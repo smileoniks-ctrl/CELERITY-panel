@@ -205,13 +205,17 @@ function generateURI(user, node, config) {
     
     // SNI for TLS handshake (can be custom domain for masquerading)
     if (config.sni) params.push(`sni=${config.sni}`);
-    params.push('alpn=h3');
     // insecure=1 only if no valid certificate (self-signed without domain)
     params.push(`insecure=${config.hasCert ? '0' : '1'}`);
-    if (config.portRange) params.push(`mport=${config.portRange}`);
+    
+    // Port hopping: official Hysteria2 multi-port format in the host:port field
+    // e.g. host:443,20000-50000 — clients fall back to 443 if range fails
+    const portPart = config.portRange
+        ? `${config.port},${config.portRange}`
+        : config.port;
     
     const name = `${node.flag || ''} ${node.name} ${config.name}`.trim();
-    const uri = `hysteria2://${auth}@${config.host}:${config.port}?${params.join('&')}#${encodeURIComponent(name)}`;
+    const uri = `hysteria2://${auth}@${config.host}:${portPart}?${params.join('&')}#${encodeURIComponent(name)}`;
     return uri;
 }
 
