@@ -46,6 +46,8 @@ services:
     environment:
       MONGO_URI: mongodb://${MONGO_USER:-hysteria}:${MONGO_PASSWORD}@mongo:27017/hysteria?authSource=admin
       REDIS_URL: redis://redis:6379
+    networks:
+      - hysteria-net
 
 networks:
   hysteria-net:

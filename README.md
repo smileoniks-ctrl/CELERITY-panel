@@ -384,21 +384,32 @@ iptables -t nat -A PREROUTING -p udp --dport 20000:50000 -j REDIRECT --to-port 4
 
 ### Single VPS Setup (Panel + Node)
 
-You can run both the panel and a Hysteria node on the same VPS:
+You can run both the panel and a Hysteria node on the same VPS. Panel uses TCP, node uses UDP on port 443 — they don't conflict.
 
-1. **DNS Setup:**
-   - `panel.example.com` → Your VPS IP
-   - `node.example.com` → Same VPS IP
+**Option 1: Use panel domain (recommended)**
 
-2. **Panel uses ports:** 80, 443 (TCP for HTTPS)
-3. **Node uses ports:** 443 (UDP for Hysteria), 20000-50000 (UDP for port hopping)
+Set the node's domain to the same as the panel domain. Auto-setup will automatically copy the panel's SSL certificates to the node.
 
-Since panel uses TCP and node uses UDP on port 443, they don't conflict.
-
-4. Add the node in the panel with:
-   - IP: Your VPS IP (or `127.0.0.1` if panel accesses node locally)
-   - Domain: `node.example.com`
+1. DNS: `panel.example.com` → Your VPS IP
+2. Add node with:
+   - IP: Your VPS IP
+   - Domain: `panel.example.com` (same as panel!)
    - Port: 443
+3. Click "Auto Setup" — certificates will be copied automatically
+
+**Option 2: No domain (self-signed)**
+
+Leave the domain field empty. A self-signed certificate will be generated.
+
+1. Add node with:
+   - IP: Your VPS IP
+   - Domain: *(leave empty)*
+   - Port: 443
+2. Click "Auto Setup"
+
+**Why not use a different domain?**
+
+If you use a different domain (e.g., `node.example.com`), ACME/Let's Encrypt will fail because port 80 is already used by the panel for its own certificate renewal. The auto-setup will warn you about this.
 
 ---
 

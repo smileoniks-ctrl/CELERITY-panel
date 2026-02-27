@@ -10,9 +10,10 @@ const yaml = require('yaml');
  * @param {string} authUrl - Auth API URL
  * @param {Object} options - Additional options
  * @param {boolean} options.authInsecure - Allow self-signed certs for auth API (default: true)
+ * @param {boolean} options.useTlsFiles - Force using TLS files instead of ACME (for same-VPS setup)
  */
 function generateNodeConfig(node, authUrl, options = {}) {
-    const { authInsecure = true } = options;
+    const { authInsecure = true, useTlsFiles = false } = options;
     
     const config = {
         listen: `:${node.port}`,
@@ -61,7 +62,7 @@ function generateNodeConfig(node, authUrl, options = {}) {
         },
     };
     
-    if (node.domain) {
+    if (node.domain && !useTlsFiles) {
         // ACME - SNI must match domain (sniGuard: dns-san by default)
         config.acme = {
             domains: [node.domain],
@@ -70,7 +71,7 @@ function generateNodeConfig(node, authUrl, options = {}) {
             listenHost: '0.0.0.0',
         };
     } else {
-        // Self-signed certificate
+        // TLS with certificate files (self-signed or copied from panel)
         config.tls = {
             cert: node.paths?.cert || '/etc/hysteria/cert.pem',
             key: node.paths?.key || '/etc/hysteria/key.pem',

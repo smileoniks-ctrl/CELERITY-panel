@@ -3,11 +3,55 @@
  */
 
 const { Client } = require('ssh2');
+const fs = require('fs');
+const path = require('path');
 const logger = require('../utils/logger');
 const config = require('../../config');
 const cryptoService = require('./cryptoService');
 const Settings = require('../models/settingsModel');
 const configGenerator = require('./configGenerator');
+
+/**
+ * Read panel's SSL certificates from Greenlock directory
+ * @param {string} domain - Panel domain
+ * @returns {Object|null} { cert, key } or null if not found
+ */
+function getPanelCertificates(domain) {
+    try {
+        // Greenlock stores certificates in greenlock.d/live/{domain}/
+        const greenlockDir = path.join(__dirname, '../../greenlock.d/live', domain);
+        
+        const certPath = path.join(greenlockDir, 'cert.pem');
+        const keyPath = path.join(greenlockDir, 'privkey.pem');
+        
+        // Also try fullchain.pem if cert.pem doesn't exist
+        const fullchainPath = path.join(greenlockDir, 'fullchain.pem');
+        
+        let cert, key;
+        
+        if (fs.existsSync(certPath)) {
+            cert = fs.readFileSync(certPath, 'utf8');
+        } else if (fs.existsSync(fullchainPath)) {
+            cert = fs.readFileSync(fullchainPath, 'utf8');
+        }
+        
+        if (fs.existsSync(keyPath)) {
+            key = fs.readFileSync(keyPath, 'utf8');
+        }
+        
+        if (cert && key) {
+            logger.info(`[NodeSetup] Found panel certificates for ${domain}`);
+            return { cert, key };
+        }
+        
+        logger.warn(`[NodeSetup] Panel certificates not found in ${greenlockDir}`);
+        return null;
+        
+    } catch (error) {
+        logger.error(`[NodeSetup] Error reading panel certificates: ${error.message}`);
+        return null;
+    }
+}
 
 const INSTALL_SCRIPT = `#!/bin/bash
 set -e
@@ -257,17 +301,60 @@ async function setupNode(node, options = {}) {
             log('Hysteria installed');
         }
         
+        // Determine TLS mode: same-VPS (copy panel certs), ACME, or self-signed
+        const isSameVpsSetup = node.domain && node.domain === config.PANEL_DOMAIN;
+        let useTlsFiles = false;
+        
         if (!node.domain) {
-            log('Generating self-signed certificate...');
+            // No domain - use self-signed certificate
+            log('No domain specified, generating self-signed certificate...');
             const certResult = await execSSH(conn, SELF_SIGNED_CERT_SCRIPT);
             logs.push(certResult.output);
             
             if (!certResult.success) {
                 throw new Error(`Certificate generation failed: ${certResult.error}`);
             }
-            log('Certificate ready');
+            log('Certificate ready (self-signed)');
+            useTlsFiles = true;
+            
+        } else if (isSameVpsSetup) {
+            // Same domain as panel - copy panel's certificates to node
+            log(`Same-VPS setup detected (domain: ${node.domain})`);
+            log('Copying panel certificates to node...');
+            
+            const panelCerts = getPanelCertificates(config.PANEL_DOMAIN);
+            
+            if (panelCerts) {
+                // Upload certificates to node
+                await uploadFile(conn, panelCerts.cert, '/etc/hysteria/cert.pem');
+                await uploadFile(conn, panelCerts.key, '/etc/hysteria/key.pem');
+                
+                // Set correct permissions
+                await execSSH(conn, `
+chmod 644 /etc/hysteria/cert.pem
+chmod 600 /etc/hysteria/key.pem
+if id "hysteria" &>/dev/null; then
+    chown hysteria:hysteria /etc/hysteria/cert.pem /etc/hysteria/key.pem
+fi
+echo "Done: Panel certificates copied to node"
+ls -la /etc/hysteria/*.pem
+                `);
+                
+                log('Panel certificates copied successfully');
+                useTlsFiles = true;
+            } else {
+                log('Warning: Could not read panel certificates, falling back to self-signed');
+                const certResult = await execSSH(conn, SELF_SIGNED_CERT_SCRIPT);
+                logs.push(certResult.output);
+                useTlsFiles = true;
+            }
+            
         } else {
+            // Different domain - use ACME (but warn about potential port 80 conflict)
             log(`Domain detected (${node.domain}), ACME will be used`);
+            log('⚠️  WARNING: If this node is on the same VPS as the panel, ACME may fail!');
+            log('⚠️  Port 80 is used by the panel for its own ACME challenges.');
+            log('⚠️  Consider using the panel domain or no domain (self-signed) for same-VPS setup.');
             log('Opening port 80 for ACME HTTP-01 challenge...');
             
             const acmeSetup = await execSSH(conn, `
@@ -293,8 +380,9 @@ if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
 fi
 
 if ss -tlnp | grep -q ':80 '; then
-    echo "Warning: Port 80 is already in use:"
+    echo "⚠️  Warning: Port 80 is already in use (likely by the panel):"
     ss -tlnp | grep ':80 '
+    echo "ACME challenge will likely fail if panel is on the same server!"
 else
     echo "Done: Port 80 is free"
 fi
@@ -307,7 +395,7 @@ echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
         }
         
         log('Uploading config...');
-        const hysteriaConfig = configGenerator.generateNodeConfig(node, authUrl, { authInsecure });
+        const hysteriaConfig = configGenerator.generateNodeConfig(node, authUrl, { authInsecure, useTlsFiles });
         await uploadFile(conn, hysteriaConfig, '/etc/hysteria/config.yaml');
         log('Config uploaded to /etc/hysteria/config.yaml');
         logs.push('--- Config content ---');
