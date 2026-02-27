@@ -1,8 +1,12 @@
 /**
  * OpenAPI 3.0 specification for C³ CELERITY API
+ *
+ * buildSpec(lang) applies optional i18n translations on top of the base English spec.
+ * Supported langs: 'en' (default), 'ru'
  */
 
 const { version } = require('../../package.json');
+const i18n = require('./i18n');
 
 const spec = {
     openapi: '3.0.3',
@@ -789,4 +793,40 @@ Admin sessions (cookie) bypass scope checks entirely.
     },
 };
 
-module.exports = spec;
+/**
+ * Apply i18n translations to the spec.
+ * Overrides: info.description, tags descriptions, and per-operation summary/description.
+ */
+function buildSpec(lang = 'en') {
+    const t = i18n[lang];
+    if (!t) return spec;
+
+    // Deep clone to avoid mutating the base spec
+    const out = JSON.parse(JSON.stringify(spec));
+
+    if (t.info?.description) {
+        out.info.description = t.info.description;
+    }
+
+    if (t.tags) {
+        out.tags = t.tags;
+    }
+
+    if (t.operations) {
+        for (const [pathMethod, override] of Object.entries(t.operations)) {
+            // Key format: "METHOD /path" e.g. "GET /users/{userId}"
+            const spaceIdx = pathMethod.indexOf(' ');
+            const method = pathMethod.slice(0, spaceIdx).toLowerCase();
+            const path = pathMethod.slice(spaceIdx + 1);
+
+            if (out.paths[path]?.[method]) {
+                if (override.summary !== undefined) out.paths[path][method].summary = override.summary;
+                if (override.description !== undefined) out.paths[path][method].description = override.description;
+            }
+        }
+    }
+
+    return out;
+}
+
+module.exports = { buildSpec };

@@ -259,25 +259,42 @@ app.post('/api/kick/:userId', requireAuth, requireScope('sync:write'), async (re
 // ==================== API DOCS ====================
 
 if (config.API_DOCS_ENABLED) {
-    const apiSpec = require('./src/docs/openapi');
+    const { buildSpec } = require('./src/docs/openapi');
 
+    // Serve spec in requested language (?lang=ru|en)
     app.get('/api/docs/openapi.json', (req, res) => {
-        res.json(apiSpec);
+        const lang = req.query.lang === 'ru' ? 'ru' : 'en';
+        res.json(buildSpec(lang));
     });
 
     app.get('/api/docs', (req, res) => {
+        const lang = req.query.lang === 'ru' ? 'ru' : 'en';
+        const otherLang = lang === 'ru' ? 'en' : 'ru';
+        const otherLabel = lang === 'ru' ? 'English' : 'Русский';
+        const specUrl = `/api/docs/openapi.json?lang=${lang}`;
+
         res.send(`<!doctype html>
 <html>
   <head>
     <title>C³ CELERITY — API Reference</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <style>body { margin: 0; }</style>
+    <style>
+      body { margin: 0; }
+      #lang-toggle {
+        position: fixed; top: 14px; right: 16px; z-index: 9999;
+        padding: 5px 12px; border-radius: 6px; border: 1px solid #a78bfa;
+        background: #1e1e2e; color: #a78bfa; font-size: 13px;
+        cursor: pointer; text-decoration: none; font-family: sans-serif;
+      }
+      #lang-toggle:hover { background: #2e2e3e; }
+    </style>
   </head>
   <body>
+    <a id="lang-toggle" href="/api/docs?lang=${otherLang}">${otherLabel}</a>
     <script
       id="api-reference"
-      data-url="/api/docs/openapi.json"
+      data-url="${specUrl}"
       data-configuration='{"theme":"purple","layout":"modern"}'
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
