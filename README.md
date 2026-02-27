@@ -239,6 +239,7 @@ Required scope: `nodes:read` (GET) / `nodes:write` (POST, PUT, DELETE)
 | GET | `/api/nodes/:id/config` | Get node config (YAML) |
 | POST | `/api/nodes/:id/sync` | Sync specific node |
 | POST | `/api/nodes/:id/update-config` | Push config via SSH |
+| POST | `/api/nodes/:id/setup` | **Auto-setup** node via SSH (long-running, ~1–2 min) |
 
 ### Stats & Sync
 

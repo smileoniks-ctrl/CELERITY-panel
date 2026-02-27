@@ -732,6 +732,82 @@ Admin sessions (cookie) bypass scope checks entirely.
             },
         },
 
+        '/nodes/{id}/setup': {
+            parameters: [{ $ref: '#/components/parameters/nodeId' }],
+            post: {
+                tags: ['Nodes'],
+                summary: 'Auto-setup node via SSH',
+                description: `Full one-click node provisioning — same as the **⚙️ Auto Setup** button in the web panel.
+
+**Steps performed:**
+1. Install Hysteria 2 binary (if not installed)
+2. Generate TLS certificate (self-signed, or prepare ACME dir if domain is set)
+3. Upload \`/etc/hysteria/config.yaml\`
+4. Configure iptables port hopping rules
+5. Open firewall ports
+6. Enable and restart \`hysteria-server\` systemd unit
+
+**⚠️ Long-running:** this request can take **30 seconds to 2 minutes** depending on the server.  
+Set your HTTP client timeout to at least **3 minutes**.
+
+**Requires SSH credentials** to be configured on the node (password or private key).`,
+                requestBody: {
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    installHysteria:  { type: 'boolean', default: true, description: 'Install/update Hysteria binary' },
+                                    setupPortHopping: { type: 'boolean', default: true, description: 'Configure iptables NAT rules for port hopping range' },
+                                    restartService:   { type: 'boolean', default: true, description: 'Enable and restart hysteria-server systemd unit' },
+                                },
+                            },
+                            example: {
+                                installHysteria: true,
+                                setupPortHopping: true,
+                                restartService: true,
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'Setup completed successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        logs:    { type: 'array', items: { type: 'string' }, description: 'Setup log lines' },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    400: { description: 'SSH credentials not configured', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    500: {
+                        description: 'Setup failed',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: false },
+                                        error:   { type: 'string' },
+                                        logs:    { type: 'array', items: { type: 'string' } },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    403: { $ref: '#/components/responses/Forbidden' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                },
+            },
+        },
+
         '/nodes/{id}/config': {
             parameters: [{ $ref: '#/components/parameters/nodeId' }],
             get: {

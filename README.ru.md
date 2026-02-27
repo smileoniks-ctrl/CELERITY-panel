@@ -239,6 +239,7 @@ Authorization: Bearer ck_your_key_here
 | GET | `/api/nodes/:id/config` | Получить конфиг (YAML) |
 | POST | `/api/nodes/:id/sync` | Синхронизировать ноду |
 | POST | `/api/nodes/:id/update-config` | Отправить конфиг через SSH |
+| POST | `/api/nodes/:id/setup` | **Авто-настройка** ноды через SSH (долгий запрос, ~1–2 мин) |
 
 ### Статистика и синхронизация
 

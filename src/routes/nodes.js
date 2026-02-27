@@ -420,4 +420,68 @@ router.post('/:id/update-config', requireScope('nodes:write'), async (req, res) 
     }
 });
 
+/**
+ * POST /nodes/:id/setup - Auto-setup node via SSH
+ *
+ * Installs Hysteria, generates certs, configures port hopping, opens firewall ports
+ * and starts the service — same as the one-click setup in the web panel.
+ *
+ * This is a long-running operation (30s–2min). The response is returned only after
+ * all steps complete. Set your HTTP client timeout accordingly (e.g. 3–5 minutes).
+ *
+ * Body (all optional, all default to true):
+ *   installHysteria  {boolean}  Install/update Hysteria binary
+ *   setupPortHopping {boolean}  Configure iptables NAT rules for port range
+ *   restartService   {boolean}  Enable and restart hysteria-server systemd unit
+ *
+ * Returns:
+ *   200 { success: true,  logs: string[] }
+ *   500 { success: false, error: string, logs: string[] }
+ */
+router.post('/:id/setup', requireScope('nodes:write'), async (req, res) => {
+    try {
+        const node = await HyNode.findById(req.params.id);
+
+        if (!node) {
+            return res.status(404).json({ error: 'Node not found' });
+        }
+
+        if (!node.ssh?.password && !node.ssh?.privateKey) {
+            return res.status(400).json({ error: 'SSH credentials not configured for this node' });
+        }
+
+        const {
+            installHysteria  = true,
+            setupPortHopping = true,
+            restartService   = true,
+        } = req.body || {};
+
+        logger.info(`[Nodes API] Auto-setup started for ${node.name} (${node.ip}) via API`);
+
+        const nodeSetup = require('../services/nodeSetup');
+        const result = await nodeSetup.setupNode(node, {
+            installHysteria,
+            setupPortHopping,
+            restartService,
+        });
+
+        if (result.success) {
+            await HyNode.findByIdAndUpdate(req.params.id, {
+                $set: { status: 'online', lastSync: new Date(), lastError: '' },
+            });
+            logger.info(`[Nodes API] Auto-setup completed for ${node.name}`);
+            res.json({ success: true, logs: result.logs });
+        } else {
+            await HyNode.findByIdAndUpdate(req.params.id, {
+                $set: { status: 'error', lastError: result.error },
+            });
+            logger.warn(`[Nodes API] Auto-setup failed for ${node.name}: ${result.error}`);
+            res.status(500).json({ success: false, error: result.error, logs: result.logs });
+        }
+    } catch (error) {
+        logger.error(`[Nodes API] Setup error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
