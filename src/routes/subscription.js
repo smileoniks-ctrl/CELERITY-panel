@@ -210,9 +210,7 @@ function generateURI(user, node, config) {
     if (config.portRange) params.push(`mport=${config.portRange}`);
     
     const name = `${node.flag || ''} ${node.name} ${config.name}`.trim();
-    // Простое ASCII имя для совместимости
-    const safeName = name.replace(/[^\x00-\x7F]/g, '').trim() || 'Server';
-    const uri = `hy2://${auth}@${config.host}:${config.port}?${params.join('&')}#${encodeURIComponent(safeName)}`;
+    const uri = `hy2://${auth}@${config.host}:${config.port}?${params.join('&')}#${encodeURIComponent(name)}`;
     return uri;
 }
 
@@ -226,22 +224,8 @@ function generateURIList(user, nodes, profileTitle) {
         });
     });
     
-    // Метаданные по документации Happ (с # комментариями)
-    // Убираем эмодзи из title для совместимости
-    const cleanTitle = (profileTitle || 'Hysteria').replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim();
-    const tx = user.traffic?.tx || 0;
-    const rx = user.traffic?.rx || 0;
-    const total = user.trafficLimit || 0;
-    const expire = user.expireAt ? Math.floor(new Date(user.expireAt).getTime() / 1000) : 0;
-    
-    const meta = [
-        `#profile-title: ${cleanTitle}`,
-        `#profile-update-interval: 12`,
-        `#subscription-userinfo: upload=${tx}; download=${rx}; total=${total}; expire=${expire}`,
-    ].join('\n');
-    
-    // Добавляем \n в конце
-    return meta + '\n' + uris.join('\n') + '\n';
+    // Чистый список URI без комментариев
+    return uris.join('\n') + '\n';
 }
 
 function generateClashYAML(user, nodes) {
