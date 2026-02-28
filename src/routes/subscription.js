@@ -687,9 +687,9 @@ function sendCachedSubscription(res, data, format, userAgent) {
         'Subscription-Userinfo': [
             `upload=${data.traffic.tx}`,
             `download=${data.traffic.rx}`,
-            `total=${data.trafficLimit}`,
+            data.trafficLimit > 0 ? `total=${data.trafficLimit}` : null,
             `expire=${data.expireAt ? Math.floor(new Date(data.expireAt).getTime() / 1000) : 0}`,
-        ].join('; '),
+        ].filter(Boolean).join('; '),
     });
     
     res.send(data.content);
