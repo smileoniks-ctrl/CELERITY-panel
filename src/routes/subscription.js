@@ -482,13 +482,13 @@ function generateHTML(user, nodes, token, baseUrl) {
 // ==================== MAIN ROUTE ====================
 
 /**
- * GET /files/:token - Единственный роут
+ * GET /files/:token или /sub/:token
  * - Браузер → HTML
  * - Приложение → подписка
  * 
  * С кэшированием готовых подписок в Redis
  */
-router.get('/files/:token', async (req, res) => {
+router.get(['/files/:token', '/sub/:token'], async (req, res) => {
     try {
         const token = req.params.token;
         const userAgent = req.headers['user-agent'] || 'unknown';
