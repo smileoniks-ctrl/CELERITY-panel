@@ -20,6 +20,8 @@
 
 ## ⚡ Quick Start
 
+> Updating an existing installation? See [Safe Production Updates](safe-update.md).
+
 **1. Install Docker** (if not installed):
 ```bash
 curl -fsSL https://get.docker.com | sh
