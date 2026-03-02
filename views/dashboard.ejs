@@ -1,7 +1,7 @@
 <div class="stats-grid">
     <div class="stat-card stat-users">
         <div class="stat-header">
-            <span class="stat-icon">👥</span>
+            <span class="stat-icon"><i class="ti ti-users"></i></span>
             <span class="stat-trend"><%= t('dashboard.activeUsers') %></span>
         </div>
         <div class="stat-value"><%= stats.users.enabled %></div>
@@ -10,7 +10,7 @@
     
     <div class="stat-card stat-nodes">
         <div class="stat-header">
-            <span class="stat-icon">🖥️</span>
+            <span class="stat-icon"><i class="ti ti-server"></i></span>
             <span class="stat-trend"><%= t('dashboard.onlineNodes') %></span>
         </div>
         <div class="stat-value"><%= stats.nodes.online %></div>
@@ -19,7 +19,7 @@
     
     <div class="stat-card stat-online">
         <div class="stat-header">
-            <span class="stat-icon">🌐</span>
+            <span class="stat-icon"><i class="ti ti-world"></i></span>
             <span class="stat-trend"><%= t('common.now') %></span>
         </div>
         <div class="stat-value" id="onlineCount"><%= stats.onlineUsers %></div>
@@ -28,7 +28,7 @@
     
     <div class="stat-card stat-traffic">
         <div class="stat-header">
-            <span class="stat-icon">📊</span>
+            <span class="stat-icon"><i class="ti ti-chart-bar"></i></span>
             <span class="stat-trend"><%= t('dashboard.total') %></span>
         </div>
         <% 
@@ -57,7 +57,7 @@
     <div class="card-header">
         <h2><%= t('dashboard.nodesStatus') %></h2>
                 <div class="header-actions">
-                    <button class="btn btn-sm" onclick="refreshStats()" title="<%= t('common.refresh') %>">🔄</button>
+                    <button class="btn btn-sm" onclick="refreshStats()" title="<%= t('common.refresh') %>"><i class="ti ti-refresh"></i></button>
                 </div>
     </div>
             <div class="card-body no-padding">
@@ -105,9 +105,9 @@
                             </td>
                             <td>
                                 <div class="node-actions">
-                                    <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>">🔄</button>
-                                    <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.settings') %>">⚙️</a>
-                                    <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>">💻</a>
+                                    <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>"><i class="ti ti-refresh"></i></button>
+                                    <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.settings') %>"><i class="ti ti-settings"></i></a>
+                                    <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>"><i class="ti ti-terminal-2"></i></a>
                                 </div>
                             </td>
                 </tr>
@@ -156,9 +156,9 @@
                             </div>
                             
                             <div class="mobile-node-actions">
-                                <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" style="flex: 1;">🔄 Restart</button>
-                                <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;">⚙️ <%= t('common.settings') %></a>
-                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon">💻</a>
+                                <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" style="flex: 1;"><i class="ti ti-refresh"></i> Restart</button>
+                                <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;"><i class="ti ti-settings"></i> <%= t('common.settings') %></a>
+                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon"><i class="ti ti-terminal-2"></i></a>
                             </div>
                         </div>
                     <% }); %>
@@ -179,8 +179,8 @@
                         <span class="logs-search-count" id="logsSearchCount"></span>
                         <button class="logs-search-clear" id="logsSearchClear" onclick="clearLogsSearch()" title="<%= t('common.clear') %>">✕</button>
                     </div>
-                    <button class="btn btn-sm" id="logsToggleBtn" onclick="toggleLogs()" title="<%= t('dashboard.pauseLogs') %>">⏸️</button>
-                    <button class="btn btn-sm" onclick="clearLogs()" title="<%= t('common.clear') %>">🗑️</button>
+                    <button class="btn btn-sm" id="logsToggleBtn" onclick="toggleLogs()" title="<%= t('dashboard.pauseLogs') %>"><i class="ti ti-player-pause"></i></button>
+                    <button class="btn btn-sm" onclick="clearLogs()" title="<%= t('common.clear') %>"><i class="ti ti-trash"></i></button>
                 </div>
             </div>
             <div class="card-body no-padding">
@@ -200,23 +200,23 @@
             <div class="card-body">
                 <div class="quick-actions">
                     <a href="/panel/nodes/add" class="quick-action">
-                        <span class="qa-icon">➕</span>
+                        <span class="qa-icon"><i class="ti ti-server-plus"></i></span>
                         <span class="qa-text"><%= t('dashboard.addNode') %></span>
                     </a>
                     <a href="/panel/users/add" class="quick-action">
-                        <span class="qa-icon">👤</span>
+                        <span class="qa-icon"><i class="ti ti-user-plus"></i></span>
                         <span class="qa-text"><%= t('dashboard.addUser') %></span>
                     </a>
                     <a href="/panel/stats" class="quick-action">
-                        <span class="qa-icon">📊</span>
+                        <span class="qa-icon"><i class="ti ti-chart-bar"></i></span>
                         <span class="qa-text"><%= t('nav.stats') %></span>
                     </a>
                     <button class="quick-action" onclick="createBackup()">
-                        <span class="qa-icon">💾</span>
+                        <span class="qa-icon"><i class="ti ti-device-floppy"></i></span>
                         <span class="qa-text"><%= t('dashboard.backupDb') %></span>
                     </button>
                     <button class="quick-action" onclick="document.getElementById('restoreInput').click()">
-                        <span class="qa-icon">📥</span>
+                        <span class="qa-icon"><i class="ti ti-download"></i></span>
                         <span class="qa-text"><%= t('dashboard.restoreDb') %></span>
                     </button>
                     <input type="file" id="restoreInput" accept=".tar.gz,.tgz" style="display:none" onchange="restoreBackup(this)">
@@ -228,7 +228,7 @@
         <div class="card mt-2">
             <div class="card-header">
                 <h2><%= t('dashboard.panel') %></h2>
-                <button class="btn btn-sm" onclick="loadSystemStats()" title="<%= t('common.refresh') %>">🔄</button>
+                <button class="btn btn-sm" onclick="loadSystemStats()" title="<%= t('common.refresh') %>"><i class="ti ti-refresh"></i></button>
             </div>
             <div class="card-body">
                 <div class="system-info" id="systemStats">
@@ -538,7 +538,7 @@ function updateLogsStatus(status) {
 function toggleLogs() {
     logsPaused = !logsPaused;
     const btn = document.getElementById('logsToggleBtn');
-    btn.textContent = logsPaused ? '▶️' : '⏸️';
+    btn.innerHTML = logsPaused ? '<i class="ti ti-player-play"></i>' : '<i class="ti ti-player-pause"></i>';
     btn.title = logsPaused ? 'Resume' : 'Pause';
 }
 
@@ -691,7 +691,7 @@ async function loadNodesSpeed() {
         const nodeId = row.dataset.nodeid;
         if (!nodesMap.has(nodeId)) nodesMap.set(nodeId, { desktop: null, mobile: null });
         const el = row.querySelector('.node-speed');
-        el.innerHTML = '<span class="load-placeholder">⏳</span>';
+        el.innerHTML = '<span class="load-placeholder"><i class="ti ti-loader-2"></i></span>';
         nodesMap.get(nodeId).desktop = el;
     });
     
@@ -699,7 +699,7 @@ async function loadNodesSpeed() {
         const nodeId = card.dataset.nodeid;
         if (!nodesMap.has(nodeId)) nodesMap.set(nodeId, { desktop: null, mobile: null });
         const el = card.querySelector('.mobile-stat-value');
-        el.textContent = '⏳';
+        el.innerHTML = '<i class="ti ti-loader-2"></i>';
         nodesMap.get(nodeId).mobile = el;
     });
     
@@ -725,7 +725,7 @@ async function restartNode(nodeId) {
     const row = document.querySelector(`tr[data-nodeid="${nodeId}"]`);
     const btn = row.querySelector('.btn-icon');
     btn.disabled = true;
-    btn.textContent = '⏳';
+    btn.innerHTML = '<i class="ti ti-loader-2"></i>';
     
     try {
         const res = await fetch(`/panel/nodes/${nodeId}/restart`, { 
@@ -746,7 +746,7 @@ async function restartNode(nodeId) {
     }
     
     btn.disabled = false;
-    btn.textContent = '🔄';
+    btn.innerHTML = '<i class="ti ti-refresh"></i>';
 }
 
 async function createBackup() {

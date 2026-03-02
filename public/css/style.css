@@ -2226,3 +2226,20 @@ html {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
+
+/* ── Tabler Icons ── */
+.ti {
+    font-size: 1em;
+    line-height: 1;
+    vertical-align: -0.125em;
+}
+
+/* Spinner animation for loader icons */
+@keyframes ti-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.ti-loader-2 {
+    display: inline-block;
+    animation: ti-spin 1s linear infinite;
+}

@@ -56,10 +56,10 @@
 </style>
 
 <div class="settings-tabs">
-    <button class="settings-tab active" data-tab="system">⚙️ <%= t('settings.tabSystem') || 'Система' %></button>
-    <button class="settings-tab" data-tab="security">🔐 <%= t('settings.tabSecurity') || 'Безопасность' %></button>
-    <button class="settings-tab" data-tab="backup">💾 <%= t('settings.tabBackup') || 'Бэкапы' %></button>
-    <button class="settings-tab" data-tab="maintenance">🔧 <%= t('settings.tabMaintenance') || 'Обслуживание' %></button>
+    <button class="settings-tab active" data-tab="system"><i class="ti ti-settings"></i> <%= t('settings.tabSystem') || 'Система' %></button>
+    <button class="settings-tab" data-tab="security"><i class="ti ti-lock"></i> <%= t('settings.tabSecurity') || 'Безопасность' %></button>
+    <button class="settings-tab" data-tab="backup"><i class="ti ti-device-floppy"></i> <%= t('settings.tabBackup') || 'Бэкапы' %></button>
+    <button class="settings-tab" data-tab="maintenance"><i class="ti ti-tool"></i> <%= t('settings.tabMaintenance') || 'Обслуживание' %></button>
 </div>
 
 <!-- ==================== TAB: SYSTEM ==================== -->
@@ -102,10 +102,10 @@
             <div class="card">
                 <div class="card-body" style="padding: 1rem;">
                     <% if (ssl.enabled) { %>
-                    <div style="color: var(--success); font-weight: 500;">✅ HTTPS</div>
+                    <div style="color: var(--success); font-weight: 500;"><i class="ti ti-shield-check"></i> HTTPS</div>
                     <div style="font-size: 12px; color: var(--text-muted);"><%= ssl.domain %></div>
                     <% } else { %>
-                    <div style="color: var(--warning); font-weight: 500;">⚠️ HTTP</div>
+                    <div style="color: var(--warning); font-weight: 500;"><i class="ti ti-alert-triangle"></i> HTTP</div>
                     <div style="font-size: 12px; color: var(--text-muted);">SSL не настроен</div>
                     <% } %>
                 </div>
@@ -503,11 +503,11 @@
 <div id="apiKeyRevealModal" style="display:none; position:fixed; inset:0; z-index:1001; background:rgba(0,0,0,0.7); align-items:center; justify-content:center;">
     <div style="background:var(--bg-secondary, #1a1a1a); border:1px solid var(--border); border-radius:12px; padding:1.5rem; width:100%; max-width:500px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <h3 style="margin:0; color:var(--success, #22c55e);">✓ <%= t('apiKeys.created') || 'Key Created' %></h3>
+            <h3 style="margin:0; color:var(--success, #22c55e);"><i class="ti ti-check"></i> <%= t('apiKeys.created') || 'Key Created' %></h3>
             <button onclick="closeRevealModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">×</button>
         </div>
         <div style="background:var(--warning-dim, rgba(245,158,11,0.1)); border:1px solid var(--warning, #f59e0b); border-radius:8px; padding:0.75rem; margin-bottom:1rem; font-size:13px; color:var(--warning, #f59e0b);">
-            ⚠ <%= t('apiKeys.revealWarning') || 'Copy this key now. It will never be shown again.' %>
+            <i class="ti ti-alert-triangle"></i> <%= t('apiKeys.revealWarning') || 'Copy this key now. It will never be shown again.' %>
         </div>
         <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
             <input type="text" id="revealKeyInput" readonly style="flex:1; font-family:monospace; font-size:13px; background:var(--bg-tertiary, #111); border:1px solid var(--border);">
@@ -747,7 +747,7 @@ async function testWebhook() {
                         <hr style="margin: 1rem 0; border-color: var(--border);">
                         
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <button type="submit" class="btn btn-primary">💾 <%= t('common.save') %></button>
+                            <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy"></i> <%= t('common.save') %></button>
                             <button type="button" class="btn btn-success" onclick="createBackupNow()" id="createBackupBtn">
                                 <%= t('settings.createBackupNow') %>
                             </button>
@@ -760,9 +760,9 @@ async function testWebhook() {
         <div class="col-6" style="display: flex;">
             <div class="card" style="flex: 1; display: flex; flex-direction: column;">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2>📋 <%= t('settings.backupsList') || 'Доступные бэкапы' %></h2>
+                    <h2><i class="ti ti-clipboard-list"></i> <%= t('settings.backupsList') || 'Доступные бэкапы' %></h2>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="loadBackupsList()" id="refreshBackupsBtn">
-                        🔄 <%= t('common.refresh') %>
+                        <i class="ti ti-refresh"></i> <%= t('common.refresh') %>
                     </button>
                 </div>
                 <div class="card-body" style="flex: 1; overflow-y: auto;">
@@ -966,7 +966,7 @@ async function loadBackupsList() {
     const btn = document.getElementById('refreshBackupsBtn');
     
     btn.disabled = true;
-    container.innerHTML = '<p style="color: var(--text-muted);">⏳ Загрузка...</p>';
+        container.innerHTML = '<p style="color: var(--text-muted);"><i class="ti ti-loader-2"></i> Загрузка...</p>';
     
     try {
         const [localRes, s3Res] = await Promise.all([
@@ -989,7 +989,7 @@ async function loadBackupsList() {
         let html = '';
         
         if (localBackups.length > 0) {
-            html += `<div style="margin-bottom: 0.75rem; font-weight: 600;">💾 ${i18n.localBackups} (${localBackups.length})</div>`;
+            html += `<div style="margin-bottom: 0.75rem; font-weight: 600;"><i class="ti ti-device-floppy"></i> ${i18n.localBackups} (${localBackups.length})</div>`;
             html += '<div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">';
             for (const b of localBackups) {
                 const date = new Date(b.created).toLocaleString();
@@ -1009,7 +1009,7 @@ async function loadBackupsList() {
         }
         
         if (s3Backups.length > 0) {
-            html += `<div style="margin-bottom: 0.75rem; font-weight: 600;">☁️ ${i18n.s3Backups} (${s3Backups.length})</div>`;
+            html += `<div style="margin-bottom: 0.75rem; font-weight: 600;"><i class="ti ti-cloud"></i> ${i18n.s3Backups} (${s3Backups.length})</div>`;
             html += '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
             for (const b of s3Backups) {
                 const date = new Date(b.created).toLocaleString();

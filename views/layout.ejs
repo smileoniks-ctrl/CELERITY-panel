@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 </head>
 <body>
     <!-- Mobile Menu Overlay -->
@@ -23,7 +24,7 @@
                 <span></span>
             </button>
             <div class="mobile-logo">
-                <span class="logo-icon">⚡</span>
+                <span class="logo-icon"><i class="ti ti-bolt"></i></span>
                 <span class="logo-text">C³ CELERITY</span>
             </div>
             <div class="mobile-status">
@@ -33,7 +34,7 @@
         
         <nav class="sidebar" id="sidebar">
             <div class="logo">
-                <span class="logo-icon">⚡</span>
+                <span class="logo-icon"><i class="ti ti-bolt"></i></span>
                 <div class="logo-content">
                     <span class="logo-text">C³ CELERITY</span>
                     <a href="https://t.me/First_VPN_Click_bot" target="_blank" class="logo-sub">by Click Connect</a>
@@ -41,27 +42,27 @@
             </div>
             <ul class="nav-menu">
                 <li><a href="/panel" class="<%= page === 'dashboard' ? 'active' : '' %>">
-                    <span class="nav-icon">📊</span>
+                    <span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span>
                     <span><%= t('nav.dashboard') %></span>
                 </a></li>
                 <li><a href="/panel/stats" class="<%= page === 'stats' ? 'active' : '' %>">
-                    <span class="nav-icon">📈</span>
+                    <span class="nav-icon"><i class="ti ti-trending-up"></i></span>
                     <span><%= t('nav.stats') %></span>
                 </a></li>
                 <li><a href="/panel/nodes" class="<%= page === 'nodes' ? 'active' : '' %>">
-                    <span class="nav-icon">🖥️</span>
+                    <span class="nav-icon"><i class="ti ti-server"></i></span>
                     <span><%= t('nav.nodes') %></span>
                 </a></li>
                 <li><a href="/panel/groups" class="<%= page === 'groups' ? 'active' : '' %>">
-                    <span class="nav-icon">📁</span>
+                    <span class="nav-icon"><i class="ti ti-folder"></i></span>
                     <span><%= t('nav.groups') %></span>
                 </a></li>
                 <li><a href="/panel/users" class="<%= page === 'users' ? 'active' : '' %>">
-                    <span class="nav-icon">👥</span>
+                    <span class="nav-icon"><i class="ti ti-users"></i></span>
                     <span><%= t('nav.users') %></span>
                 </a></li>
                 <li><a href="/panel/settings" class="<%= page === 'settings' ? 'active' : '' %>">
-                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-icon"><i class="ti ti-settings"></i></span>
                     <span><%= t('nav.settings') %></span>
                 </a></li>
             </ul>

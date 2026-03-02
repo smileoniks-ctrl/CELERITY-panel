@@ -50,9 +50,9 @@
                             </div>
                             
                             <div class="group-stats">
-                                <span class="stat">🖥️ <%= group.nodesCount || 0 %> <%= t('groups.nodesCount') %></span>
-                                <span class="stat">👥 <%= group.usersCount || 0 %> <%= t('groups.usersCount') %></span>
-                                <span class="stat" title="<%= t('groups.maxDevices') %>">📱 <%= group.maxDevices || '∞' %></span>
+                                <span class="stat"><i class="ti ti-server"></i> <%= group.nodesCount || 0 %> <%= t('groups.nodesCount') %></span>
+                                <span class="stat"><i class="ti ti-users"></i> <%= group.usersCount || 0 %> <%= t('groups.usersCount') %></span>
+                                <span class="stat" title="<%= t('groups.maxDevices') %>"><i class="ti ti-device-mobile"></i> <%= group.maxDevices || '∞' %></span>
                             </div>
                             
                             <div class="form-row-inline">
@@ -72,7 +72,7 @@
                         </form>
                         
                         <form method="POST" action="/panel/groups/<%= group._id %>/delete" class="delete-form" onsubmit="return confirm('<%= t('groups.confirmDelete').replace('{name}', group.name) %>')">
-                            <button type="submit" class="btn btn-sm btn-danger">🗑️</button>
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="ti ti-trash"></i></button>
                         </form>
                     </div>
                 <% }); %>

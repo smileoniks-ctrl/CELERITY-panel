@@ -120,7 +120,7 @@
                     </a>
                     
                     <button class="btn btn-block" onclick="copySubscription()">
-                        📋 <%= t('users.copySubscription') %>
+                        <i class="ti ti-clipboard"></i> <%= t('users.copySubscription') %>
                     </button>
                     
                     <a href="<%= baseUrl %>/api/files/<%= user.subscriptionToken || user.userId %>" 

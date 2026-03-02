@@ -43,7 +43,7 @@
                     <tr>
                         <td colspan="7" class="text-center text-muted">
                             <div class="empty-state">
-                                <span class="empty-icon">🖥️</span>
+                                <span class="empty-icon"><i class="ti ti-server"></i></span>
                                 <p><%= t('nodes.noNodes') %></p>
                                 <a href="/panel/nodes/add" class="btn btn-primary"><%= t('nodes.addFirstNode') %></a>
                             </div>
@@ -101,10 +101,10 @@
                         </td>
                         <td>
                             <div class="node-actions">
-                                <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>" <%= !node.ssh?.password ? 'disabled' : '' %>>🔄</button>
-                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>" <%= !node.ssh?.password ? 'style="pointer-events:none;opacity:0.5"' : '' %>>💻</a>
-                                <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.edit') %>">⚙️</a>
-                                <button class="btn-icon btn-icon-danger" onclick="deleteNode('<%= node._id %>')" title="<%= t('common.delete') %>">🗑️</button>
+                                <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>" <%= !node.ssh?.password ? 'disabled' : '' %>><i class="ti ti-refresh"></i></button>
+                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>" <%= !node.ssh?.password ? 'style="pointer-events:none;opacity:0.5"' : '' %>><i class="ti ti-terminal-2"></i></a>
+                                <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.edit') %>"><i class="ti ti-pencil"></i></a>
+                                <button class="btn-icon btn-icon-danger" onclick="deleteNode('<%= node._id %>')" title="<%= t('common.delete') %>"><i class="ti ti-trash"></i></button>
                             </div>
                         </td>
                     </tr>
@@ -148,8 +148,8 @@
                     </div>
                     
                     <div class="mobile-node-actions">
-                        <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" <%= !node.ssh?.password ? 'disabled' : '' %>>🔄 <%= t('nodes.restart') %></button>
-                        <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;">⚙️ <%= t('common.edit') %></a>
+                        <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" <%= !node.ssh?.password ? 'disabled' : '' %>><i class="ti ti-refresh"></i> <%= t('nodes.restart') %></button>
+                        <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;"><i class="ti ti-pencil"></i> <%= t('common.edit') %></a>
                     </div>
                 </div>
             <% }); %>
@@ -221,7 +221,7 @@ function applyFilters() {
 async function restartNode(id) {
     const btn = event.target;
     const originalText = btn.textContent;
-    btn.textContent = '⏳';
+    btn.innerHTML = '<i class="ti ti-loader-2"></i>';
     btn.disabled = true;
     
     try {
