@@ -82,7 +82,9 @@ app.use((req, res, next) => {
 
 app.use(i18nMiddleware);
 app.use(countRequest);
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
+}));
 
 // Sanitize error details from 500 responses in production
 app.use((req, res, next) => {
@@ -575,50 +577,78 @@ function setupWebSocketServer(server) {
 function setupCronJobs() {
     // Collect stats every 5 minutes
     cron.schedule('*/5 * * * *', async () => {
-        logger.debug('[Cron] Collecting stats');
-        await syncService.collectAllStats();
-        
-        // Save stats snapshot for charts
-        await statsService.saveHourlySnapshot();
+        try {
+            logger.debug('[Cron] Collecting stats');
+            await syncService.collectAllStats();
+            
+            // Save stats snapshot for charts
+            await statsService.saveHourlySnapshot();
+        } catch (error) {
+            logger.error(`[Cron] Stats collection failed: ${error.message}`);
+        }
     });
     
     // Health check every minute
     cron.schedule('* * * * *', async () => {
-        await syncService.healthCheck();
+        try {
+            await syncService.healthCheck();
+        } catch (error) {
+            logger.error(`[Cron] Health check failed: ${error.message}`);
+        }
     });
     
     // Save daily snapshot every hour
     cron.schedule('0 * * * *', async () => {
-        logger.debug('[Cron] Saving daily stats snapshot');
-        await statsService.saveDailySnapshot();
+        try {
+            logger.debug('[Cron] Saving daily stats snapshot');
+            await statsService.saveDailySnapshot();
+        } catch (error) {
+            logger.error(`[Cron] Daily snapshot failed: ${error.message}`);
+        }
     });
     
     // Save monthly snapshot and cleanup at 00:05
     cron.schedule('5 0 * * *', async () => {
-        logger.info('[Cron] Saving monthly stats snapshot');
-        await statsService.saveMonthlySnapshot();
-        await statsService.cleanup();
+        try {
+            logger.info('[Cron] Saving monthly stats snapshot');
+            await statsService.saveMonthlySnapshot();
+            await statsService.cleanup();
+        } catch (error) {
+            logger.error(`[Cron] Monthly maintenance failed: ${error.message}`);
+        }
     });
     
     // Clean old logs daily at 3:00
     cron.schedule('0 3 * * *', () => {
-        logger.info('[Cron] Cleaning old logs');
-        cleanOldLogs(30);
+        try {
+            logger.info('[Cron] Cleaning old logs');
+            cleanOldLogs(30);
+        } catch (error) {
+            logger.error(`[Cron] Log cleanup failed: ${error.message}`);
+        }
     });
     
     // Check for scheduled backup every hour
     cron.schedule('0 * * * *', async () => {
-        await backupService.scheduledBackup();
+        try {
+            await backupService.scheduledBackup();
+        } catch (error) {
+            logger.error(`[Cron] Scheduled backup failed: ${error.message}`);
+        }
     });
     
     // Initial health check and stats snapshot after 5 seconds
     setTimeout(async () => {
-        logger.info('[Startup] Checking nodes status');
-        await syncService.healthCheck();
-        
-        // Initial stats snapshot
-        await statsService.saveHourlySnapshot();
-        logger.info('[Startup] Initial stats snapshot saved');
+        try {
+            logger.info('[Startup] Checking nodes status');
+            await syncService.healthCheck();
+            
+            // Initial stats snapshot
+            await statsService.saveHourlySnapshot();
+            logger.info('[Startup] Initial stats snapshot saved');
+        } catch (error) {
+            logger.error(`[Startup] Initial checks failed: ${error.message}`);
+        }
     }, 5000);
 }
 

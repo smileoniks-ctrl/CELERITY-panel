@@ -929,18 +929,35 @@ router.get('/users/:userId', requireAuth, async (req, res) => {
 router.get('/groups', requireAuth, async (req, res) => {
     try {
         const groups = await ServerGroup.find().sort({ name: 1 });
-        
-        // Считаем количество нод и пользователей в каждой группе
-        const groupsWithCounts = await Promise.all(groups.map(async (group) => {
-            const [nodesCount, usersCount] = await Promise.all([
-                HyNode.countDocuments({ groups: group._id }),
-                HyUser.countDocuments({ groups: group._id }),
+
+        const groupIds = groups.map((group) => group._id);
+        let nodeCountMap = new Map();
+        let userCountMap = new Map();
+
+        if (groupIds.length > 0) {
+            const [nodeCounts, userCounts] = await Promise.all([
+                HyNode.aggregate([
+                    { $match: { groups: { $in: groupIds } } },
+                    { $unwind: '$groups' },
+                    { $match: { groups: { $in: groupIds } } },
+                    { $group: { _id: '$groups', count: { $sum: 1 } } },
+                ]),
+                HyUser.aggregate([
+                    { $match: { groups: { $in: groupIds } } },
+                    { $unwind: '$groups' },
+                    { $match: { groups: { $in: groupIds } } },
+                    { $group: { _id: '$groups', count: { $sum: 1 } } },
+                ]),
             ]);
-            return {
-                ...group.toObject(),
-                nodesCount,
-                usersCount,
-            };
+
+            nodeCountMap = new Map(nodeCounts.map((item) => [String(item._id), item.count]));
+            userCountMap = new Map(userCounts.map((item) => [String(item._id), item.count]));
+        }
+
+        const groupsWithCounts = groups.map((group) => ({
+            ...group.toObject(),
+            nodesCount: nodeCountMap.get(String(group._id)) || 0,
+            usersCount: userCountMap.get(String(group._id)) || 0,
         }));
         
         render(res, 'groups', {
@@ -1198,11 +1215,17 @@ router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
         
         // Инвалидируем кэш всех пользователей
         const users = await HyUser.find({}).select('userId subscriptionToken').lean();
-        for (const user of users) {
-            await cache.invalidateUser(user.userId);
+        const invalidateTasks = users.flatMap((user) => {
+            const tasks = [() => cache.invalidateUser(user.userId)];
             if (user.subscriptionToken) {
-                await cache.invalidateSubscription(user.subscriptionToken);
+                tasks.push(() => cache.invalidateSubscription(user.subscriptionToken));
             }
+            return tasks;
+        });
+
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < invalidateTasks.length; i += BATCH_SIZE) {
+            await Promise.all(invalidateTasks.slice(i, i + BATCH_SIZE).map((task) => task()));
         }
         
         // Инвалидируем статистику

@@ -13,5 +13,7 @@ const serverGroupSchema = new mongoose.Schema({
     subscriptionTitle: { type: String, default: '', trim: true },
 }, { timestamps: true });
 
+serverGroupSchema.index({ active: 1 });
+
 module.exports = mongoose.model('ServerGroup', serverGroupSchema);
 
