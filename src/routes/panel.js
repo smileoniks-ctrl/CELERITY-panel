@@ -1098,11 +1098,22 @@ router.post('/settings', requireAuth, async (req, res) => {
 
         // Subscription settings
         if (req.body['_subscriptionSettings'] !== undefined) {
-            updates['subscription.supportUrl']     = req.body['subscription.supportUrl'] || '';
-            updates['subscription.webPageUrl']     = req.body['subscription.webPageUrl'] || '';
-            updates['subscription.happProviderId'] = req.body['subscription.happProviderId'] || '';
-            updates['subscription.logoUrl']        = req.body['subscription.logoUrl'] || '';
-            updates['subscription.pageTitle']      = req.body['subscription.pageTitle'] || '';
+            updates['subscription.supportUrl']            = req.body['subscription.supportUrl'] || '';
+            updates['subscription.webPageUrl']            = req.body['subscription.webPageUrl'] || '';
+            updates['subscription.happProviderId']        = req.body['subscription.happProviderId'] || '';
+            updates['subscription.logoUrl']               = req.body['subscription.logoUrl'] || '';
+            updates['subscription.pageTitle']             = req.body['subscription.pageTitle'] || '';
+            updates['subscription.announce']              = req.body['subscription.announce'] || '';
+            updates['subscription.subExpire']             = req.body['subscription.subExpire'] === 'on';
+            updates['subscription.subExpireButtonLink']   = req.body['subscription.subExpireButtonLink'] || '';
+            updates['subscription.notificationSubsExpire']= req.body['subscription.notificationSubsExpire'] === 'on';
+            updates['subscription.fallbackUrl']           = req.body['subscription.fallbackUrl'] || '';
+            try {
+                const raw = req.body['importButtonsJson'];
+                updates['subscription.importButtons'] = raw ? JSON.parse(raw) : [];
+            } catch (_) {
+                updates['subscription.importButtons'] = [];
+            }
         }
 
         // Backup settings (если форма бэкапов)
