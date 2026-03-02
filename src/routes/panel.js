@@ -37,6 +37,9 @@ const config = require('../../config');
 const logger = require('../utils/logger');
 const path = require('path');
 const fs = require('fs');
+const fsp = fs.promises;
+const { createReadStream } = require('fs');
+const readline = require('readline');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
@@ -1388,28 +1391,14 @@ router.get('/logs', requireAuth, async (req, res) => {
     try {
         const logsDir = path.join(__dirname, '../../logs');
         let logs = [];
-        
-        // Winston с maxFiles создаёт файлы combined1.log, combined2.log и т.д.
-        // Ищем все combined*.log файлы
-        if (fs.existsSync(logsDir)) {
-            const files = fs.readdirSync(logsDir)
-                .filter(f => f.startsWith('combined') && f.endsWith('.log'))
-                .map(f => ({
-                    name: f,
-                    path: path.join(logsDir, f),
-                    mtime: fs.statSync(path.join(logsDir, f)).mtime
-                }))
-                .sort((a, b) => b.mtime - a.mtime); // Сортируем по времени изменения
-            
-            // Берём самый свежий файл
-            if (files.length > 0) {
-                const latestFile = files[0].path;
-                const content = fs.readFileSync(latestFile, 'utf8');
-                // Берём последние 100 строк, новые сверху
-                logs = content.split('\n').filter(Boolean).slice(-100).reverse();
-            }
+
+        const files = await getCombinedLogFiles(logsDir);
+
+        // Берём самый свежий файл
+        if (files.length > 0) {
+            logs = await readLastLogLines(files[0].path, 100);
         }
-        
+
         res.json({ logs });
     } catch (error) {
         logger.error(`[Panel] Logs read error: ${error.message}`);
@@ -1428,33 +1417,36 @@ router.get('/logs/search', requireAuth, async (req, res) => {
         }
 
         const logsDir = path.join(__dirname, '../../logs');
-        if (!fs.existsSync(logsDir)) {
-            return res.json({ matches: [], total: 0 });
-        }
-
-        const files = fs.readdirSync(logsDir)
-            .filter(f => f.startsWith('combined') && f.endsWith('.log'))
-            .map(f => ({
-                name: f,
-                path: path.join(logsDir, f),
-                mtime: fs.statSync(path.join(logsDir, f)).mtime
-            }))
-            .sort((a, b) => b.mtime - a.mtime);
+        const files = await getCombinedLogFiles(logsDir);
 
         const qLower = q.toLowerCase();
         const matches = [];
         let total = 0;
 
         for (const file of files) {
-            const content = fs.readFileSync(file.path, 'utf8');
-            const lines = content.split('\n').filter(Boolean).reverse();
-            for (const line of lines) {
+            const fileMatches = [];
+            const rl = readline.createInterface({
+                input: createReadStream(file.path, { encoding: 'utf8' }),
+                crlfDelay: Infinity,
+            });
+
+            for await (const line of rl) {
+                if (!line) continue;
+
                 if (line.toLowerCase().includes(qLower)) {
-                    total++;
-                    if (matches.length < limit) {
-                        matches.push(line);
+                    total += 1;
+                    fileMatches.push(line);
+
+                    // Держим только последние limit совпадений в текущем файле
+                    if (fileMatches.length > limit) {
+                        fileMatches.shift();
                     }
                 }
+            }
+
+            // Отдаём новые строки сверху (как и раньше)
+            for (let i = fileMatches.length - 1; i >= 0 && matches.length < limit; i -= 1) {
+                matches.push(fileMatches[i]);
             }
         }
 
@@ -1464,6 +1456,51 @@ router.get('/logs/search', requireAuth, async (req, res) => {
         res.json({ matches: [], total: 0, error: error.message });
     }
 });
+
+async function getCombinedLogFiles(logsDir) {
+    try {
+        await fsp.access(logsDir);
+    } catch {
+        return [];
+    }
+
+    const dirEntries = await fsp.readdir(logsDir, { withFileTypes: true });
+    const logEntries = dirEntries.filter(
+        (entry) => entry.isFile() && entry.name.startsWith('combined') && entry.name.endsWith('.log')
+    );
+
+    const files = await Promise.all(
+        logEntries.map(async (entry) => {
+            const fullPath = path.join(logsDir, entry.name);
+            const stat = await fsp.stat(fullPath);
+            return {
+                name: entry.name,
+                path: fullPath,
+                mtime: stat.mtime,
+            };
+        })
+    );
+
+    return files.sort((a, b) => b.mtime - a.mtime);
+}
+
+async function readLastLogLines(filePath, maxLines) {
+    const tail = [];
+    const rl = readline.createInterface({
+        input: createReadStream(filePath, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+        if (!line) continue;
+        tail.push(line);
+        if (tail.length > maxLines) {
+            tail.shift();
+        }
+    }
+
+    return tail.reverse();
+}
 
 // POST /panel/backup - Backup MongoDB и скачать
 router.post('/backup', requireAuth, async (req, res) => {
