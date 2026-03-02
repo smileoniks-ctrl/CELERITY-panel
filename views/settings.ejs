@@ -337,12 +337,150 @@
                     <small class="hint"><%= t('settings.subHappProviderIdHint') || '8-символьный код из happ-proxy.com (опционально).' %></small>
                 </div>
 
+                <hr style="margin: 1.25rem 0; border-color: var(--border);">
+
+                <%# ── Объявление ── %>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label><%= t('settings.subAnnounce') || 'Объявление' %></label>
+                    <textarea name="subscription.announce" rows="3" maxlength="200"
+                              placeholder="Например: Технические работы 15 января с 03:00 до 05:00"
+                              oninput="document.getElementById('announceLen').textContent = this.value.length"
+                              style="resize: vertical; min-height: 72px;"><%= settings?.subscription?.announce || '' %></textarea>
+                    <small class="hint">
+                        Показывается в HAPP и Hiddify внутри приложения (до 200 символов).
+                        <span id="announceLen" style="color: var(--text-muted);"><%= (settings?.subscription?.announce || '').length %></span>/200
+                    </small>
+                </div>
+
+                <hr style="margin: 1.25rem 0; border-color: var(--border);">
+
+                <%# ── Уведомления об истечении (HAPP) ── %>
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 0.75rem;">
+                        <%= t('settings.subExpireSection') || 'Уведомления об истечении' %>
+                    </label>
+
+                    <div class="settings-grid" style="margin-bottom: 0.75rem;">
+                        <label class="toggle-label" style="align-items: flex-start;">
+                            <input type="checkbox" name="subscription.subExpire"
+                                   <%= settings?.subscription?.subExpire ? 'checked' : '' %>>
+                            <span>
+                                <strong><%= t('settings.subExpire') || 'Баннер об истечении в HAPP' %></strong><br>
+                                <small class="hint" style="margin-top: 2px; display: block;">За 3 дня и после истечения — HAPP показывает предупреждение в интерфейсе.</small>
+                            </span>
+                        </label>
+                        <label class="toggle-label" style="align-items: flex-start;">
+                            <input type="checkbox" name="subscription.notificationSubsExpire"
+                                   <%= settings?.subscription?.notificationSubsExpire ? 'checked' : '' %>>
+                            <span>
+                                <strong><%= t('settings.subNotificationExpire') || 'Push-уведомление (HAPP)' %></strong><br>
+                                <small class="hint" style="margin-top: 2px; display: block;">Пуш-напоминание за 3 дня до истечения (по 1 уведомлению в день).</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="form-group" style="max-width: 420px;">
+                        <label><%= t('settings.subExpireButtonLink') || 'Ссылка для кнопки «Продлить»' %></label>
+                        <input type="url" name="subscription.subExpireButtonLink"
+                               value="<%= settings?.subscription?.subExpireButtonLink || '' %>"
+                               placeholder="https://t.me/yoursupport">
+                        <small class="hint">Появляется в баннере истечения в HAPP. Оставьте пустым — кнопка не покажется.</small>
+                    </div>
+                </div>
+
+                <hr style="margin: 1.25rem 0; border-color: var(--border);">
+
+                <%# ── Fallback URL ── %>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label><%= t('settings.subFallbackUrl') || 'Резервный URL подписки' %></label>
+                    <input type="url" name="subscription.fallbackUrl"
+                           value="<%= settings?.subscription?.fallbackUrl || '' %>"
+                           placeholder="https://backup.example.com/api/files/...">
+                    <small class="hint">HAPP переключится на этот URL, если основной недоступен (&gt;9 сек или код 3xx–5xx).</small>
+                </div>
+
+                <hr style="margin: 1.25rem 0; border-color: var(--border);">
+
+                <%# ── Кнопки импорта ── %>
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px;">
+                        <%= t('settings.subImportButtons') || 'Кнопки «Открыть в приложении»' %>
+                    </label>
+                    <small class="hint" style="display: block; margin-bottom: 0.75rem;">
+                        Если список пуст — по умолчанию отображаются кнопки Hiddify и HAPP.
+                        В шаблоне URL используйте <code>{url}</code> (encoded URL подписки) и <code>{title}</code>.
+                    </small>
+
+                    <div id="importButtonsList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
+
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addImportButton()">
+                        <i class="ti ti-plus"></i> Добавить кнопку
+                    </button>
+
+                    <input type="hidden" id="importButtonsJson" name="importButtonsJson" value="">
+                </div>
+
                 <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem;">
                     <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem;">
                         <i class="ti ti-device-floppy"></i> <%= t('common.save') || 'Сохранить' %>
                     </button>
                 </div>
             </form>
+
+            <script>
+            (function() {
+                const DEFAULTS = [
+                    { label: 'Hiddify', urlTemplate: 'hiddify://install-sub?url={url}#{title}', enabled: true },
+                    { label: 'HAPP',    urlTemplate: 'happ://subscribe?url={url}',               enabled: true },
+                ];
+
+                let buttons = <%- JSON.stringify(settings?.subscription?.importButtons || []) %>;
+
+                function render() {
+                    const container = document.getElementById('importButtonsList');
+                    container.innerHTML = '';
+                    buttons.forEach((btn, i) => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+                        row.innerHTML = `
+                            <input type="text" placeholder="Название (напр. Hiddify)"
+                                   value="${escHtml(btn.label || '')}"
+                                   style="width:130px; flex-shrink:0;"
+                                   oninput="updateBtn(${i},'label',this.value)">
+                            <input type="text" placeholder="hiddify://install-sub?url={url}#{title}"
+                                   value="${escHtml(btn.urlTemplate || '')}"
+                                   style="flex:1;"
+                                   oninput="updateBtn(${i},'urlTemplate',this.value)">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeBtn(${i})" title="Удалить">
+                                <i class="ti ti-trash"></i>
+                            </button>`;
+                        container.appendChild(row);
+                    });
+                    syncJson();
+                }
+
+                function syncJson() {
+                    document.getElementById('importButtonsJson').value = JSON.stringify(buttons);
+                }
+
+                window.updateBtn = (i, key, val) => { buttons[i][key] = val; syncJson(); };
+                window.removeBtn  = (i) => { buttons.splice(i, 1); render(); };
+                window.addImportButton = () => {
+                    buttons.push({ label: '', urlTemplate: '', enabled: true });
+                    render();
+                };
+
+                function escHtml(s) {
+                    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                }
+
+                // Инициализация — сразу при загрузке вкладки
+                render();
+
+                // Синхронизируем JSON перед отправкой формы
+                document.querySelector('[name="_subscriptionSettings"]').closest('form').addEventListener('submit', syncJson);
+            })();
+            </script>
         </div>
     </div>
 </div>

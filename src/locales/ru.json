@@ -451,7 +451,14 @@
     "subWebPageUrl": "Ссылка на веб-страницу",
     "subWebPageUrlHint": "Отображается кнопкой «Открыть веб-страницу» в Hiddify. Например: лендинг или кабинет.",
     "subHappProviderId": "HAPP Provider ID",
-    "subHappProviderIdHint": "Опциональный 8-символьный код из happ-proxy.com. Открывает статистику и кнопку обратной связи."
+    "subHappProviderIdHint": "Опциональный 8-символьный код из happ-proxy.com. Открывает статистику и кнопку обратной связи.",
+    "subAnnounce": "Объявление",
+    "subExpireSection": "Уведомления об истечении",
+    "subExpire": "Баннер об истечении в HAPP",
+    "subNotificationExpire": "Push-уведомление об истечении (HAPP)",
+    "subExpireButtonLink": "Ссылка для кнопки «Продлить»",
+    "subFallbackUrl": "Резервный URL подписки",
+    "subImportButtons": "Кнопки «Открыть в приложении»"
   },
   "setup": {
     "title": "Первоначальная настройка",
