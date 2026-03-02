@@ -69,8 +69,8 @@
                     <div class="detail-item">
                         <label><%= t('users.txRx') %></label>
                         <span class="value">
-                            ↑ <%= ((user.traffic?.tx || 0) / (1024*1024*1024)).toFixed(2) %> / 
-                            ↓ <%= ((user.traffic?.rx || 0) / (1024*1024*1024)).toFixed(2) %> GB
+                            <i class="ti ti-arrow-up" style="color:#22c55e"></i> <%= ((user.traffic?.tx || 0) / (1024*1024*1024)).toFixed(2) %> / 
+                            <i class="ti ti-arrow-down" style="color:#3b82f6"></i> <%= ((user.traffic?.rx || 0) / (1024*1024*1024)).toFixed(2) %> GB
                         </span>
                     </div>
                     <div class="detail-item">

@@ -394,7 +394,7 @@ function generateHTML(user, nodes, token, baseUrl) {
         .location-header:hover { background: #1a1a1a; }
         .location-flag { font-size: 24px; }
         .location-name { flex: 1; font-weight: 500; }
-        .location-arrow { color: var(--muted); transition: transform 0.2s; }
+        .location-arrow { color: var(--muted); transition: transform 0.2s; display: inline-flex; }
         .location.open .location-arrow { transform: rotate(180deg); }
         .location-configs { display: none; border-top: 1px solid var(--border); }
         .location.open .location-configs { display: block; }
@@ -406,14 +406,17 @@ function generateHTML(user, nodes, token, baseUrl) {
         .copy-btn.success { background: var(--success); }
         .sub-box { display: flex; gap: 8px; }
         .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; }
-        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; display: flex; align-items: center; gap: 8px; }
         .toast.show { transform: translateX(-50%) translateY(0); }
+        .header h1, .section h2 { display: flex; align-items: center; gap: 8px; }
+        .copy-btn { display: inline-flex; align-items: center; gap: 6px; }
     </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Подключение</h1>
+            <h1><i class="ti ti-rocket"></i> Подключение</h1>
             <p>Ваша персональная конфигурация</p>
         </div>
         
@@ -433,7 +436,7 @@ function generateHTML(user, nodes, token, baseUrl) {
         </div>
         
         <div class="section">
-            <h2>🔗 ССЫЛКА ДЛЯ ПРИЛОЖЕНИЙ</h2>
+            <h2><i class="ti ti-link"></i> ССЫЛКА ДЛЯ ПРИЛОЖЕНИЙ</h2>
             <div class="sub-box">
                 <input type="text" value="${baseUrl}" readonly id="subUrl">
                 <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
@@ -441,13 +444,13 @@ function generateHTML(user, nodes, token, baseUrl) {
         </div>
         
         <div class="section">
-            <h2>🌍 ЛОКАЦИИ</h2>
+            <h2><i class="ti ti-world"></i> ЛОКАЦИИ</h2>
             ${Object.entries(locations).map(([name, loc]) => `
             <div class="location">
                 <div class="location-header" onclick="this.parentElement.classList.toggle('open')">
                     <span class="location-flag">${loc.flag}</span>
                     <span class="location-name">${name}</span>
-                    <span class="location-arrow">▼</span>
+                    <span class="location-arrow"><i class="ti ti-chevron-down"></i></span>
                 </div>
                 <div class="location-configs">
                     ${loc.configs.map((cfg, i) => `
@@ -462,7 +465,7 @@ function generateHTML(user, nodes, token, baseUrl) {
         </div>
     </div>
     
-    <div class="toast" id="toast">✓ Скопировано</div>
+    <div class="toast" id="toast"><i class="ti ti-check"></i> Скопировано</div>
     
     <script>
         // Все URI для копирования
@@ -505,7 +508,7 @@ function generateHTML(user, nodes, token, baseUrl) {
         
         function success(btn) {
             const orig = btn.textContent;
-            btn.textContent = '✓';
+            btn.innerHTML = '<i class="ti ti-check"></i>';
             btn.classList.add('success');
             document.getElementById('toast').classList.add('show');
             setTimeout(() => {

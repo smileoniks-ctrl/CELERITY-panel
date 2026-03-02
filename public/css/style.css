@@ -109,24 +109,8 @@ html {
 
 .logo-icon {
     font-size: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent);
-    filter: drop-shadow(0 0 10px var(--accent-glow)) drop-shadow(0 0 24px rgba(168, 85, 247, 0.5));
-    animation: logo-bolt 2.5s ease-in-out infinite;
-}
-
-.logo-icon i {
-    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 30%, #6366f1 60%, #a855f7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-@keyframes logo-bolt {
-    0%, 100% { filter: drop-shadow(0 0 10px var(--accent-glow)) drop-shadow(0 0 24px rgba(168, 85, 247, 0.5)); }
-    50% { filter: drop-shadow(0 0 16px var(--accent-glow)) drop-shadow(0 0 32px rgba(168, 85, 247, 0.7)); }
+    filter: drop-shadow(0 0 12px var(--accent-glow));
+    animation: pulse 3s infinite;
 }
 
 .logo-content {
@@ -1402,16 +1386,9 @@ html {
 
 .login-header .logo-icon {
     font-size: 48px;
-    filter: drop-shadow(0 0 16px var(--accent-glow)) drop-shadow(0 0 32px rgba(168, 85, 247, 0.5));
-    display: inline-flex;
-    animation: logo-bolt 2.5s ease-in-out infinite;
-}
-
-.login-header .logo-icon i {
-    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 30%, #6366f1 60%, #a855f7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    filter: drop-shadow(0 0 20px var(--accent-glow));
+    display: inline-block;
+    animation: pulse 2s infinite;
 }
 
 .login-header h1 {

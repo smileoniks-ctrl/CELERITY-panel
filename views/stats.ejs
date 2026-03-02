@@ -38,7 +38,7 @@
         };
         %>
         <div class="stat-value"><%= formatTraffic(summary.traffic24h.total) %></div>
-        <div class="stat-label">↑ <%= formatTraffic(summary.traffic24h.tx) %> / ↓ <%= formatTraffic(summary.traffic24h.rx) %></div>
+        <div class="stat-label"><i class="ti ti-arrow-up" style="color:#22c55e"></i> <%= formatTraffic(summary.traffic24h.tx) %> / <i class="ti ti-arrow-down" style="color:#3b82f6"></i> <%= formatTraffic(summary.traffic24h.rx) %></div>
     </div>
     
     <div class="stat-card stat-nodes">
@@ -525,8 +525,8 @@ function updateTrafficChart(data) {
     
     // Update totals
     document.getElementById('trafficTotals').innerHTML = `
-        <span class="up">↑ ${formatBytes(data.totals.tx)}</span>
-        <span class="down">↓ ${formatBytes(data.totals.rx)}</span>
+        <span class="up"><i class="ti ti-arrow-up"></i> ${formatBytes(data.totals.tx)}</span>
+        <span class="down"><i class="ti ti-arrow-down"></i> ${formatBytes(data.totals.rx)}</span>
     `;
 }
 
@@ -599,9 +599,9 @@ async function updateTrend() {
         const trendEl = document.getElementById('onlineTrend');
         
         if (trend > 0) {
-            trendEl.innerHTML = `<span style="color: var(--success)">↑ ${trend}%</span>`;
+            trendEl.innerHTML = `<span style="color: var(--success)"><i class="ti ti-trending-up"></i> ${trend}%</span>`;
         } else if (trend < 0) {
-            trendEl.innerHTML = `<span style="color: var(--danger)">↓ ${Math.abs(trend)}%</span>`;
+            trendEl.innerHTML = `<span style="color: var(--danger)"><i class="ti ti-trending-down"></i> ${Math.abs(trend)}%</span>`;
         } else {
             trendEl.textContent = '—';
         }

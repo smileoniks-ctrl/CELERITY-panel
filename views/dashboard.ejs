@@ -44,8 +44,8 @@
         };
         %>
         <div class="stat-value"><%= formatTraffic(totalGB) %></div>
-        <div class="stat-label" title="↑ <%= formatTraffic(txGB) %> / ↓ <%= formatTraffic(rxGB) %>">
-            ↑ <%= formatTraffic(txGB) %> / ↓ <%= formatTraffic(rxGB) %>
+        <div class="stat-label" title="<%= t('common.upload') || 'Upload' %> <%= formatTraffic(txGB) %> / <%= t('common.download') || 'Download' %> <%= formatTraffic(rxGB) %>">
+            <i class="ti ti-arrow-up" style="color:#22c55e"></i> <%= formatTraffic(txGB) %> / <i class="ti ti-arrow-down" style="color:#3b82f6"></i> <%= formatTraffic(rxGB) %>
         </div>
     </div>
 </div>
@@ -332,7 +332,9 @@
     color: var(--muted);
 }
 .node-speed .speed-up, .node-speed .speed-down {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 .node-speed .speed-up {
     color: #22c55e;
@@ -668,14 +670,14 @@ async function loadNodesSpeed() {
             
             if (desktopEl) {
                 desktopEl.innerHTML = `
-                    <span class="speed-up" title="Upload">↑ ${txSpeed}</span>
-                    <span class="speed-down" title="Download">↓ ${rxSpeed}</span>
+                    <span class="speed-up" title="Upload"><i class="ti ti-arrow-up"></i> ${txSpeed}</span>
+                    <span class="speed-down" title="Download"><i class="ti ti-arrow-down"></i> ${rxSpeed}</span>
                 `;
             }
             if (mobileEl) {
                 mobileEl.innerHTML = `
-                    <span style="color: #22c55e; font-size: 12px;">↑ ${txSpeed}</span><br>
-                    <span style="color: #3b82f6; font-size: 12px;">↓ ${rxSpeed}</span>
+                    <span style="color: #22c55e; font-size: 12px;"><i class="ti ti-arrow-up"></i> ${txSpeed}</span><br>
+                    <span style="color: #3b82f6; font-size: 12px;"><i class="ti ti-arrow-down"></i> ${rxSpeed}</span>
                 `;
             }
         } else {

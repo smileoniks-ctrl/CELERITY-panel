@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= typeof t !== 'undefined' ? t('terminal.title') : 'SSH Terminal' %> - <%= node.name %></title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -35,7 +36,12 @@
             color: #c9d1d9;
             font-size: 16px;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .header h1 i { margin-right: 6px; }
+        .header .btn { display: inline-flex; align-items: center; gap: 6px; }
         
         .status {
             display: flex;
@@ -147,15 +153,15 @@
 <body>
     <div class="header">
         <div class="header-left">
-            <h1>🖥️ <%= node.name %> (<%= node.ip %>)</h1>
+            <h1><i class="ti ti-device-desktop"></i> <%= node.name %> (<%= node.ip %>)</h1>
             <div class="status">
                 <div class="status-dot connecting" id="statusDot"></div>
                 <span id="statusText"><%= typeof t !== 'undefined' ? t('terminal.connecting') : 'Connecting...' %></span>
             </div>
         </div>
         <div class="header-right">
-            <button class="btn" onclick="reconnect()">🔄 <%= typeof t !== 'undefined' ? t('nodes.reconnect') : 'Reconnect' %></button>
-            <button class="btn btn-danger" onclick="disconnect()">✕ <%= typeof t !== 'undefined' ? t('common.close') : 'Close' %></button>
+            <button class="btn" onclick="reconnect()"><i class="ti ti-refresh"></i> <%= typeof t !== 'undefined' ? t('nodes.reconnect') : 'Reconnect' %></button>
+            <button class="btn btn-danger" onclick="disconnect()"><i class="ti ti-x"></i> <%= typeof t !== 'undefined' ? t('common.close') : 'Close' %></button>
         </div>
     </div>
     
@@ -174,7 +180,7 @@
     <div class="overlay hidden" id="errorOverlay">
         <div class="overlay-content">
             <div class="error-message">
-                <h2>❌ <%= typeof t !== 'undefined' ? t('terminal.connectionError') : 'Connection error' %></h2>
+                <h2><i class="ti ti-alert-circle"></i> <%= typeof t !== 'undefined' ? t('terminal.connectionError') : 'Connection error' %></h2>
                 <p id="errorText"></p>
                 <button class="btn" onclick="reconnect()" style="margin-top: 15px;"><%= typeof t !== 'undefined' ? t('terminal.tryAgain') : 'Try Again' %></button>
             </div>
