@@ -12,6 +12,8 @@
 
 **C³ CELERITY** by Click Connect — modern web panel for managing [Hysteria 2](https://v2.hysteria.network/) proxy servers with centralized HTTP authentication, one-click node setup, and flexible user-to-server group mapping.
 
+**Built for performance:** Lightweight architecture designed for speed at any scale.
+
 <p align="center">
   <img src="https://github.com/user-attachments/assets/bc04b654-aad1-4dc7-96fb-3f35df114eaf" alt="C³ CELERITY Dashboard" width="800">
   <br>
