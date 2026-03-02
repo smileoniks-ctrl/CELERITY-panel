@@ -155,8 +155,8 @@
                                   class="code-textarea" placeholder="listen: :443&#10;&#10;acme:&#10;  domains:&#10;    - example.com..."><%= node?.customConfig || '' %></textarea>
                         <small><%= t('nodes.customConfigFormat') %></small>
                     </div>
-                    <button type="button" class="btn btn-sm" onclick="generateConfig()"><%= t('nodes.generateConfig') %></button>
-                    <button type="button" class="btn btn-sm" onclick="loadCurrentConfig()"><%= t('nodes.loadCurrentConfig') %></button>
+                    <button type="button" class="btn btn-sm" onclick="generateConfig()"><i class="ti ti-wand"></i> <%= t('nodes.generateConfig') %></button>
+                    <button type="button" class="btn btn-sm" onclick="loadCurrentConfig()"><i class="ti ti-cloud-download"></i> <%= t('nodes.loadCurrentConfig') %></button>
                 </div>
             </div>
             

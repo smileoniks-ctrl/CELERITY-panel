@@ -18,7 +18,7 @@
             </div>
             
             <div class="alert alert-info" style="margin-bottom: 1rem;">
-                <%= typeof t !== 'undefined' ? t('setup.createAdmin') : '🔐 Create administrator account.' %><br>
+                <i class="ti ti-lock"></i> <%= typeof t !== 'undefined' ? t('setup.createAdmin') : 'Create administrator account.' %><br>
                 <%= typeof t !== 'undefined' ? t('setup.credentialsEncrypted') : 'Login and password will be stored encrypted.' %>
             </div>
             
@@ -49,7 +49,7 @@
             </form>
             
             <div class="login-footer">
-                <small><%= typeof t !== 'undefined' ? t('setup.rememberWarning') : '⚠️ Remember credentials — recovery is impossible!' %></small>
+                <small><i class="ti ti-alert-triangle"></i> <%= typeof t !== 'undefined' ? t('setup.rememberWarning') : 'Remember credentials — recovery is impossible!' %></small>
             </div>
         </div>
     </div>
