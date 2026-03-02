@@ -451,14 +451,7 @@
     "subWebPageUrl": "Web Page URL",
     "subWebPageUrlHint": "Shown as an \"Open Web Page\" button in Hiddify. Example: landing or user portal.",
     "subHappProviderId": "HAPP Provider ID",
-    "subHappProviderIdHint": "Optional 8-character code from happ-proxy.com. Unlocks statistics and feedback button.",
-    "subAnnounce": "Announcement",
-    "subExpireSection": "Expiry Notifications",
-    "subExpire": "Expiry banner in HAPP",
-    "subNotificationExpire": "Push notification on expiry (HAPP)",
-    "subExpireButtonLink": "\"Renew\" button URL",
-    "subFallbackUrl": "Fallback subscription URL",
-    "subImportButtons": "\"Open in app\" buttons"
+    "subHappProviderIdHint": "Optional 8-character code from happ-proxy.com. Unlocks statistics and feedback button."
   },
   "setup": {
     "title": "Initial Setup",

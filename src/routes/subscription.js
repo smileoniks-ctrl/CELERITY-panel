@@ -397,42 +397,13 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
            </div>`
         : '';
 
-    // Кнопки импорта — дефолт: Hiddify + HAPP; можно переопределить в настройках
-    const importBtnList = (sub.importButtons && sub.importButtons.length > 0)
-        ? sub.importButtons.filter(b => b.enabled !== false)
-        : [
-            { label: 'Hiddify', urlTemplate: 'hiddify://install-sub?url={url}#{title}' },
-            { label: 'HAPP',    urlTemplate: 'happ://subscribe?url={url}' },
-        ];
-    const encodedSubUrl = encodeURIComponent(baseUrl);
-    const encodedTitle  = encodeURIComponent(pageTitle);
-
-    // Кнопка поддержки — того же стиля, что и кнопки импорта
-    const supportBtn = sub.supportUrl
-        ? `<a href="${sub.supportUrl}" target="_blank" rel="noopener noreferrer" class="import-btn">
-               <i class="ti ti-headset"></i> Поддержка
-           </a>`
-        : '';
-
-    const actionsBtns = [
-        ...importBtnList.map(btn => {
-            const href = (btn.urlTemplate || '')
-                .replace('{url}', encodedSubUrl)
-                .replace('{title}', encodedTitle);
-            return `<a href="${href}" class="import-btn">${btn.label}</a>`;
-        }),
-        supportBtn,
-    ].join('');
-
-    const actionsSectionHtml = `<div class="section">
-            <h2><i class="ti ti-apps"></i> ДЕЙСТВИЯ</h2>
-            <div class="import-btns">${actionsBtns}</div>
-           </div>`;
-
-    // Прогресс-бар трафика
-    const trafficPercent = trafficLimit > 0 ? Math.min(100, (trafficUsed / trafficLimit) * 100) : 0;
-    const progressHtml   = trafficLimit > 0
-        ? `<div class="traffic-progress"><div class="traffic-bar" style="width:${trafficPercent.toFixed(1)}%"></div></div>`
+    const supportHtml = sub.supportUrl
+        ? `<div class="section" style="text-align:center;">
+            <a href="${sub.supportUrl}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:var(--card); border:1px solid var(--border); border-radius:10px; color:var(--text); text-decoration:none; font-size:14px;">
+                <i class="ti ti-headset" style="font-size:18px; color:var(--accent);"></i> Поддержка
+            </a>
+           </div>`
         : '';
 
     return `<!DOCTYPE html>
@@ -447,16 +418,14 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; }
         .container { max-width: 600px; margin: 0 auto; }
         .header { text-align: center; padding: 32px 16px; background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); border-radius: 16px; margin-bottom: 16px; }
-        .header h1 { font-size: 24px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .header h1 { font-size: 24px; margin-bottom: 4px; }
         .header p { color: var(--muted); font-size: 14px; }
         .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
         .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
         .stat-value { font-size: 18px; font-weight: 600; color: var(--accent); }
-        .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
-        .traffic-progress { height: 5px; background: var(--border); border-radius: 3px; margin-top: 7px; overflow: hidden; }
-        .traffic-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+        .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
         .section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-        .section h2 { font-size: 14px; margin-bottom: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+        .section h2 { font-size: 14px; margin-bottom: 12px; color: var(--muted); }
         .location { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
         .location-header { display: flex; align-items: center; gap: 10px; padding: 12px; cursor: pointer; background: var(--bg); }
         .location-header:hover { background: #1a1a1a; }
@@ -469,17 +438,16 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         .config { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); }
         .config:last-child { border-bottom: none; }
         .config-name { font-size: 13px; }
-        .copy-btn { padding: 6px 12px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .copy-btn { padding: 6px 12px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
         .copy-btn:active { transform: scale(0.95); }
         .copy-btn.success { background: var(--success); }
         .sub-box { display: flex; gap: 8px; }
         .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; min-width: 0; }
-        .import-btns { display: flex; flex-wrap: wrap; gap: 10px; }
-        .import-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); text-decoration: none; font-size: 14px; font-weight: 500; transition: border-color 0.15s, background 0.15s; }
-        .import-btn:hover { background: #1c1c1c; border-color: var(--accent); }
-        .import-btn:active { transform: scale(0.97); }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; display: flex; align-items: center; gap: 8px; }
         .toast.show { transform: translateX(-50%) translateY(0); }
+        .header h1 { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .section h2 { display: flex; align-items: center; gap: 8px; }
+        .copy-btn { display: inline-flex; align-items: center; gap: 6px; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 </head>
@@ -492,9 +460,8 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         
         <div class="stats">
             <div class="stat">
-                <div class="stat-value">${trafficUsed.toFixed(1)}<small style="font-size:13px;font-weight:400;color:var(--muted);">${trafficLimit > 0 ? ` / ${trafficLimit.toFixed(0)} ГБ` : ' ГБ'}</small></div>
-                ${progressHtml}
-                <div class="stat-label">Трафик</div>
+                <div class="stat-value">${trafficUsed.toFixed(1)} ГБ</div>
+                <div class="stat-label">Использовано${trafficLimit > 0 ? ` / ${trafficLimit.toFixed(0)} ГБ` : ''}</div>
             </div>
             <div class="stat">
                 <div class="stat-value">${Object.keys(locations).length}</div>
@@ -513,7 +480,7 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
                 <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
             </div>
         </div>
-
+        
         <div class="section">
             <h2><i class="ti ti-world"></i> ЛОКАЦИИ</h2>
             ${Object.entries(locations).map(([name, loc]) => `
@@ -536,7 +503,7 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         </div>
 
         ${qrSectionHtml}
-        ${actionsSectionHtml}
+        ${supportHtml}
     </div>
     
     <div class="toast" id="toast"><i class="ti ti-check"></i> Скопировано</div>
@@ -685,7 +652,7 @@ router.get('/files/:token', async (req, res) => {
         logger.debug(`[Sub] Serving ${nodes.length} nodes to user ${user.userId}`);
         
         // Генерируем подписку
-        const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent, settings?.subscription || {});
+        const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent, settings?.subscription?.happProviderId || '');
         
         // Сохраняем в кэш
         await cache.setSubscription(token, format, subscriptionData);
@@ -702,7 +669,7 @@ router.get('/files/:token', async (req, res) => {
 /**
  * Генерирует данные подписки для кэширования
  */
-function generateSubscriptionData(user, nodes, format, userAgent, sub = {}) {
+function generateSubscriptionData(user, nodes, format, userAgent, happProviderId = '') {
     let content;
     let needsBase64 = false;
     
@@ -721,33 +688,16 @@ function generateSubscriptionData(user, nodes, format, userAgent, sub = {}) {
             break;
         case 'uri':
         case 'raw':
-        default: {
+        default:
             content = generateURIList(user, nodes);
-            // HAPP/Hiddify read #param: value comments from the body as fallback
-            // (headers may be stripped by reverse proxies)
-            const comments = [];
-            if (sub.happProviderId)        comments.push(`#providerid ${sub.happProviderId}`);
-            if (sub.supportUrl)            comments.push(`#support-url: ${sub.supportUrl}`);
-            if (sub.webPageUrl)            comments.push(`#profile-web-page-url: ${sub.webPageUrl}`);
-            if (sub.fallbackUrl)           comments.push(`#fallback-url ${sub.fallbackUrl}`);
-            if (sub.announce) {
-                const b64 = Buffer.from(sub.announce).toString('base64');
-                comments.push(`#announce: base64:${b64}`);
-            }
-            if (sub.subExpire) {
-                comments.push('#sub-expire: 1');
-                if (sub.subExpireButtonLink) comments.push(`#sub-expire-button-link: ${sub.subExpireButtonLink}`);
-            }
-            if (sub.notificationSubsExpire) comments.push('#notification-subs-expire: 1');
-
-            if (comments.length > 0) {
-                content = comments.join('\n') + '\n' + content;
+            // HAPP reads #providerid from body as fallback (in case headers are stripped by a proxy)
+            if (happProviderId) {
+                content = `#providerid ${happProviderId}\n${content}`;
             }
             if (/quantumult/i.test(userAgent)) {
                 needsBase64 = true;
             }
             break;
-        }
     }
     
     if (needsBase64) {
@@ -798,17 +748,9 @@ function sendCachedSubscription(res, data, format, userAgent, settings) {
     };
 
     const sub = settings?.subscription;
-    if (sub?.supportUrl)             headers['support-url']               = sub.supportUrl;
-    if (sub?.webPageUrl)             headers['profile-web-page-url']      = sub.webPageUrl;
-    if (sub?.happProviderId)         headers['providerid']                 = sub.happProviderId;
-    if (sub?.fallbackUrl)            headers['fallback-url']               = sub.fallbackUrl;
-    if (sub?.announce) {
-        const b64 = Buffer.from(sub.announce).toString('base64');
-        headers['announce'] = `base64:${b64}`;
-    }
-    if (sub?.subExpire)              headers['sub-expire']                 = '1';
-    if (sub?.subExpireButtonLink)    headers['sub-expire-button-link']     = sub.subExpireButtonLink;
-    if (sub?.notificationSubsExpire) headers['notification-subs-expire']   = '1';
+    if (sub?.supportUrl)     headers['support-url']          = sub.supportUrl;
+    if (sub?.webPageUrl)     headers['profile-web-page-url'] = sub.webPageUrl;
+    if (sub?.happProviderId) headers['providerid']            = sub.happProviderId;
 
     res.set(headers);
     res.send(data.content);

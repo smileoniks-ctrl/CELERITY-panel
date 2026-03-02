@@ -76,25 +76,6 @@ const settingsSchema = new mongoose.Schema({
         happProviderId: { type: String, default: '' },
         logoUrl:        { type: String, default: '' },
         pageTitle:      { type: String, default: '' },
-        // Announcement shown inside HAPP/Hiddify app
-        announce:               { type: String, default: '' },
-        // Expiry banner in HAPP (requires Provider ID for extended version)
-        subExpire:              { type: Boolean, default: false },
-        subExpireButtonLink:    { type: String, default: '' },
-        // Push notification 3 days before expiry (HAPP)
-        notificationSubsExpire: { type: Boolean, default: false },
-        // Fallback subscription URL (HAPP — if primary is down)
-        fallbackUrl:            { type: String, default: '' },
-        // Custom import buttons on the subscription HTML page
-        importButtons: {
-            type: [{
-                _id: false,
-                label:       { type: String },
-                urlTemplate: { type: String },
-                enabled:     { type: Boolean, default: true },
-            }],
-            default: [],
-        },
     },
     
 }, { timestamps: true });
