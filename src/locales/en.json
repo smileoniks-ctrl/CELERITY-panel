@@ -315,6 +315,7 @@
   "settings": {
     "title": "Settings",
     "tabSystem": "System",
+    "tabSubscription": "Subscription",
     "tabSecurity": "Security",
     "tabBackup": "Backups",
     "tabMaintenance": "Maintenance",
@@ -438,7 +439,19 @@
     "flushCacheBtn": "Flush Cache",
     "flushCacheConfirm": "Clear all cached data?\n\nThis will temporarily increase server load as cache rebuilds.",
     "flushing": "Flushing...",
-    "cacheFlushed": "Cache cleared successfully"
+    "cacheFlushed": "Cache cleared successfully",
+    "tabSubscriptionTitle": "Subscription Settings",
+    "subClientApps": "Client Applications",
+    "subLogoUrl": "Logo URL",
+    "subLogoUrlHint": "Link to an image (PNG/SVG/WebP). Leave empty to use the default icon.",
+    "subPageTitle": "Page Title",
+    "subPageTitleHint": "Text above the logo on the subscription page. Default: \"Connection\".",
+    "subSupportUrl": "Support URL",
+    "subSupportUrlHint": "Shown as a \"Support\" button in Hiddify. Example: https://t.me/yoursupport",
+    "subWebPageUrl": "Web Page URL",
+    "subWebPageUrlHint": "Shown as an \"Open Web Page\" button in Hiddify. Example: landing or user portal.",
+    "subHappProviderId": "HAPP Provider ID",
+    "subHappProviderIdHint": "Optional 8-character code from happ-proxy.com. Unlocks statistics and feedback button."
   },
   "setup": {
     "title": "Initial Setup",

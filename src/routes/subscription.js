@@ -10,6 +10,7 @@
 
 const express = require('express');
 const router = express.Router();
+const QRCode = require('qrcode');
 const HyUser = require('../models/hyUserModel');
 const HyNode = require('../models/hyNodeModel');
 const cache = require('../services/cacheService');
@@ -342,7 +343,7 @@ function generateSingboxJSON(user, nodes) {
 
 // ==================== HTML PAGE ====================
 
-function generateHTML(user, nodes, token, baseUrl) {
+async function generateHTML(user, nodes, token, baseUrl, settings) {
     // Собираем все конфиги
     const allConfigs = [];
     nodes.forEach(node => {
@@ -369,12 +370,36 @@ function generateHTML(user, nodes, token, baseUrl) {
         locations[cfg.location].configs.push({ name: cfg.name, uri: cfg.uri });
     });
 
+    // Кастомизация из настроек
+    const sub = settings?.subscription || {};
+    const logoUrl   = sub.logoUrl   || '';
+    const pageTitle = sub.pageTitle || 'Подключение';
+
+    const logoHtml = logoUrl
+        ? `<img src="${logoUrl}" style="height:48px; border-radius:10px; object-fit:contain;" onerror="this.style.display='none'">`
+        : '<i class="ti ti-rocket"></i>';
+
+    // QR-код ссылки подписки
+    let qrDataUrl = '';
+    try {
+        qrDataUrl = await QRCode.toDataURL(baseUrl, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#141414' } });
+    } catch (e) {
+        logger.warn(`[Sub] QR generation failed: ${e.message}`);
+    }
+
+    const qrHtml = qrDataUrl
+        ? `<div class="qr-wrap">
+            <img src="${qrDataUrl}" alt="QR" style="width:130px; height:130px; border-radius:10px; display:block;">
+            <div style="font-size:10px; color:var(--muted); text-align:center; margin-top:4px;">Сканировать QR</div>
+           </div>`
+        : '';
+
     return `<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Подключение</title>
+    <title>${pageTitle}</title>
     <style>
         :root { --bg: #0a0a0a; --card: #141414; --border: #252525; --text: #fff; --muted: #888; --accent: #3b82f6; --success: #22c55e; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -404,8 +429,11 @@ function generateHTML(user, nodes, token, baseUrl) {
         .copy-btn { padding: 6px 12px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
         .copy-btn:active { transform: scale(0.95); }
         .copy-btn.success { background: var(--success); }
+        .sub-row { display: flex; gap: 12px; align-items: flex-start; }
+        .sub-fields { flex: 1; min-width: 0; }
         .sub-box { display: flex; gap: 8px; }
-        .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; }
+        .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; min-width: 0; }
+        .qr-wrap { flex-shrink: 0; }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; display: flex; align-items: center; gap: 8px; }
         .toast.show { transform: translateX(-50%) translateY(0); }
         .header h1 { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -417,7 +445,7 @@ function generateHTML(user, nodes, token, baseUrl) {
 <body>
     <div class="container">
         <div class="header">
-            <h1><i class="ti ti-rocket"></i> Подключение</h1>
+            <h1>${logoHtml} ${pageTitle}</h1>
             <p>Ваша персональная конфигурация</p>
         </div>
         
@@ -438,9 +466,14 @@ function generateHTML(user, nodes, token, baseUrl) {
         
         <div class="section">
             <h2><i class="ti ti-link"></i> ССЫЛКА ДЛЯ ПРИЛОЖЕНИЙ</h2>
-            <div class="sub-box">
-                <input type="text" value="${baseUrl}" readonly id="subUrl">
-                <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
+            <div class="sub-row">
+                <div class="sub-fields">
+                    <div class="sub-box">
+                        <input type="text" value="${baseUrl}" readonly id="subUrl">
+                        <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
+                    </div>
+                </div>
+                ${qrHtml}
             </div>
         </div>
         
@@ -544,7 +577,10 @@ router.get('/files/:token', async (req, res) => {
         // Для браузера без format — не кэшируем (HTML со свежими данными)
         if (browser && !format) {
             // HTML страница — не кэшируем, показываем свежие данные
-            const user = await getUserByToken(token);
+            const [user, settings] = await Promise.all([
+                getUserByToken(token),
+                getSettings(),
+            ]);
             
             if (!user) {
                 logger.warn(`[Sub] User not found for token: ${token}`);
@@ -563,7 +599,8 @@ router.get('/files/:token', async (req, res) => {
             }
             
             const baseUrl = `${req.protocol}://${req.get('host')}/api/files/${token}`;
-            return res.type('text/html').send(generateHTML(user, nodes, token, baseUrl));
+            const html = await generateHTML(user, nodes, token, baseUrl, settings);
+            return res.type('text/html').send(html);
         }
         
         // Для приложений — определяем формат и кэшируем
@@ -572,11 +609,14 @@ router.get('/files/:token', async (req, res) => {
             logger.debug(`[Sub] UA: "${userAgent}" → format: ${format}`);
         }
         
+        // Читаем настройки (из Redis-кэша — быстро)
+        const settings = await getSettings();
+
         // Проверяем кэш
         const cached = await cache.getSubscription(token, format);
         if (cached) {
             logger.debug(`[Sub] Cache HIT: ${token}:${format}`);
-            return sendCachedSubscription(res, cached, format, userAgent);
+            return sendCachedSubscription(res, cached, format, userAgent, settings);
         }
         
         // Кэша нет — генерируем
@@ -605,13 +645,13 @@ router.get('/files/:token', async (req, res) => {
         logger.debug(`[Sub] Serving ${nodes.length} nodes to user ${user.userId}`);
         
         // Генерируем подписку
-        const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent);
+        const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent, settings?.subscription?.happProviderId || '');
         
         // Сохраняем в кэш
         await cache.setSubscription(token, format, subscriptionData);
         
         // Отправляем
-        return sendCachedSubscription(res, subscriptionData, format, userAgent);
+        return sendCachedSubscription(res, subscriptionData, format, userAgent, settings);
         
     } catch (error) {
         logger.error(`[Sub] Error: ${error.message}`);
@@ -622,7 +662,7 @@ router.get('/files/:token', async (req, res) => {
 /**
  * Генерирует данные подписки для кэширования
  */
-function generateSubscriptionData(user, nodes, format, userAgent) {
+function generateSubscriptionData(user, nodes, format, userAgent, happProviderId = '') {
     let content;
     let needsBase64 = false;
     
@@ -643,6 +683,10 @@ function generateSubscriptionData(user, nodes, format, userAgent) {
         case 'raw':
         default:
             content = generateURIList(user, nodes);
+            // HAPP reads #providerid from body as fallback (in case headers are stripped by a proxy)
+            if (happProviderId) {
+                content = `#providerid ${happProviderId}\n${content}`;
+            }
             if (/quantumult/i.test(userAgent)) {
                 needsBase64 = true;
             }
@@ -669,7 +713,7 @@ function generateSubscriptionData(user, nodes, format, userAgent) {
 /**
  * Отправляет закэшированную подписку
  */
-function sendCachedSubscription(res, data, format, userAgent) {
+function sendCachedSubscription(res, data, format, userAgent, settings) {
     let contentType = 'text/plain';
     
     switch (format) {
@@ -683,7 +727,7 @@ function sendCachedSubscription(res, data, format, userAgent) {
             break;
     }
     
-    res.set({
+    const headers = {
         'Content-Type': `${contentType}; charset=utf-8`,
         'Content-Disposition': `attachment; filename="${data.username}"`,
         'Profile-Title': encodeTitle(data.profileTitle),
@@ -694,8 +738,14 @@ function sendCachedSubscription(res, data, format, userAgent) {
             data.trafficLimit > 0 ? `total=${data.trafficLimit}` : null,
             `expire=${data.expireAt ? Math.floor(new Date(data.expireAt).getTime() / 1000) : 0}`,
         ].filter(Boolean).join('; '),
-    });
-    
+    };
+
+    const sub = settings?.subscription;
+    if (sub?.supportUrl)     headers['support-url']          = sub.supportUrl;
+    if (sub?.webPageUrl)     headers['profile-web-page-url'] = sub.webPageUrl;
+    if (sub?.happProviderId) headers['providerid']            = sub.happProviderId;
+
+    res.set(headers);
     res.send(data.content);
 }
 

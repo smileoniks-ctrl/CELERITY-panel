@@ -69,6 +69,14 @@ const settingsSchema = new mongoose.Schema({
         // empty = all events; non-empty = only listed events
         events: { type: [String], default: [] },
     },
+
+    subscription: {
+        supportUrl:     { type: String, default: '' },
+        webPageUrl:     { type: String, default: '' },
+        happProviderId: { type: String, default: '' },
+        logoUrl:        { type: String, default: '' },
+        pageTitle:      { type: String, default: '' },
+    },
     
 }, { timestamps: true });
 

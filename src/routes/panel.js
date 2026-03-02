@@ -1096,6 +1096,15 @@ router.post('/settings', requireAuth, async (req, res) => {
                 : [];
         }
 
+        // Subscription settings
+        if (req.body['_subscriptionSettings'] !== undefined) {
+            updates['subscription.supportUrl']     = req.body['subscription.supportUrl'] || '';
+            updates['subscription.webPageUrl']     = req.body['subscription.webPageUrl'] || '';
+            updates['subscription.happProviderId'] = req.body['subscription.happProviderId'] || '';
+            updates['subscription.logoUrl']        = req.body['subscription.logoUrl'] || '';
+            updates['subscription.pageTitle']      = req.body['subscription.pageTitle'] || '';
+        }
+
         // Backup settings (если форма бэкапов)
         if (req.body['_backupSettings'] || req.body['backup.enabled'] !== undefined) {
             updates['backup.enabled'] = req.body['backup.enabled'] === 'on';

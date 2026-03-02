@@ -315,6 +315,7 @@
   "settings": {
     "title": "Настройки",
     "tabSystem": "Система",
+    "tabSubscription": "Подписка",
     "tabSecurity": "Безопасность",
     "tabBackup": "Бэкапы",
     "tabMaintenance": "Обслуживание",
@@ -438,7 +439,19 @@
     "flushCacheBtn": "Очистить кэш",
     "flushCacheConfirm": "Очистить все кэшированные данные?\n\nЭто временно увеличит нагрузку на сервер пока кэш восстановится.",
     "flushing": "Очистка...",
-    "cacheFlushed": "Кэш успешно очищен"
+    "cacheFlushed": "Кэш успешно очищен",
+    "tabSubscriptionTitle": "Настройки подписки",
+    "subClientApps": "Клиентские приложения",
+    "subLogoUrl": "URL логотипа",
+    "subLogoUrlHint": "Ссылка на картинку (PNG/SVG/WebP). Оставьте пустым — будет иконка по умолчанию.",
+    "subPageTitle": "Заголовок страницы",
+    "subPageTitleHint": "Текст над логотипом на странице подписки. По умолчанию: «Подключение».",
+    "subSupportUrl": "Ссылка на поддержку",
+    "subSupportUrlHint": "Отображается кнопкой «Поддержка» в Hiddify. Например: https://t.me/yoursupport",
+    "subWebPageUrl": "Ссылка на веб-страницу",
+    "subWebPageUrlHint": "Отображается кнопкой «Открыть веб-страницу» в Hiddify. Например: лендинг или кабинет.",
+    "subHappProviderId": "HAPP Provider ID",
+    "subHappProviderIdHint": "Опциональный 8-символьный код из happ-proxy.com. Открывает статистику и кнопку обратной связи."
   },
   "setup": {
     "title": "Первоначальная настройка",
