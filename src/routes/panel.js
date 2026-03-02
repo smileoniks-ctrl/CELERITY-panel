@@ -628,7 +628,8 @@ router.get('/users', requireAuth, async (req, res) => {
         
         // Поиск по userId или username
         if (search && search.trim()) {
-            const searchRegex = new RegExp(search.trim(), 'i');
+            const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const searchRegex = new RegExp(escaped, 'i');
             filter.$or = [
                 { userId: searchRegex },
                 { username: searchRegex }
