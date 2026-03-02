@@ -387,10 +387,22 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         logger.warn(`[Sub] QR generation failed: ${e.message}`);
     }
 
-    const qrHtml = qrDataUrl
-        ? `<div class="qr-wrap">
-            <img src="${qrDataUrl}" alt="QR" style="width:130px; height:130px; border-radius:10px; display:block;">
-            <div style="font-size:10px; color:var(--muted); text-align:center; margin-top:4px;">Сканировать QR</div>
+    const qrSectionHtml = qrDataUrl
+        ? `<div class="section" style="text-align:center;">
+            <h2 style="justify-content:center;"><i class="ti ti-qrcode"></i> QR-КОД</h2>
+            <div style="display:inline-block; background:#141414; padding:12px; border-radius:12px; margin-bottom:8px;">
+                <img src="${qrDataUrl}" alt="QR" style="width:160px; height:160px; border-radius:8px; display:block;">
+            </div>
+            <div style="font-size:12px; color:var(--muted);">Отсканируйте для импорта подписки в приложение</div>
+           </div>`
+        : '';
+
+    const supportHtml = sub.supportUrl
+        ? `<div class="section" style="text-align:center;">
+            <a href="${sub.supportUrl}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:var(--card); border:1px solid var(--border); border-radius:10px; color:var(--text); text-decoration:none; font-size:14px;">
+                <i class="ti ti-headset" style="font-size:18px; color:var(--accent);"></i> Поддержка
+            </a>
            </div>`
         : '';
 
@@ -429,11 +441,8 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         .copy-btn { padding: 6px 12px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
         .copy-btn:active { transform: scale(0.95); }
         .copy-btn.success { background: var(--success); }
-        .sub-row { display: flex; gap: 12px; align-items: flex-start; }
-        .sub-fields { flex: 1; min-width: 0; }
         .sub-box { display: flex; gap: 8px; }
         .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; min-width: 0; }
-        .qr-wrap { flex-shrink: 0; }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; display: flex; align-items: center; gap: 8px; }
         .toast.show { transform: translateX(-50%) translateY(0); }
         .header h1 { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -466,14 +475,9 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         
         <div class="section">
             <h2><i class="ti ti-link"></i> ССЫЛКА ДЛЯ ПРИЛОЖЕНИЙ</h2>
-            <div class="sub-row">
-                <div class="sub-fields">
-                    <div class="sub-box">
-                        <input type="text" value="${baseUrl}" readonly id="subUrl">
-                        <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
-                    </div>
-                </div>
-                ${qrHtml}
+            <div class="sub-box">
+                <input type="text" value="${baseUrl}" readonly id="subUrl">
+                <button class="copy-btn" onclick="copyText('${baseUrl}', this)">Копировать</button>
             </div>
         </div>
         
@@ -497,6 +501,9 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
             </div>
             `).join('')}
         </div>
+
+        ${qrSectionHtml}
+        ${supportHtml}
     </div>
     
     <div class="toast" id="toast"><i class="ti ti-check"></i> Скопировано</div>
