@@ -67,6 +67,7 @@ function initSessionMiddleware() {
         saveUninitialized: false,
         cookie: { 
             secure: true,
+            sameSite: 'strict',
             maxAge: 24 * 60 * 60 * 1000
         }
     });
@@ -82,6 +83,18 @@ app.use((req, res, next) => {
 app.use(i18nMiddleware);
 app.use(countRequest);
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Sanitize error details from 500 responses in production
+app.use((req, res, next) => {
+    const originalJson = res.json.bind(res);
+    res.json = function(body) {
+        if (res.statusCode >= 500 && process.env.NODE_ENV !== 'development') {
+            body = { error: 'Internal Server Error' };
+        }
+        return originalJson(body);
+    };
+    next();
+});
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -327,8 +340,9 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, next) => {
     logger.error(`[Error] ${err.message}`);
+    const msg = process.env.NODE_ENV !== 'development' ? 'Internal Server Error' : err.message;
     if (req.path.startsWith('/api')) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: msg });
     } else {
         res.status(500).send('Internal Server Error');
     }
@@ -442,28 +456,35 @@ function setupWebSocketServer(server) {
     
     server.on('upgrade', (request, socket, head) => {
         const pathname = request.url;
-        const cookies = cookie.parse(request.headers.cookie || '');
-        const sessionId = cookies['connect.sid'];
-        
-        // Auth check for all WebSocket connections
-        if (!sessionId) {
-            logger.warn(`[WS] Connection attempt without session: ${request.socket.remoteAddress}`);
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-            socket.destroy();
-            return;
-        }
-        
-        if (pathname && pathname.startsWith('/ws/terminal/')) {
-            wssTerminal.handleUpgrade(request, socket, head, (ws) => {
-                wssTerminal.emit('connection', ws, request);
-            });
-        } else if (pathname === '/ws/logs') {
-            wssLogs.handleUpgrade(request, socket, head, (ws) => {
-                wssLogs.emit('connection', ws, request);
-            });
-        } else {
-            socket.destroy();
-        }
+
+        const fakeRes = {
+            writeHead: () => {},
+            end: () => {},
+            write: () => {},
+            getHeader: () => {},
+            setHeader: () => {},
+        };
+
+        sessionMiddleware(request, fakeRes, () => {
+            if (!request.session?.authenticated) {
+                logger.warn(`[WS] Unauthorized upgrade attempt: ${request.socket.remoteAddress}`);
+                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+
+            if (pathname && pathname.startsWith('/ws/terminal/')) {
+                wssTerminal.handleUpgrade(request, socket, head, (ws) => {
+                    wssTerminal.emit('connection', ws, request);
+                });
+            } else if (pathname === '/ws/logs') {
+                wssLogs.handleUpgrade(request, socket, head, (ws) => {
+                    wssLogs.emit('connection', ws, request);
+                });
+            } else {
+                socket.destroy();
+            }
+        });
     });
     
     // SSH Terminal WebSocket
