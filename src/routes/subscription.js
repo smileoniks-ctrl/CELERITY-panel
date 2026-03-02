@@ -408,7 +408,8 @@ function generateHTML(user, nodes, token, baseUrl) {
         .sub-box input { flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; transition: transform 0.3s; display: flex; align-items: center; gap: 8px; }
         .toast.show { transform: translateX(-50%) translateY(0); }
-        .header h1, .section h2 { display: flex; align-items: center; gap: 8px; }
+        .header h1 { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .section h2 { display: flex; align-items: center; gap: 8px; }
         .copy-btn { display: inline-flex; align-items: center; gap: 6px; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">

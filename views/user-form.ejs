@@ -10,7 +10,7 @@ const hasExpireAt = isEditMode && user.expireAt;
 const expireAtIso = hasExpireAt ? new Date(user.expireAt).toISOString() : '';
 %>
 <div class="page-header">
-    <a href="/panel/users" class="btn btn-back"><%= t('common.backToList') %></a>
+    <a href="/panel/users" class="btn btn-back"><i class="ti ti-chevron-left"></i> <%= t('common.backToList') %></a>
 </div>
 
 <div class="card">

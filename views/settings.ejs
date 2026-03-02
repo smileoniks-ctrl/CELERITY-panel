@@ -120,7 +120,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2><%= t('settings.loadBalancing') %></h2>
+                        <h2><i class="ti ti-scale"></i> <%= t('settings.loadBalancing') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-list">
@@ -149,7 +149,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2><%= t('settings.deviceLimit') %> & <%= t('settings.rateLimiting') %></h2>
+                        <h2><i class="ti ti-device-mobile"></i> <%= t('settings.deviceLimit') %> &amp; <i class="ti ti-shield"></i> <%= t('settings.rateLimiting') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-grid">
@@ -176,7 +176,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2><%= t('settings.caching') %></h2>
+                        <h2><i class="ti ti-database"></i> <%= t('settings.caching') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-grid">
@@ -212,7 +212,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2><%= t('settings.sshPool') %></h2>
+                        <h2><i class="ti ti-plug-connected"></i> <%= t('settings.sshPool') %></h2>
                     </div>
                     <div class="card-body">
                         <label class="checkbox-label" style="margin-bottom: 0.75rem;">
@@ -250,7 +250,7 @@
         <!-- Save Button -->
         <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
             <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 15px;">
-                <%= t('settings.saveAllSettings') %>
+                <i class="ti ti-device-floppy"></i> <%= t('settings.saveAllSettings') %>
             </button>
         </div>
     </form>
@@ -262,7 +262,7 @@
         <div class="col-6">
             <div class="card">
                 <div class="card-header">
-                    <h2><%= t('settings.administrator') %></h2>
+                    <h2><i class="ti ti-user-shield"></i> <%= t('settings.administrator') %></h2>
                 </div>
                 <div class="card-body">
                     <div class="settings-list">
@@ -285,7 +285,7 @@
             <!-- Node Auth API - под Администратором -->
             <div class="card" style="margin-top: 1rem;">
                 <div class="card-header">
-                    <h2><%= t('settings.nodeAuth') || 'Node Auth API' %></h2>
+                    <h2><i class="ti ti-lock"></i> <%= t('settings.nodeAuth') || 'Node Auth API' %></h2>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="/panel/settings">
@@ -306,7 +306,7 @@
         <div class="col-6">
             <div class="card">
                 <div class="card-header">
-                    <h2><%= t('settings.changePassword') %></h2>
+                    <h2><i class="ti ti-key"></i> <%= t('settings.changePassword') %></h2>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="/panel/settings/password">
@@ -322,7 +322,7 @@
                             <label><%= t('settings.confirmPassword') %></label>
                             <input type="password" name="confirmPassword" minlength="6" required>
                         </div>
-                        <button type="submit" class="btn btn-primary"><%= t('settings.changePasswordBtn') %></button>
+                        <button type="submit" class="btn btn-primary"><i class="ti ti-key"></i> <%= t('settings.changePasswordBtn') %></button>
                     </form>
                 </div>
             </div>
@@ -332,8 +332,8 @@
     <!-- ==================== API KEYS ==================== -->
     <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-            <h2><%= t('apiKeys.title') || 'API Keys' %></h2>
-            <button class="btn btn-primary btn-sm" onclick="openApiKeyModal()"><%= t('apiKeys.create') || 'Create Key' %></button>
+            <h2><i class="ti ti-api"></i> <%= t('apiKeys.title') || 'API Keys' %></h2>
+            <button class="btn btn-primary btn-sm" onclick="openApiKeyModal()"><i class="ti ti-plus"></i> <%= t('apiKeys.create') || 'Create Key' %></button>
         </div>
         <div class="card-body" style="padding: 0;">
             <% if (!apiKeys || apiKeys.length === 0) { %>
@@ -408,7 +408,7 @@
     <!-- ==================== WEBHOOKS ==================== -->
     <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header">
-            <h2><%= t('webhooks.title') || 'Webhooks' %></h2>
+            <h2><i class="ti ti-webhook"></i> <%= t('webhooks.title') || 'Webhooks' %></h2>
         </div>
         <div class="card-body">
             <form method="POST" action="/panel/settings" id="webhookSettingsForm">
@@ -539,7 +539,7 @@ function copyRevealKey() {
     input.select();
     navigator.clipboard?.writeText(input.value).catch(() => document.execCommand('copy'));
     const btn = event.target;
-    btn.textContent = '✓';
+        btn.innerHTML = '<i class="ti ti-check"></i>';
     setTimeout(() => btn.textContent = '<%= t("apiKeys.copy") || "Copy" %>', 1500);
 }
 
@@ -640,7 +640,7 @@ async function testWebhook() {
         <div class="col-6" style="display: flex;">
             <div class="card" style="flex: 1; display: flex; flex-direction: column;">
                 <div class="card-header">
-                    <h2><%= t('settings.autoBackup') %></h2>
+                    <h2><i class="ti ti-device-floppy"></i> <%= t('settings.autoBackup') %></h2>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="/panel/settings" id="backupSettingsForm">
@@ -739,7 +739,7 @@ async function testWebhook() {
                             </div>
                             
                             <button type="button" class="btn btn-secondary btn-sm" onclick="testS3Connection()" id="testS3Btn">
-                                <%= t('settings.testS3') %>
+                                <i class="ti ti-plug"></i> <%= t('settings.testS3') %>
                             </button>
                             <span id="s3TestResult" style="margin-left: 0.5rem;"></span>
                         </div>
@@ -749,7 +749,7 @@ async function testWebhook() {
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy"></i> <%= t('common.save') %></button>
                             <button type="button" class="btn btn-success" onclick="createBackupNow()" id="createBackupBtn">
-                                <%= t('settings.createBackupNow') %>
+                                <i class="ti ti-database-export"></i> <%= t('settings.createBackupNow') %>
                             </button>
                         </div>
                     </form>
@@ -761,7 +761,7 @@ async function testWebhook() {
             <div class="card" style="flex: 1; display: flex; flex-direction: column;">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2><i class="ti ti-clipboard-list"></i> <%= t('settings.backupsList') || 'Доступные бэкапы' %></h2>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="loadBackupsList()" id="refreshBackupsBtn">
+                    <button type="button" class="btn btn-sm" onclick="loadBackupsList()" id="refreshBackupsBtn">
                         <i class="ti ti-refresh"></i> <%= t('common.refresh') %>
                     </button>
                 </div>
@@ -781,28 +781,28 @@ async function testWebhook() {
         <div class="col-6">
             <div class="card">
                 <div class="card-header">
-                    <h2><%= t('settings.cacheManagement') %></h2>
+                    <h2><i class="ti ti-eraser"></i> <%= t('settings.cacheManagement') %></h2>
                 </div>
                 <div class="card-body">
                     <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 1rem;">
                         <%= t('settings.flushCacheDesc') %>
                     </p>
                     <button class="btn btn-warning" onclick="flushCache()">
-                        <%= t('settings.flushCacheBtn') %>
+                        <i class="ti ti-trash"></i> <%= t('settings.flushCacheBtn') %>
                     </button>
                 </div>
             </div>
             
             <div class="card mt-2">
                 <div class="card-header">
-                    <h2><%= t('settings.resetStats') || 'Сброс статистики' %></h2>
+                    <h2><i class="ti ti-chart-bar-off"></i> <%= t('settings.resetStats') || 'Сброс статистики' %></h2>
                 </div>
                 <div class="card-body">
                     <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 1rem;">
                         <%= t('settings.resetStatsDesc') || 'Удалить все исторические данные статистики.' %>
                     </p>
                     <button class="btn btn-warning" onclick="resetStats()">
-                        <%= t('settings.resetStatsBtn') || 'Очистить статистику' %>
+                        <i class="ti ti-trash"></i> <%= t('settings.resetStatsBtn') || 'Очистить статистику' %>
                     </button>
                 </div>
             </div>
@@ -811,7 +811,7 @@ async function testWebhook() {
         <div class="col-6">
             <div class="card" style="border-color: var(--danger);">
                 <div class="card-header" style="background: rgba(239, 68, 68, 0.1);">
-                    <h2 style="color: var(--danger);"><%= t('settings.dangerZone') %></h2>
+                    <h2 style="color: var(--danger);"><i class="ti ti-alert-triangle"></i> <%= t('settings.dangerZone') %></h2>
                 </div>
                 <div class="card-body">
                     <h4 style="margin-bottom: 0.5rem;"><%= t('settings.resetTrafficCounter') %></h4>
@@ -819,7 +819,7 @@ async function testWebhook() {
                         <%= t('settings.resetTrafficDesc') %>
                     </p>
                     <button class="btn btn-danger" onclick="resetTraffic()">
-                        <%= t('settings.resetAllTraffic') %>
+                        <i class="ti ti-trash"></i> <%= t('settings.resetAllTraffic') %>
                     </button>
                 </div>
             </div>
