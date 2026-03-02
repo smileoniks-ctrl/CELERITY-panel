@@ -1,5 +1,5 @@
 <div class="page-header">
-    <a href="/panel/nodes" class="btn btn-back"><%= t('common.backToList') %></a>
+    <a href="/panel/nodes" class="btn btn-back"><i class="ti ti-chevron-left"></i> <%= t('common.backToList') %></a>
 </div>
 
 <div class="card">
@@ -109,7 +109,7 @@
                         <div class="input-with-button">
                             <input type="text" id="statsSecret" name="statsSecret" value="<%= node?.statsSecret || '' %>" 
                                    placeholder="secret123">
-                            <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret">🎲</button>
+                            <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret"><i class="ti ti-dice"></i></button>
                         </div>
                     </div>
                 </div>
@@ -185,36 +185,36 @@
     <div class="card-body">
         <% if (!node.ssh?.password && !node.ssh?.privateKey) { %>
         <div class="ssh-warning" id="sshWarning">
-            <span class="ssh-warning-icon">⚠️</span>
+            <span class="ssh-warning-icon"><i class="ti ti-alert-triangle"></i></span>
             <span><%= t('nodes.sshNotConfigured') || 'SSH not configured. Auto-setup and terminal require SSH credentials.' %></span>
         </div>
         <% } %>
         <div class="actions-grid">
             <button class="action-btn" onclick="setupNode()" id="btnSetup" <%= !node.ssh?.password && !node.ssh?.privateKey ? 'disabled title="Configure SSH first"' : '' %>>
-                <span class="action-icon">⚙️</span>
+                <span class="action-icon"><i class="ti ti-settings"></i></span>
                 <span><%= t('nodes.autoSetup') %></span>
             </button>
             <a href="/panel/nodes/<%= node._id %>/outbounds" class="action-btn" style="text-decoration:none; text-align:center;">
-                <span class="action-icon">↗</span>
+                <span class="action-icon"><i class="ti ti-arrow-up-right"></i></span>
                 <span>Outbounds</span>
                 <% if (node.outbounds && node.outbounds.length > 0) { %>
                 <span class="badge" style="font-size:10px; background: var(--accent); color:#fff; border-radius:10px; padding:1px 6px; margin-left:4px;"><%= node.outbounds.length %></span>
                 <% } %>
             </a>
             <button class="action-btn" onclick="openTerminal()">
-                <span class="action-icon">🖥️</span>
+                <span class="action-icon"><i class="ti ti-terminal-2"></i></span>
                 <span><%= t('nodes.terminal') %></span>
             </button>
             <button class="action-btn" onclick="getNodeLogs()">
-                <span class="action-icon">📋</span>
+                <span class="action-icon"><i class="ti ti-file-text"></i></span>
                 <span><%= t('nodes.viewLogs') %></span>
             </button>
             <button class="action-btn" onclick="checkStatus()">
-                <span class="action-icon">🔍</span>
+                <span class="action-icon"><i class="ti ti-search"></i></span>
                 <span><%= t('nodes.checkStatus') %></span>
             </button>
             <button class="action-btn" onclick="resetStatus()">
-                <span class="action-icon">🔄</span>
+                <span class="action-icon"><i class="ti ti-refresh"></i></span>
                 <span><%= t('nodes.resetStatus') %></span>
             </button>
         </div>
@@ -301,7 +301,7 @@ async function setupNode() {
     
     const btn = document.getElementById('btnSetup');
     btn.disabled = true;
-    btn.innerHTML = '<span class="action-icon">⏳</span><span>...</span>';
+        btn.innerHTML = '<span class="action-icon"><i class="ti ti-loader-2"></i></span><span>...</span>';
     
     document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.setupRunning + '</div>';
     
@@ -316,15 +316,15 @@ async function setupNode() {
         }
         
         if (data.success) {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success">✅ ' + data.message + '</div>';
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success"><i class="ti ti-check"></i> ' + data.message + '</div>';
         } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">❌ ' + (data.error || i18n.error) + '</div>';
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
         }
     } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">❌ ' + err.message + '</div>';
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<span class="action-icon">⚙️</span><span>' + i18n.autoSetup + '</span>';
+        btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
     }
 }
 
@@ -339,10 +339,10 @@ async function getNodeLogs() {
             document.getElementById('setupResult').innerHTML = '';
             showLogs(data.logs);
         } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">❌ ' + data.error + '</div>';
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + data.error + '</div>';
         }
     } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">❌ ' + err.message + '</div>';
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
     }
 }
 
@@ -356,9 +356,9 @@ async function checkStatus() {
         const data = await res.json();
         
         const statusColors = { online: 'alert-success', offline: 'alert-warning', error: 'alert-error' };
-        const statusIcons = { online: '✅', offline: '⚠️', error: '❌' };
+        const statusIcons = { online: '<i class="ti ti-check"></i>', offline: '<i class="ti ti-alert-triangle"></i>', error: '<i class="ti ti-x"></i>' };
         const color = statusColors[data.status] || '';
-        const icon = statusIcons[data.status] || '❓';
+        const icon = statusIcons[data.status] || '<i class="ti ti-help"></i>';
         
         document.getElementById('setupResult').innerHTML = '<div class="alert ' + color + '">' + icon + ' Status: ' + data.status + '</div>';
     } catch (err) {
@@ -383,7 +383,7 @@ async function resetStatus() {
         if (data.success) {
             document.getElementById('setupResult').innerHTML = '<div class="alert alert-success">' + i18n.statusReset + '</div>';
         } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">❌ ' + (data.error || i18n.error) + '</div>';
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
         }
     } catch (err) {
         document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';

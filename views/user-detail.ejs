@@ -1,5 +1,5 @@
 <div class="page-header">
-    <a href="/panel/users" class="btn btn-back"><%= t('common.backToList') %></a>
+    <a href="/panel/users" class="btn btn-back"><i class="ti ti-chevron-left"></i> <%= t('common.backToList') %></a>
 </div>
 
 <div class="row">
@@ -69,8 +69,8 @@
                     <div class="detail-item">
                         <label><%= t('users.txRx') %></label>
                         <span class="value">
-                            ↑ <%= ((user.traffic?.tx || 0) / (1024*1024*1024)).toFixed(2) %> / 
-                            ↓ <%= ((user.traffic?.rx || 0) / (1024*1024*1024)).toFixed(2) %> GB
+                            <i class="ti ti-arrow-up" style="color:#22c55e"></i> <%= ((user.traffic?.tx || 0) / (1024*1024*1024)).toFixed(2) %> / 
+                            <i class="ti ti-arrow-down" style="color:#3b82f6"></i> <%= ((user.traffic?.rx || 0) / (1024*1024*1024)).toFixed(2) %> GB
                         </span>
                     </div>
                     <div class="detail-item">
@@ -120,7 +120,7 @@
                     </a>
                     
                     <button class="btn btn-block" onclick="copySubscription()">
-                        📋 <%= t('users.copySubscription') %>
+                        <i class="ti ti-clipboard"></i> <%= t('users.copySubscription') %>
                     </button>
                     
                     <a href="<%= baseUrl %>/api/files/<%= user.subscriptionToken || user.userId %>" 

@@ -416,6 +416,11 @@ html {
     gap: 8px;
 }
 
+.card-header h2 i {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
 .card-body {
     padding: 24px;
 }
@@ -2225,4 +2230,96 @@ html {
 .form-group .datetime-input::-webkit-calendar-picker-indicator:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+}
+
+/* ── Tabler Icons ── */
+.ti {
+    font-size: 1em;
+    line-height: 1;
+    vertical-align: -0.125em;
+}
+
+/* Spinner animation for loader icons */
+@keyframes ti-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.ti-loader-2 {
+    display: inline-block;
+    animation: ti-spin 1s linear infinite;
+}
+
+/* ─── Page enter animations ───────────────────────────────────── */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* Main content area fades in on navigation */
+.main-content {
+    animation: fadeIn 0.2s ease-out;
+}
+
+/* Stats cards stagger */
+.stat-card {
+    animation: fadeUp 0.3s ease-out both;
+}
+.stat-card:nth-child(1) { animation-delay: 0.03s; }
+.stat-card:nth-child(2) { animation-delay: 0.07s; }
+.stat-card:nth-child(3) { animation-delay: 0.11s; }
+.stat-card:nth-child(4) { animation-delay: 0.15s; }
+
+/* Cards */
+.card {
+    animation: fadeUp 0.25s ease-out both;
+}
+
+/* Dashboard grid children stagger */
+.dashboard-main > .card:nth-child(1) { animation-delay: 0.05s; }
+.dashboard-main > .card:nth-child(2) { animation-delay: 0.1s; }
+.dashboard-sidebar > .card:nth-child(1) { animation-delay: 0.08s; }
+.dashboard-sidebar > .card:nth-child(2) { animation-delay: 0.13s; }
+
+/* Table rows */
+.table tbody tr {
+    animation: fadeIn 0.2s ease-out both;
+}
+.table tbody tr:nth-child(1)  { animation-delay: 0.04s; }
+.table tbody tr:nth-child(2)  { animation-delay: 0.07s; }
+.table tbody tr:nth-child(3)  { animation-delay: 0.10s; }
+.table tbody tr:nth-child(4)  { animation-delay: 0.13s; }
+.table tbody tr:nth-child(5)  { animation-delay: 0.16s; }
+.table tbody tr:nth-child(n+6) { animation-delay: 0.18s; }
+
+/* Топбар */
+.topbar {
+    animation: fadeIn 0.15s ease-out;
+}
+
+/* Page header */
+.page-header {
+    animation: fadeUp 0.2s ease-out both;
+}
+
+/* Quick action items */
+.quick-action {
+    animation: fadeUp 0.25s ease-out both;
+}
+.quick-actions .quick-action:nth-child(1) { animation-delay: 0.05s; }
+.quick-actions .quick-action:nth-child(2) { animation-delay: 0.08s; }
+.quick-actions .quick-action:nth-child(3) { animation-delay: 0.11s; }
+.quick-actions .quick-action:nth-child(4) { animation-delay: 0.14s; }
+.quick-actions .quick-action:nth-child(5) { animation-delay: 0.17s; }
+
+/* Уважаем prefer-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .main-content, .stat-card, .card, .table tbody tr,
+    .nav-menu li, .topbar, .page-header, .quick-action {
+        animation: none;
+    }
 }

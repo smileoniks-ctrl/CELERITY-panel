@@ -5,7 +5,7 @@
     <div class="page-header-center">
         <div class="filters-bar">
             <div class="search-box">
-                <span class="search-icon">🔍</span>
+                <span class="search-icon"><i class="ti ti-search"></i></span>
                 <input type="text" id="searchUser" placeholder="<%= t('users.searchPlaceholder') %>" 
                        value="<%= query.search || '' %>" autocomplete="off">
                 <kbd class="search-hint">/</kbd>
@@ -25,7 +25,7 @@
     </div>
     <div class="page-header-right">
         <a href="/panel/users/add" class="btn btn-primary">
-            <span>+</span> <%= t('common.create') %>
+            <i class="ti ti-user-plus"></i> <%= t('common.create') %>
         </a>
     </div>
 </div>
@@ -36,12 +36,12 @@
             <thead>
                 <tr>
                     <th class="th-user sortable" onclick="sortBy('userId')" style="cursor: pointer;">
-                        <%= t('users.user') %> <%= getSortIcon('userId') %>
+                        <%= t('users.user') %> <%- getSortIcon('userId') %>
                     </th>
                     <th class="th-status"><%= t('common.status') %></th>
                     <th class="th-groups"><%= t('users.groups') %></th>
                     <th class="th-traffic sortable" onclick="sortBy('traffic')" style="cursor: pointer;">
-                        <%= t('users.traffic') %> <%= getSortIcon('traffic') %>
+                        <%= t('users.traffic') %> <%- getSortIcon('traffic') %>
                     </th>
                     <th class="th-actions"><%= t('common.actions') %></th>
                 </tr>
@@ -51,7 +51,7 @@
                 <tr>
                     <td colspan="5" class="empty-cell">
                         <div class="empty-state">
-                            <span class="empty-icon">👥</span>
+                            <span class="empty-icon"><i class="ti ti-users"></i></span>
                             <p><%= t('users.noUsers') %></p>
                             <a href="/panel/users/add" class="btn btn-primary btn-sm"><%= t('users.createFirst') %></a>
                         </div>
@@ -116,10 +116,10 @@
                     <td class="td-actions">
                         <div class="action-buttons">
                             <button class="btn-icon" onclick="copySubscription('<%= user.subscriptionToken || user.userId %>')" title="<%= t('users.copySubscription') %>">
-                                📋
+                                <i class="ti ti-clipboard"></i>
                             </button>
                             <a href="/panel/users/<%= user.userId %>" class="btn-icon" title="<%= t('users.details') %>">
-                                →
+                                <i class="ti ti-arrow-right"></i>
                             </a>
                         </div>
                     </td>
@@ -196,7 +196,7 @@
                 
                 <div class="mobile-node-actions">
                     <button class="btn btn-sm" onclick="copySubscription('<%= user.subscriptionToken || user.userId %>')" style="flex: 1;">
-                        📋 <%= t('users.subscription') %>
+                        <i class="ti ti-clipboard"></i> <%= t('users.subscription') %>
                     </button>
                     <a href="/panel/users/<%= user.userId %>" class="btn btn-sm" style="flex: 1;">
                         <%= t('users.details') %>
@@ -210,7 +210,7 @@
 <% if (pagination.pages > 1) { %>
 <div class="pagination">
     <% if (pagination.page > 1) { %>
-    <a href="?page=<%= pagination.page - 1 %>&<%= Object.entries(query).filter(([k,v]) => k !== 'page' && v).map(([k,v]) => k+'='+v).join('&') %>" class="page-btn">←</a>
+    <a href="?page=<%= pagination.page - 1 %>&<%= Object.entries(query).filter(([k,v]) => k !== 'page' && v).map(([k,v]) => k+'='+v).join('&') %>" class="page-btn"><i class="ti ti-chevron-left"></i></a>
     <% } %>
     
     <% 
@@ -234,7 +234,7 @@
     <% } %>
     
     <% if (pagination.page < pagination.pages) { %>
-    <a href="?page=<%= pagination.page + 1 %>&<%= Object.entries(query).filter(([k,v]) => k !== 'page' && v).map(([k,v]) => k+'='+v).join('&') %>" class="page-btn">→</a>
+    <a href="?page=<%= pagination.page + 1 %>&<%= Object.entries(query).filter(([k,v]) => k !== 'page' && v).map(([k,v]) => k+'='+v).join('&') %>" class="page-btn"><i class="ti ti-chevron-right"></i></a>
     <% } %>
 </div>
 <% } %>
@@ -247,23 +247,23 @@ function getSortIcon(field) {
     const currentOrder = query.sortOrder || 'desc';
     
     if (currentSort !== field) {
-        return '↕️';
+        return '<i class="ti ti-arrows-vertical"></i>';
     }
     
-    return currentOrder === 'desc' ? '↓' : '↑';
+    return currentOrder === 'desc' ? '<i class="ti ti-chevron-down"></i>' : '<i class="ti ti-chevron-up"></i>';
 }
 %>
 
 <script>
-const baseUrl = <%= JSON.stringify(baseUrl) %>;
-const currentSortBy = <%= JSON.stringify(String(query.sortBy || "createdAt").replace(/[<>]/g, "")) %>;
-const currentSortOrder = <%= JSON.stringify(String(query.sortOrder || "desc").replace(/[<>]/g, "")) %>;
+const baseUrl = <%- JSON.stringify(baseUrl) %>;
+const currentSortBy = <%- JSON.stringify(String(query.sortBy || "createdAt").replace(/[<>]/g, "")) %>;
+const currentSortOrder = <%- JSON.stringify(String(query.sortOrder || "desc").replace(/[<>]/g, "")) %>;
 const i18n = {
-    turnedOn: <%= JSON.stringify(t("users.turnedOn")) %>,
-    turnedOff: <%= JSON.stringify(t("users.turnedOff")) %>,
-    error: <%= JSON.stringify(t("common.error")) %>,
-    linkCopied: <%= JSON.stringify(t("users.linkCopied")) %>,
-    copyError: <%= JSON.stringify(t("users.copyError")) %>
+    turnedOn: <%- JSON.stringify(t("users.turnedOn")) %>,
+    turnedOff: <%- JSON.stringify(t("users.turnedOff")) %>,
+    error: <%- JSON.stringify(t("common.error")) %>,
+    linkCopied: <%- JSON.stringify(t("users.linkCopied")) %>,
+    copyError: <%- JSON.stringify(t("users.copyError")) %>
 };
 
 // Debounced search
