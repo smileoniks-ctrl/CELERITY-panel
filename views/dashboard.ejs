@@ -175,11 +175,9 @@
                 </h2>
                 <div class="logs-controls">
                     <div class="logs-search-wrap" id="logsSearchWrap">
-                        <span class="logs-search-icon"><i class="ti ti-search"></i></span>
                         <input type="text" class="logs-search-input" id="logsSearch" placeholder="<%= t('common.search') %>..." oninput="onLogsSearchInput(this.value)">
                         <span class="logs-search-count" id="logsSearchCount"></span>
-                        <span class="logs-search-loading" id="logsSearchLoading" aria-hidden="true"><i class="ti ti-loader-2"></i></span>
-                        <button class="logs-search-clear" id="logsSearchClear" onclick="clearLogsSearch()" title="<%= t('common.clear') %>">✕</button>
+                        <button class="logs-search-clear" id="logsSearchClear" onclick="clearLogsSearch()" title="<%= t('common.clear') %>"><i class="ti ti-x"></i></button>
                     </div>
                     <button class="btn btn-sm" id="logsToggleBtn" onclick="toggleLogs()" title="<%= t('dashboard.pauseLogs') %>"><i class="ti ti-player-pause"></i></button>
                     <button class="btn btn-sm" onclick="clearLogs()" title="<%= t('common.clear') %>"><i class="ti ti-trash"></i></button>
@@ -301,98 +299,14 @@
 .logs-controls {
     display: flex;
     gap: 8px;
-}
-.logs-search-wrap {
-    display: flex;
     align-items: center;
-    gap: 8px;
-    min-width: 300px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--bg-tertiary);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-.logs-search-wrap:focus-within {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    background: var(--bg-secondary);
-}
-.logs-search-wrap.searching .logs-search-loading {
-    display: inline-flex;
-}
-.logs-search-wrap.searching .logs-search-icon {
-    color: var(--primary);
-}
-.logs-search-icon {
-    display: inline-flex;
-    color: var(--text-muted);
-}
-.logs-search-input {
-    flex: 1;
-    min-width: 140px;
-    border: none;
-    background: transparent;
-    color: var(--text-primary);
-    outline: none;
-    height: 36px;
-    font-size: 0.9rem;
-}
-.logs-search-input::placeholder {
-    color: var(--text-muted);
-}
-.logs-search-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 6px;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    color: var(--text-primary);
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-}
-.logs-search-loading {
-    display: none;
-    align-items: center;
-    color: var(--text-muted);
-}
-.logs-search-loading .ti-loader-2 {
-    animation: spin 0.8s linear infinite;
-}
-.logs-search-clear {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-}
-.logs-search-clear:hover {
-    background: var(--bg-card);
-    color: var(--text-primary);
 }
 .logs-hit {
-    background: rgba(99, 102, 241, 0.22);
+    background: rgba(99, 102, 241, 0.25);
     color: inherit;
-    border-radius: 4px;
-    padding: 0 2px;
-}
-@media (max-width: 768px) {
-    .logs-controls {
-        width: 100%;
-        flex-wrap: wrap;
-    }
-    .logs-search-wrap {
-        min-width: 0;
-        width: 100%;
-    }
+    border-radius: 3px;
+    padding: 1px 3px;
+    margin: 0 1px;
 }
 @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -565,9 +479,10 @@ function appendLog(log) {
 
 function onLogsSearchInput(value) {
     const clearBtn = document.getElementById('logsSearchClear');
+    const countEl = document.getElementById('logsSearchCount');
     const hasValue = value.trim().length > 0;
     clearBtn.style.display = hasValue ? 'flex' : 'none';
-    setLogsSearchUiState(hasValue ? 'typing' : 'idle');
+    if (!hasValue && countEl) countEl.textContent = '';
 
     clearTimeout(logsSearchDebounce);
     logsSearchDebounce = setTimeout(() => {
@@ -585,10 +500,9 @@ async function execLogsSearch(q) {
     logsSearchMode = true;
     const container = document.getElementById('logsContainer');
     const countEl = document.getElementById('logsSearchCount');
-    setLogsSearchUiState('searching');
 
     container.innerHTML = '<div class="logs-loading">' + i18n.loading + '</div>';
-    if (countEl) countEl.textContent = '';
+    if (countEl) countEl.textContent = '...';
 
     try {
         const res = await fetch(`/panel/logs/search?q=${encodeURIComponent(q)}&limit=200`, { credentials: 'include' });
@@ -601,20 +515,16 @@ async function execLogsSearch(q) {
             if (countEl) {
                 const shown = data.matches.length;
                 const total = data.total;
-                countEl.textContent = shown < total
-                    ? `${shown} / ${total}`
-                    : `${total}`;
+                countEl.textContent = shown < total ? `${shown}/${total}` : `${total}`;
             }
-            setLogsSearchUiState('active');
         } else {
             container.innerHTML = '<div class="logs-empty">' + i18n.noLogs + '</div>';
             if (countEl) countEl.textContent = '0';
-            setLogsSearchUiState('active');
         }
     } catch (e) {
         if (logsSearchMode) {
             container.innerHTML = '<div class="logs-empty">—</div>';
-            setLogsSearchUiState('typing');
+            if (countEl) countEl.textContent = '';
         }
     }
 }
@@ -624,7 +534,6 @@ function exitLogsSearchMode() {
     logsSearchRequestId += 1;
     const countEl = document.getElementById('logsSearchCount');
     if (countEl) countEl.textContent = '';
-    setLogsSearchUiState('idle');
     const container = document.getElementById('logsContainer');
     container.innerHTML = '<div class="logs-loading">' + i18n.loading + '</div>';
     if (logsWs) {
@@ -643,13 +552,7 @@ function clearLogsSearch() {
 }
 
 function setLogsSearchUiState(state) {
-    const wrap = document.getElementById('logsSearchWrap');
-    if (!wrap) return;
-
-    wrap.classList.remove('searching');
-    if (state === 'searching') {
-        wrap.classList.add('searching');
-    }
+    // Оставлен для совместимости, состояние теперь отображается через count badge
 }
 
 function scrollLogsToBottom() {

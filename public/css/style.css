@@ -1083,56 +1083,71 @@ html {
 
 /* Logs search */
 .logs-search-wrap {
-    position: relative;
     display: flex;
     align-items: center;
+    gap: 6px;
 }
 
 .logs-search-input {
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--radius-sm);
     color: var(--text-primary);
-    font-size: 12px;
-    padding: 4px 28px 4px 10px;
-    width: 160px;
+    font-size: 13px;
+    padding: 7px 12px;
+    width: 180px;
     outline: none;
-    transition: border-color 0.2s, width 0.2s;
+    transition: all 0.2s ease;
+}
+
+.logs-search-input:hover {
+    border-color: var(--border-light);
 }
 
 .logs-search-input:focus {
-    border-color: var(--primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: var(--bg-tertiary);
     width: 220px;
+}
+
+.logs-search-input::placeholder {
+    color: var(--text-muted);
 }
 
 .logs-search-count {
     font-size: 11px;
     color: var(--text-muted);
     white-space: nowrap;
-    margin-right: 2px;
-    min-width: 24px;
-    text-align: right;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px 8px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.logs-search-count:empty {
+    display: none;
 }
 
 .logs-search-clear {
-    position: absolute;
-    right: 6px;
+    display: none;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 11px;
-    padding: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    transition: color 0.15s;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    margin-left: -4px;
 }
 
 .logs-search-clear:hover {
+    background: var(--bg-tertiary);
     color: var(--text-primary);
 }
 
@@ -1956,6 +1971,15 @@ html {
     
     .search-box input {
         width: 100%;
+    }
+    
+    .logs-search-wrap {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .logs-search-input {
+        width: 100% !important;
     }
     
     /* Tables - скрываем на мобилках */
