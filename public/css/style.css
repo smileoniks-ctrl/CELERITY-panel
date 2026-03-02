@@ -2296,17 +2296,6 @@ html {
 .table tbody tr:nth-child(5)  { animation-delay: 0.16s; }
 .table tbody tr:nth-child(n+6) { animation-delay: 0.18s; }
 
-/* Sidebar nav items */
-.nav-menu li {
-    animation: fadeIn 0.2s ease-out both;
-}
-.nav-menu li:nth-child(1) { animation-delay: 0.05s; }
-.nav-menu li:nth-child(2) { animation-delay: 0.08s; }
-.nav-menu li:nth-child(3) { animation-delay: 0.11s; }
-.nav-menu li:nth-child(4) { animation-delay: 0.14s; }
-.nav-menu li:nth-child(5) { animation-delay: 0.17s; }
-.nav-menu li:nth-child(6) { animation-delay: 0.20s; }
-
 /* Топбар */
 .topbar {
     animation: fadeIn 0.15s ease-out;
