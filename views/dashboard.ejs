@@ -53,9 +53,9 @@
 <div class="dashboard-grid">
     <div class="dashboard-main">
         <!-- Nodes Status -->
-<div class="card">
+        <div class="card">
     <div class="card-header">
-        <h2><%= t('dashboard.nodesStatus') %></h2>
+        <h2><i class="ti ti-server"></i> <%= t('dashboard.nodesStatus') %></h2>
                 <div class="header-actions">
                     <button class="btn btn-sm" onclick="refreshStats()" title="<%= t('common.refresh') %>"><i class="ti ti-refresh"></i></button>
                 </div>
@@ -171,7 +171,7 @@
             <div class="card-header">
                 <h2>
                     <span class="logs-status-dot" id="logsStatusDot"></span>
-                    <%= t('dashboard.recentLogs') %>
+                    <i class="ti ti-file-text"></i> <%= t('dashboard.recentLogs') %>
                 </h2>
                 <div class="logs-controls">
                     <div class="logs-search-wrap">
@@ -195,12 +195,12 @@
         <!-- Quick Actions -->
         <div class="card">
             <div class="card-header">
-                <h2><%= t('dashboard.quickActions') %></h2>
+                <h2><i class="ti ti-bolt"></i> <%= t('dashboard.quickActions') %></h2>
             </div>
             <div class="card-body">
                 <div class="quick-actions">
                     <a href="/panel/nodes/add" class="quick-action">
-                        <span class="qa-icon"><i class="ti ti-server-plus"></i></span>
+                        <span class="qa-icon"><i class="ti ti-server-2"></i></span>
                         <span class="qa-text"><%= t('dashboard.addNode') %></span>
                     </a>
                     <a href="/panel/users/add" class="quick-action">
@@ -227,7 +227,7 @@
         <!-- System Info -->
         <div class="card mt-2">
             <div class="card-header">
-                <h2><%= t('dashboard.panel') %></h2>
+                <h2><i class="ti ti-device-desktop"></i> <%= t('dashboard.panel') %></h2>
                 <button class="btn btn-sm" onclick="loadSystemStats()" title="<%= t('common.refresh') %>"><i class="ti ti-refresh"></i></button>
             </div>
             <div class="card-body">

@@ -5,7 +5,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2><%= t('groups.addGroup') %></h2>
+        <h2><i class="ti ti-folder-plus"></i> <%= t('groups.addGroup') %></h2>
     </div>
     <div class="card-body">
         <form method="POST" action="/panel/groups" class="form-inline">
@@ -22,7 +22,7 @@
                 <div class="form-group" style="flex: 0.5;">
                     <input type="color" name="color" value="#6366f1" title="<%= t('groups.colorHint') %>">
                 </div>
-                <button type="submit" class="btn btn-primary"><%= t('groups.createGroup') %></button>
+                <button type="submit" class="btn btn-primary"><i class="ti ti-plus"></i> <%= t('groups.createGroup') %></button>
             </div>
             <small class="hint"><%= t('groups.formHint') %></small>
         </form>
@@ -31,11 +31,12 @@
 
 <div class="card mt-2">
     <div class="card-header">
-        <h2><%= t('groups.allGroups') %> (<%= groups.length %>)</h2>
+        <h2><i class="ti ti-folders"></i> <%= t('groups.allGroups') %> (<%= groups.length %>)</h2>
     </div>
     <div class="card-body">
         <% if (groups.length === 0) { %>
             <div class="empty-state">
+                <span class="empty-icon"><i class="ti ti-folders"></i></span>
                 <p><%= t('groups.noGroups') %></p>
                 <p class="hint"><%= t('groups.noGroupsHint') %></p>
             </div>
