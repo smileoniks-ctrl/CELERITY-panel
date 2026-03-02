@@ -685,7 +685,7 @@ async function testWebhook() {
                         
                         <hr style="margin: 1rem 0; border-color: var(--border);">
                         
-                        <h4 style="margin-bottom: 0.75rem;"><%= t('settings.s3Settings') %></h4>
+                        <h4 style="margin-bottom: 0.75rem;"><i class="ti ti-cloud"></i> <%= t('settings.s3Settings') %></h4>
                         
                         <div class="settings-list" style="margin-bottom: 1rem;">
                             <label class="checkbox-label">
@@ -738,7 +738,7 @@ async function testWebhook() {
                                 </div>
                             </div>
                             
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="testS3Connection()" id="testS3Btn">
+                            <button type="button" class="btn btn-sm" onclick="testS3Connection()" id="testS3Btn">
                                 <i class="ti ti-plug"></i> <%= t('settings.testS3') %>
                             </button>
                             <span id="s3TestResult" style="margin-left: 0.5rem;"></span>
