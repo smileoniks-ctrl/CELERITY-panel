@@ -245,7 +245,9 @@ function generateVlessURI(user, node) {
         if (xray.realityPublicKey) params.set('pbk', xray.realityPublicKey);
         const sni = xray.realitySni && xray.realitySni[0] ? xray.realitySni[0] : '';
         if (sni) params.set('sni', sni);
-        const sid = xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : '';
+        // Prefer non-empty shortId if available
+        const shortIds = xray.realityShortIds || [''];
+        const sid = shortIds.find(id => id && id.length > 0) || shortIds[0] || '';
         params.set('sid', sid);
         if (xray.realitySpiderX) params.set('spx', xray.realitySpiderX);
         params.set('fp', fingerprint);
@@ -328,7 +330,7 @@ function _buildClashVlessProxy(user, node) {
     tls: true
     reality-opts:
       public-key: "${xray.realityPublicKey || ''}"
-      short-id: "${xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : ''}"
+      short-id: "${(xray.realityShortIds || ['']).find(id => id && id.length > 0) || ''}"
     servername: ${sni}
     client-fingerprint: ${fingerprint}`;
         if (transport === 'tcp' && xray.flow) proxy += `\n    flow: ${xray.flow}`;
@@ -430,7 +432,7 @@ function _buildSingboxVlessOutbound(user, node) {
             reality: {
                 enabled: true,
                 public_key: xray.realityPublicKey || '',
-                short_id: xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : '',
+                short_id: (xray.realityShortIds || ['']).find(id => id && id.length > 0) || '',
             },
         };
     } else if (security === 'tls') {
