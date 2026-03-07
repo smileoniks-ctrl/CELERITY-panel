@@ -555,8 +555,8 @@ else
     echo "Done: Xray already installed ($(xray version | head -1))"
 fi
 
-mkdir -p /etc/xray
-echo "Done: Directory /etc/xray ready"
+mkdir -p /usr/local/etc/xray
+echo "Done: Directory /usr/local/etc/xray ready"
 `;
 
 /**
@@ -630,32 +630,40 @@ async function setupXrayNode(node, options = {}) {
         }
         log('Xray-core installed');
 
-        // Generate Reality keys if needed
+        // Generate Reality keys and shortId if needed
         const xrayCfg = node.xray || {};
-        if (xrayCfg.security === 'reality' && !xrayCfg.realityPrivateKey) {
-            log('Generating x25519 Reality keys...');
-            generatedKeys = await generateX25519Keys(conn);
-            log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
+        if (xrayCfg.security === 'reality') {
+            const updates = {};
+            let needsUpdate = false;
 
-            // Persist keys to DB
-            const HyNode = require('../models/hyNodeModel');
-            await HyNode.updateOne(
-                { _id: node._id },
-                {
-                    $set: {
-                        'xray.realityPrivateKey': generatedKeys.privateKey,
-                        'xray.realityPublicKey': generatedKeys.publicKey,
-                    },
-                }
-            );
+            // Generate x25519 keys if not set
+            if (!xrayCfg.realityPrivateKey) {
+                log('Generating x25519 Reality keys...');
+                generatedKeys = await generateX25519Keys(conn);
+                log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
+                updates['xray.realityPrivateKey'] = generatedKeys.privateKey;
+                updates['xray.realityPublicKey'] = generatedKeys.publicKey;
+                node.xray = { ...node.xray, realityPrivateKey: generatedKeys.privateKey, realityPublicKey: generatedKeys.publicKey };
+                needsUpdate = true;
+            }
 
-            // Update local node object so config is generated with the new keys
-            node.xray = {
-                ...xrayCfg,
-                realityPrivateKey: generatedKeys.privateKey,
-                realityPublicKey: generatedKeys.publicKey,
-            };
-            log('Reality keys saved to database');
+            // Generate shortId if not set or only contains empty string
+            const currentShortIds = xrayCfg.realityShortIds || [''];
+            const hasRealShortId = currentShortIds.some(id => id && id.length > 0);
+            if (!hasRealShortId) {
+                const shortId = require('crypto').randomBytes(8).toString('hex'); // 16 hex chars
+                log(`Generated shortId: ${shortId}`);
+                updates['xray.realityShortIds'] = ['', shortId]; // empty + random
+                node.xray = { ...node.xray, realityShortIds: ['', shortId] };
+                needsUpdate = true;
+            }
+
+            // Save to DB
+            if (needsUpdate) {
+                const HyNode = require('../models/hyNodeModel');
+                await HyNode.updateOne({ _id: node._id }, { $set: updates });
+                log('Reality settings saved to database');
+            }
         }
 
         // Generate and upload config
@@ -664,7 +672,7 @@ async function setupXrayNode(node, options = {}) {
         const syncService = require('./syncService');
         const users = await syncService._getUsersForNode(node);
         const configContent = configGenerator.generateXrayConfig(node, users);
-        const configPath = '/etc/xray/config.json';
+        const configPath = '/usr/local/etc/xray/config.json';
 
         await uploadFile(conn, configContent, configPath);
         log(`Config uploaded to ${configPath} (${users.length} users)`);

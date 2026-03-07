@@ -274,8 +274,8 @@ function buildXrayStreamSettings(node) {
         streamSettings.tlsSettings = {
             serverName: node.domain || node.sni || '',
             certificates: [{
-                certificateFile: node.paths?.cert || '/etc/xray/cert.pem',
-                keyFile: node.paths?.key || '/etc/xray/key.pem',
+                certificateFile: node.paths?.cert || '/usr/local/etc/xray/cert.pem',
+                keyFile: node.paths?.key || '/usr/local/etc/xray/key.pem',
             }],
         };
         // Add ALPN if specified
@@ -422,7 +422,7 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 Type=simple
-ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
+ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=1048576

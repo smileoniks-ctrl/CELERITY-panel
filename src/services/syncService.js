@@ -179,7 +179,7 @@ class SyncService {
             const configContent = configGenerator.generateXrayConfig(node, users);
 
             // Upload config.json
-            await ssh.uploadContent(configContent, node.paths?.config || '/etc/xray/config.json');
+            await ssh.uploadContent(configContent, node.paths?.config || '/usr/local/etc/xray/config.json');
 
             // Restart xray service
             await ssh.exec('systemctl restart xray');

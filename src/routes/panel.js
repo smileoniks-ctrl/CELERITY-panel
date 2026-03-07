@@ -657,7 +657,7 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
         const conn = await nodeSetup.connectSSH(node);
         // Use appropriate config path based on node type
         const configPath = node.type === 'xray'
-            ? '/etc/xray/config.json'
+            ? '/usr/local/etc/xray/config.json'
             : (node.paths?.config || '/etc/hysteria/config.yaml');
         const result = await nodeSetup.execSSH(conn, `cat ${configPath}`);
         conn.end();

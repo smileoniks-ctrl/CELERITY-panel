@@ -31,7 +31,7 @@
                         <input type="radio" name="type" value="hysteria" id="protoHysteria"
                                <%= (node?.type || 'hysteria') === 'hysteria' ? 'checked' : '' %>
                                onchange="switchProto('hysteria')">
-                        <span class="proto-icon"><i class="ti ti-bolt"></i></span>
+                        <span class="proto-icon"><img src="/img/hysteria.svg" alt="Hysteria" style="width:24px;height:24px;"></span>
                         <span class="proto-name">Hysteria 2</span>
                         <span class="proto-desc">QUIC · HTTP auth · port hopping</span>
                     </label>
@@ -39,7 +39,7 @@
                         <input type="radio" name="type" value="xray" id="protoXray"
                                <%= node?.type === 'xray' ? 'checked' : '' %>
                                onchange="switchProto('xray')">
-                        <span class="proto-icon"><i class="ti ti-shield-check"></i></span>
+                        <span class="proto-icon"><img src="/img/xray.svg" alt="Xray" style="width:24px;height:24px;"></span>
                         <span class="proto-name">Xray VLESS</span>
                         <span class="proto-desc">Reality / TLS · WebSocket · gRPC</span>
                     </label>
@@ -55,13 +55,13 @@
                 </div>
             </div>
             
-                <div class="form-group">
+                <div class="form-group hysteria-only" id="domainGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="domain"><%= t('nodes.domain') %></label>
                     <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>" 
                            placeholder="de.example.com">
                     <small><%= t('nodes.domainHint') %></small>
                 </div>
-                
+
                 <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="sni"><%= t('nodes.sni') || 'SNI (Server Name Indication)' %></label>
                     <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>" 
