@@ -20,12 +20,17 @@ const outboundSchema = new mongoose.Schema({
 }, { _id: false });
 
 const xrayConfigSchema = new mongoose.Schema({
-    // Transport: tcp (Reality/TLS), ws (WebSocket), grpc
-    transport: { type: String, enum: ['tcp', 'ws', 'grpc'], default: 'tcp' },
+    // Transport: tcp, ws, grpc, xhttp (splithttp)
+    transport: { type: String, enum: ['tcp', 'ws', 'grpc', 'xhttp'], default: 'tcp' },
     // Security: reality (no cert needed), tls (cert files), none
     security: { type: String, enum: ['reality', 'tls', 'none'], default: 'reality' },
     // XTLS flow — only for tcp+reality/tls
     flow: { type: String, default: 'xtls-rprx-vision' },
+
+    // TLS Fingerprint (uTLS) — chrome, firefox, safari, ios, android, edge, random, randomized
+    fingerprint: { type: String, default: 'chrome' },
+    // ALPN — comma-separated or array: h3, h2, http/1.1
+    alpn: { type: [String], default: [] },
 
     // Reality-specific
     realityDest: { type: String, default: 'www.google.com:443' },
@@ -41,6 +46,11 @@ const xrayConfigSchema = new mongoose.Schema({
 
     // gRPC-specific
     grpcServiceName: { type: String, default: 'grpc' },
+
+    // xhttp (splithttp) specific
+    xhttpPath: { type: String, default: '/' },
+    xhttpHost: { type: String, default: '' },
+    xhttpMode: { type: String, enum: ['auto', 'packet-up', 'stream-up'], default: 'auto' },
 
     // gRPC API port for user management (local, not exposed)
     apiPort: { type: Number, default: 61000 },

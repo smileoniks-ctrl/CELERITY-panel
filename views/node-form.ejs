@@ -153,6 +153,7 @@
                             <option value="tcp" <%= node?.xray?.transport === 'tcp' || !node?.xray?.transport ? 'selected' : '' %>>TCP</option>
                             <option value="ws" <%= node?.xray?.transport === 'ws' ? 'selected' : '' %>>WebSocket</option>
                             <option value="grpc" <%= node?.xray?.transport === 'grpc' ? 'selected' : '' %>>gRPC</option>
+                            <option value="xhttp" <%= node?.xray?.transport === 'xhttp' ? 'selected' : '' %>>XHTTP (SplitHTTP)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -165,10 +166,34 @@
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="xrayFingerprint">TLS Fingerprint</label>
+                        <select id="xrayFingerprint" name="xray.fingerprint">
+                            <option value="chrome" <%= node?.xray?.fingerprint === 'chrome' || !node?.xray?.fingerprint ? 'selected' : '' %>>Chrome</option>
+                            <option value="firefox" <%= node?.xray?.fingerprint === 'firefox' ? 'selected' : '' %>>Firefox</option>
+                            <option value="safari" <%= node?.xray?.fingerprint === 'safari' ? 'selected' : '' %>>Safari</option>
+                            <option value="ios" <%= node?.xray?.fingerprint === 'ios' ? 'selected' : '' %>>iOS</option>
+                            <option value="android" <%= node?.xray?.fingerprint === 'android' ? 'selected' : '' %>>Android</option>
+                            <option value="edge" <%= node?.xray?.fingerprint === 'edge' ? 'selected' : '' %>>Edge</option>
+                            <option value="random" <%= node?.xray?.fingerprint === 'random' ? 'selected' : '' %>>Random</option>
+                            <option value="randomized" <%= node?.xray?.fingerprint === 'randomized' ? 'selected' : '' %>>Randomized</option>
+                        </select>
+                        <small>uTLS fingerprint for TLS handshake (Reality/TLS)</small>
+                    </div>
+                    <div class="form-group" id="alpnGroup" style="<%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'display:none' : '' %>">
+                        <label for="xrayAlpn">ALPN</label>
+                        <input type="text" id="xrayAlpn" name="xray.alpn" 
+                               value="<%= (node?.xray?.alpn || []).join(', ') %>"
+                               placeholder="h2, http/1.1">
+                        <small>Comma-separated: h3, h2, http/1.1 (for TLS only)</small>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label for="xrayFlow">Flow (XTLS)</label>
                     <input type="text" id="xrayFlow" name="xray.flow" value="<%= node?.xray?.flow || 'xtls-rprx-vision' %>" placeholder="xtls-rprx-vision">
-                    <small>Only for TCP + Reality/TLS. Leave empty for WebSocket/gRPC.</small>
+                    <small>Only for TCP + Reality/TLS. Leave empty for WebSocket/gRPC/XHTTP.</small>
                 </div>
 
                 <%# Reality-specific fields %>
@@ -238,6 +263,32 @@
                         <label for="xrayGrpcService">gRPC Service Name</label>
                         <input type="text" id="xrayGrpcService" name="xray.grpcServiceName"
                                value="<%= node?.xray?.grpcServiceName || 'grpc' %>" placeholder="grpc">
+                    </div>
+                </div>
+
+                <%# XHTTP (SplitHTTP) specific fields %>
+                <div id="xhttpFields" style="<%= node?.xray?.transport === 'xhttp' ? '' : 'display:none' %>">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="xrayXhttpPath">XHTTP Path</label>
+                            <input type="text" id="xrayXhttpPath" name="xray.xhttpPath"
+                                   value="<%= node?.xray?.xhttpPath || '/' %>" placeholder="/">
+                        </div>
+                        <div class="form-group">
+                            <label for="xrayXhttpHost">XHTTP Host Header</label>
+                            <input type="text" id="xrayXhttpHost" name="xray.xhttpHost"
+                                   value="<%= node?.xray?.xhttpHost || '' %>" placeholder="cdn.example.com">
+                            <small>For CDN usage (e.g., Cloudflare). Leave empty if not using CDN.</small>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="xrayXhttpMode">XHTTP Mode</label>
+                        <select id="xrayXhttpMode" name="xray.xhttpMode">
+                            <option value="auto" <%= node?.xray?.xhttpMode === 'auto' || !node?.xray?.xhttpMode ? 'selected' : '' %>>Auto</option>
+                            <option value="packet-up" <%= node?.xray?.xhttpMode === 'packet-up' ? 'selected' : '' %>>Packet Up</option>
+                            <option value="stream-up" <%= node?.xray?.xhttpMode === 'stream-up' ? 'selected' : '' %>>Stream Up</option>
+                        </select>
+                        <small>Upload mode: auto (recommended), packet-up (for restrictive CDN), stream-up (for H2/H3)</small>
                     </div>
                 </div>
 
@@ -792,6 +843,7 @@ function updateXrayTransportUI() {
     const transport = document.getElementById('xrayTransport').value;
     document.getElementById('wsFields').style.display = transport === 'ws' ? '' : 'none';
     document.getElementById('grpcFields').style.display = transport === 'grpc' ? '' : 'none';
+    document.getElementById('xhttpFields').style.display = transport === 'xhttp' ? '' : 'none';
     // Flow only makes sense for TCP
     const flowGroup = document.getElementById('xrayFlow').closest('.form-group');
     if (flowGroup) flowGroup.style.display = transport === 'tcp' ? '' : 'none';
@@ -800,6 +852,8 @@ function updateXrayTransportUI() {
 function updateXraySecurityUI() {
     const security = document.getElementById('xraySecurity').value;
     document.getElementById('realityFields').style.display = security === 'reality' ? '' : 'none';
+    // ALPN only for TLS (not Reality)
+    document.getElementById('alpnGroup').style.display = security === 'tls' ? '' : 'none';
 }
 
 <% if (node && node.type === 'xray') { %>

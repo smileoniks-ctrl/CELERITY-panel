@@ -233,9 +233,11 @@ function generateVlessURI(user, node) {
     const port = node.port || 443;
     const transport = xray.transport || 'tcp';
     const security = xray.security || 'reality';
+    const fingerprint = xray.fingerprint || 'chrome';
 
     const params = new URLSearchParams();
-    params.set('type', transport);
+    // xhttp → splithttp in URI type parameter
+    params.set('type', transport === 'xhttp' ? 'splithttp' : transport);
     params.set('security', security);
 
     if (security === 'reality') {
@@ -246,12 +248,16 @@ function generateVlessURI(user, node) {
         const sid = xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : '';
         params.set('sid', sid);
         if (xray.realitySpiderX) params.set('spx', xray.realitySpiderX);
-        params.set('fp', 'chrome');
+        params.set('fp', fingerprint);
     } else if (security === 'tls') {
         if (xray.flow && transport === 'tcp') params.set('flow', xray.flow);
         const sni = node.domain || node.sni || '';
         if (sni) params.set('sni', sni);
-        params.set('fp', 'chrome');
+        params.set('fp', fingerprint);
+        // ALPN
+        if (xray.alpn && xray.alpn.length > 0) {
+            params.set('alpn', xray.alpn.join(','));
+        }
     }
 
     if (transport === 'ws') {
@@ -260,12 +266,17 @@ function generateVlessURI(user, node) {
     } else if (transport === 'grpc') {
         params.set('serviceName', xray.grpcServiceName || 'grpc');
         params.set('mode', 'gun');
+    } else if (transport === 'xhttp') {
+        params.set('path', xray.xhttpPath || '/');
+        if (xray.xhttpHost) params.set('host', xray.xhttpHost);
+        if (xray.xhttpMode && xray.xhttpMode !== 'auto') params.set('mode', xray.xhttpMode);
     }
 
     const transportLabel = {
         tcp: security === 'reality' ? 'Reality' : 'TCP',
         ws: 'WebSocket',
         grpc: 'gRPC',
+        xhttp: 'XHTTP',
     }[transport] || transport.toUpperCase();
 
     const name = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
@@ -294,8 +305,14 @@ function _buildClashVlessProxy(user, node) {
     const host = node.domain || node.ip;
     const transport = xray.transport || 'tcp';
     const security = xray.security || 'reality';
-    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC' }[transport] || transport;
+    const fingerprint = xray.fingerprint || 'chrome';
+    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC', xhttp: 'XHTTP' }[transport] || transport;
     const name = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
+
+    // Clash Meta doesn't support splithttp/xhttp - skip these nodes
+    if (transport === 'xhttp') {
+        return { name, proxy: null };
+    }
 
     let proxy = `  - name: "${name}"
     type: vless
@@ -313,14 +330,17 @@ function _buildClashVlessProxy(user, node) {
       public-key: "${xray.realityPublicKey || ''}"
       short-id: "${xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : ''}"
     servername: ${sni}
-    client-fingerprint: chrome`;
+    client-fingerprint: ${fingerprint}`;
         if (transport === 'tcp' && xray.flow) proxy += `\n    flow: ${xray.flow}`;
     } else if (security === 'tls') {
         proxy += `
     network: ${transport}
     tls: true
     servername: ${node.domain || node.sni || host}
-    client-fingerprint: chrome`;
+    client-fingerprint: ${fingerprint}`;
+        if (xray.alpn && xray.alpn.length > 0) {
+            proxy += `\n    alpn:\n${xray.alpn.map(a => `      - ${a}`).join('\n')}`;
+        }
         if (transport === 'tcp' && xray.flow) proxy += `\n    flow: ${xray.flow}`;
     } else {
         proxy += `\n    network: ${transport}`;
@@ -349,6 +369,7 @@ function generateClashYAML(user, nodes) {
         if (node.type === 'xray') {
             if (!user.xrayUuid) return;
             const { name, proxy } = _buildClashVlessProxy(user, node);
+            if (!proxy) return; // xhttp not supported by Clash
             proxyNames.push(name);
             proxies.push(proxy);
         } else {
@@ -380,8 +401,14 @@ function _buildSingboxVlessOutbound(user, node) {
     const host = node.domain || node.ip;
     const transport = xray.transport || 'tcp';
     const security = xray.security || 'reality';
-    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC' }[transport] || transport;
+    const fingerprint = xray.fingerprint || 'chrome';
+    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC', xhttp: 'XHTTP' }[transport] || transport;
     const tag = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
+
+    // Sing-box doesn't support splithttp/xhttp - skip these nodes
+    if (transport === 'xhttp') {
+        return { tag, outbound: null };
+    }
 
     const outbound = {
         type: 'vless',
@@ -399,7 +426,7 @@ function _buildSingboxVlessOutbound(user, node) {
         outbound.tls = {
             enabled: true,
             server_name: xray.realitySni && xray.realitySni[0] ? xray.realitySni[0] : host,
-            utls: { enabled: true, fingerprint: 'chrome' },
+            utls: { enabled: true, fingerprint },
             reality: {
                 enabled: true,
                 public_key: xray.realityPublicKey || '',
@@ -410,8 +437,12 @@ function _buildSingboxVlessOutbound(user, node) {
         outbound.tls = {
             enabled: true,
             server_name: node.domain || node.sni || host,
-            utls: { enabled: true, fingerprint: 'chrome' },
+            utls: { enabled: true, fingerprint },
         };
+        // ALPN
+        if (xray.alpn && xray.alpn.length > 0) {
+            outbound.tls.alpn = xray.alpn;
+        }
     }
 
     if (transport === 'ws') {
@@ -439,6 +470,7 @@ function generateSingboxJSON(user, nodes) {
         if (node.type === 'xray') {
             if (!user.xrayUuid) return;
             const { tag, outbound } = _buildSingboxVlessOutbound(user, node);
+            if (!outbound) return; // xhttp not supported by sing-box
             tags.push(tag);
             proxyOutbounds.push(outbound);
         } else {

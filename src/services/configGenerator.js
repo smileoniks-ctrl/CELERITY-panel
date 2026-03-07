@@ -251,7 +251,9 @@ function buildXrayStreamSettings(node) {
     const transport = xray.transport || 'tcp';
     const security = xray.security || 'reality';
 
-    const streamSettings = { network: transport };
+    // xhttp is called 'splithttp' in Xray config network field
+    const networkName = transport === 'xhttp' ? 'splithttp' : transport;
+    const streamSettings = { network: networkName };
 
     // Security layer
     if (security === 'reality') {
@@ -276,6 +278,10 @@ function buildXrayStreamSettings(node) {
                 keyFile: node.paths?.key || '/etc/xray/key.pem',
             }],
         };
+        // Add ALPN if specified
+        if (xray.alpn && xray.alpn.length > 0) {
+            streamSettings.tlsSettings.alpn = xray.alpn;
+        }
     } else {
         streamSettings.security = 'none';
     }
@@ -289,6 +295,12 @@ function buildXrayStreamSettings(node) {
     } else if (transport === 'grpc') {
         streamSettings.grpcSettings = {
             serviceName: xray.grpcServiceName || 'grpc',
+        };
+    } else if (transport === 'xhttp') {
+        streamSettings.splithttpSettings = {
+            path: xray.xhttpPath || '/',
+            host: xray.xhttpHost || '',
+            mode: xray.xhttpMode || 'auto',
         };
     }
 

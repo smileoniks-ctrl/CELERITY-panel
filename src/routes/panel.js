@@ -50,7 +50,7 @@ const templateCache = new Map();
 
 /**
  * Parse Xray-related form fields from req.body into an xray sub-document object.
- * Handles comma-separated arrays (SNI, shortIds).
+ * Handles comma-separated arrays (SNI, shortIds, alpn).
  */
 function parseXrayFormFields(body) {
     const xray = {};
@@ -58,6 +58,15 @@ function parseXrayFormFields(body) {
     if (body['xray.transport']) xray.transport = body['xray.transport'];
     if (body['xray.security']) xray.security = body['xray.security'];
     if (body['xray.flow'] !== undefined) xray.flow = body['xray.flow'];
+
+    // TLS fingerprint (uTLS)
+    if (body['xray.fingerprint']) xray.fingerprint = body['xray.fingerprint'];
+
+    // ALPN (comma-separated)
+    if (body['xray.alpn'] !== undefined) {
+        const alpnStr = body['xray.alpn'].trim();
+        xray.alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
 
     // Reality
     if (body['xray.realityDest']) xray.realityDest = body['xray.realityDest'];
@@ -81,6 +90,11 @@ function parseXrayFormFields(body) {
 
     // gRPC
     if (body['xray.grpcServiceName']) xray.grpcServiceName = body['xray.grpcServiceName'];
+
+    // XHTTP (SplitHTTP)
+    if (body['xray.xhttpPath'] !== undefined) xray.xhttpPath = body['xray.xhttpPath'];
+    if (body['xray.xhttpHost'] !== undefined) xray.xhttpHost = body['xray.xhttpHost'];
+    if (body['xray.xhttpMode']) xray.xhttpMode = body['xray.xhttpMode'];
 
     // API port
     if (body['xray.apiPort']) xray.apiPort = parseInt(body['xray.apiPort']) || 61000;
