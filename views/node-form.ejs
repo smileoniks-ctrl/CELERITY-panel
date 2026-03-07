@@ -62,7 +62,7 @@
                     <small><%= t('nodes.domainHint') %></small>
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="sni"><%= t('nodes.sni') || 'SNI (Server Name Indication)' %></label>
                     <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>" 
                            placeholder="google.com">
@@ -96,7 +96,7 @@
                            placeholder="443">
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group hysteria-only" id="portRangeGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="portRange"><%= t('nodes.portRange') %></label>
                     <input type="text" id="portRange" name="portRange" value="<%= node?.portRange || '20000-50000' %>" 
                            placeholder="20000-50000">
@@ -105,7 +105,7 @@
             </div>
             
             <div class="form-row">
-                <div class="form-group">
+                <div class="form-group hysteria-only" id="maxOnlineGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="maxOnlineUsers"><%= t('nodes.maxOnlineUsers') %></label>
                     <input type="number" id="maxOnlineUsers" name="maxOnlineUsers" 
                            value="<%= node?.maxOnlineUsers || 0 %>" placeholder="0" min="0">
@@ -120,6 +120,28 @@
                 </div>
             </div>
             
+            <%# ========== SSH Settings (needed for BOTH protocols) ========== %>
+            <div class="form-section">
+                <h3><%= t('nodes.sshSettings') %></h3>
+                <small class="section-hint"><%= t('nodes.sshSettingsHint') %></small>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sshPort"><%= t('nodes.sshPort') %></label>
+                        <input type="number" id="sshPort" name="ssh.port" value="<%= node?.ssh?.port || 22 %>">
+                    </div>
+                    <div class="form-group">
+                        <label for="sshUsername"><%= t('nodes.sshUsername') %></label>
+                        <input type="text" id="sshUsername" name="ssh.username" value="<%= node?.ssh?.username || 'root' %>">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="sshPassword"><%= t('nodes.sshPassword') %> <%= node?.ssh?.password ? t('nodes.sshPasswordSet') : '' %></label>
+                    <input type="password" id="sshPassword" name="ssh.password" 
+                           placeholder="<%= node?.ssh?.password ? t('nodes.sshPasswordKeep') : t('nodes.sshPasswordPlaceholder') %>">
+                    <small class="hint"><%= t('nodes.sshPasswordEncrypted') %></small>
+                </div>
+            </div>
+
             <%# ========== Xray Settings (shown only for xray type) ========== %>
             <div class="form-section" id="xraySection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
                 <h3><i class="ti ti-shield-check" style="color:#a78bfa"></i> Xray VLESS Settings</h3>
@@ -244,27 +266,6 @@
                             <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret"><i class="ti ti-dice"></i></button>
                         </div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="form-section">
-                <h3><%= t('nodes.sshSettings') %></h3>
-                <small class="section-hint"><%= t('nodes.sshSettingsHint') %></small>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="sshPort"><%= t('nodes.sshPort') %></label>
-                        <input type="number" id="sshPort" name="ssh.port" value="<%= node?.ssh?.port || 22 %>">
-                    </div>
-                    <div class="form-group">
-                        <label for="sshUsername"><%= t('nodes.sshUsername') %></label>
-                        <input type="text" id="sshUsername" name="ssh.username" value="<%= node?.ssh?.username || 'root' %>">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="sshPassword"><%= t('nodes.sshPassword') %> <%= node?.ssh?.password ? t('nodes.sshPasswordSet') : '' %></label>
-                    <input type="password" id="sshPassword" name="ssh.password" 
-                           placeholder="<%= node?.ssh?.password ? t('nodes.sshPasswordKeep') : t('nodes.sshPasswordPlaceholder') %>">
-                    <small class="hint"><%= t('nodes.sshPasswordEncrypted') %></small>
                 </div>
             </div>
             
@@ -524,7 +525,7 @@ async function resetStatus() {
 }
 </script>
 
-<div class="card mt-3">
+<div class="card mt-3 hysteria-only" id="configPreviewCard" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
     <div class="card-header">
         <h2><%= t('nodes.nodeConfig') %></h2>
     </div>
@@ -770,17 +771,20 @@ function switchProto(proto) {
     const hysteriaSection = document.getElementById('hysteriaSection');
     const labelHysteria = document.getElementById('protoHysteriaLabel');
     const labelXray = document.getElementById('protoXrayLabel');
+    const hysteriaOnlyFields = document.querySelectorAll('.hysteria-only');
 
     if (proto === 'xray') {
         xraySection.style.display = '';
         hysteriaSection.style.display = 'none';
         labelXray.classList.add('active');
         labelHysteria.classList.remove('active');
+        hysteriaOnlyFields.forEach(el => el.style.display = 'none');
     } else {
         xraySection.style.display = 'none';
         hysteriaSection.style.display = '';
         labelHysteria.classList.add('active');
         labelXray.classList.remove('active');
+        hysteriaOnlyFields.forEach(el => el.style.display = '');
     }
 }
 
@@ -842,6 +846,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
 // Init UI state on page load
 (function() {
     const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
+    switchProto(proto);
     if (proto === 'xray') {
         updateXrayTransportUI();
         updateXraySecurityUI();
