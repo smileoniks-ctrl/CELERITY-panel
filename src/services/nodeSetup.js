@@ -561,6 +561,9 @@ echo "Done: Directory /etc/xray ready"
 
 /**
  * Generate x25519 keys for Xray Reality via SSH
+ * Supports multiple output formats:
+ * - Old: "Private key: xxx\nPublic key: xxx"
+ * - New: "PrivateKey: xxx\nPublicKey: xxx"
  * @returns {{ privateKey: string, publicKey: string } | null}
  */
 async function generateX25519Keys(conn) {
@@ -569,9 +572,18 @@ async function generateX25519Keys(conn) {
         throw new Error(`Failed to generate x25519 keys: ${result.output}`);
     }
     const output = result.output;
-    const privMatch = output.match(/Private key:\s*(\S+)/);
-    const pubMatch = output.match(/Public key:\s*(\S+)/);
+    
+    // Try different formats (case-insensitive, with/without space)
+    const privMatch = output.match(/Private\s*[Kk]ey:\s*(\S+)/i);
+    const pubMatch = output.match(/Public\s*[Kk]ey:\s*(\S+)/i);
+    
     if (!privMatch || !pubMatch) {
+        // Fallback: try to extract first two base64-like strings
+        const base64Pattern = /:\s*([A-Za-z0-9_-]{40,})/g;
+        const matches = [...output.matchAll(base64Pattern)];
+        if (matches.length >= 2) {
+            return { privateKey: matches[0][1], publicKey: matches[1][1] };
+        }
         throw new Error(`Could not parse x25519 output: ${output}`);
     }
     return { privateKey: privMatch[1], publicKey: pubMatch[1] };
