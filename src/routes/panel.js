@@ -964,6 +964,9 @@ router.post('/users/:userId', requireAuth, async (req, res) => {
             maxDevices: userMaxDevices,
         };
 
+        const wasEnabled = user.enabled;
+        const nowEnabled = updates.enabled;
+
         await HyUser.findOneAndUpdate({ userId: req.params.userId }, { $set: updates });
 
         await cache.invalidateUser(req.params.userId);
@@ -972,6 +975,22 @@ router.post('/users/:userId', requireAuth, async (req, res) => {
         }
         await cache.clearDeviceIPs(req.params.userId);
         await cache.invalidateDashboardCounts();
+
+        // Sync with Xray nodes if enabled status changed
+        if (wasEnabled !== nowEnabled) {
+            const updatedUser = { ...user.toObject(), ...updates };
+            if (nowEnabled) {
+                // User enabled -> add to all Xray nodes
+                syncService.addUserToAllXrayNodes(updatedUser).catch(err => {
+                    logger.error(`[Panel] Xray addUser error for ${req.params.userId}: ${err.message}`);
+                });
+            } else {
+                // User disabled -> remove from all Xray nodes
+                syncService.removeUserFromAllXrayNodes(updatedUser).catch(err => {
+                    logger.error(`[Panel] Xray removeUser error for ${req.params.userId}: ${err.message}`);
+                });
+            }
+        }
 
         webhookService.emit(webhookService.EVENTS.USER_UPDATED, { userId: req.params.userId, updates });
 
