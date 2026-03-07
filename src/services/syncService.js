@@ -68,6 +68,7 @@ class SyncService {
 
     /**
      * Build xray api adu command for adding a user to an Xray inbound
+     * Syntax: xray api adu --server=IP:PORT -tag=TAG -id=UUID -email=EMAIL -level=0 [-flow=FLOW]
      */
     _buildAddUserCmd(node, user) {
         const xray = node.xray || {};
@@ -75,26 +76,25 @@ class SyncService {
         const inboundTag = xray.inboundTag || 'vless-in';
         const transport = xray.transport || 'tcp';
         const security = xray.security || 'reality';
-        // Use only userId for email to ensure consistent add/remove
         const email = user.userId;
         const uuid = user.xrayUuid;
-        let cmd = `xray api adu --server=127.0.0.1:${apiPort} --inbound-tag="${inboundTag}" --id="${uuid}" --email="${email}" --level=0`;
+        let cmd = `xray api adu --server=127.0.0.1:${apiPort} -tag="${inboundTag}" -id="${uuid}" -email="${email}" -level=0`;
         if ((security === 'reality' || security === 'tls') && transport === 'tcp') {
-            cmd += ` --flow="${xray.flow || 'xtls-rprx-vision'}"`;
+            cmd += ` -flow="${xray.flow || 'xtls-rprx-vision'}"`;
         }
         return cmd;
     }
 
     /**
      * Build xray api rmu command for removing a user from an Xray inbound
+     * Syntax: xray api rmu --server=IP:PORT -tag=TAG "email1" "email2" ...
      */
     _buildRemoveUserCmd(node, user) {
         const xray = node.xray || {};
         const apiPort = xray.apiPort || 61000;
         const inboundTag = xray.inboundTag || 'vless-in';
-        // Use only userId for email to ensure consistent add/remove
         const email = user.userId;
-        return `xray api rmu --server=127.0.0.1:${apiPort} --inbound-tag="${inboundTag}" --email="${email}"`;
+        return `xray api rmu --server=127.0.0.1:${apiPort} -tag="${inboundTag}" "${email}"`;
     }
 
     /**
