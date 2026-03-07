@@ -132,9 +132,10 @@ class SyncService {
             const cmd = this._buildRemoveUserCmd(node, user);
             logger.debug(`[Xray] Running: ${cmd}`);
             const result = await ssh.exec(cmd);
-            logger.debug(`[Xray] rmu output: ${result}`);
-            if (result && result.toLowerCase().includes('error')) {
-                logger.warn(`[Xray] rmu may have failed for ${user.userId}: ${result}`);
+            const output = typeof result === 'string' ? result : JSON.stringify(result);
+            logger.debug(`[Xray] rmu output: ${output}`);
+            if (output && output.toLowerCase().includes('error')) {
+                logger.warn(`[Xray] rmu may have failed for ${user.userId}: ${output}`);
             }
             logger.info(`[Xray] Removed user ${user.userId} from ${node.name}`);
             return true;
