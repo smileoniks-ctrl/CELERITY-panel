@@ -652,7 +652,10 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
         }
         
         const conn = await nodeSetup.connectSSH(node);
-        const configPath = node.paths?.config || '/etc/hysteria/config.yaml';
+        // Use appropriate config path based on node type
+        const configPath = node.type === 'xray'
+            ? '/etc/xray/config.json'
+            : (node.paths?.config || '/etc/hysteria/config.yaml');
         const result = await nodeSetup.execSSH(conn, `cat ${configPath}`);
         conn.end();
         
@@ -670,19 +673,24 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
 router.get('/nodes/:id/logs', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
-        
+
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ success: false, error: 'Нода не найдена' });
         }
-        
+
         if (!node.ssh?.password && !node.ssh?.privateKey) {
-            return res.status(400).json({ error: 'SSH данные не настроены' });
+            return res.status(400).json({ success: false, error: 'SSH данные не настроены' });
         }
-        
-        const result = await nodeSetup.getNodeLogs(node, 100);
+
+        // Use appropriate function based on node type
+        logger.debug(`[Panel] Getting logs for node ${node.name} (type: ${node.type})`);
+        const result = node.type === 'xray'
+            ? await nodeSetup.getXrayNodeLogs(node, 100)
+            : await nodeSetup.getNodeLogs(node, 100);
         res.json(result);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error(`[Panel] Get logs error for node ${req.params.id}: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -1332,29 +1340,31 @@ router.post('/settings/flush-cache', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/nodes/:id/restart - Перезапуск Hysteria на ноде
+// POST /panel/nodes/:id/restart - Перезапуск сервиса на ноде
 router.post('/nodes/:id/restart', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
-        
+
         if (!node) {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
-        
+
         if (!node.ssh?.password && !node.ssh?.privateKey) {
             return res.status(400).json({ error: 'SSH данные не настроены' });
         }
-        
+
         const conn = await nodeSetup.connectSSH(node);
-        const result = await nodeSetup.execSSH(conn, 'systemctl restart hysteria-server && sleep 2 && systemctl is-active hysteria-server');
+        // Use appropriate service name based on node type
+        const serviceName = node.type === 'xray' ? 'xray' : 'hysteria-server';
+        const result = await nodeSetup.execSSH(conn, `systemctl restart ${serviceName} && sleep 2 && systemctl is-active ${serviceName}`);
         conn.end();
-        
+
         const isActive = result.output.trim().includes('active');
-        
-        await HyNode.findByIdAndUpdate(req.params.id, { 
-            $set: { status: isActive ? 'online' : 'error', lastSync: new Date() } 
+
+        await HyNode.findByIdAndUpdate(req.params.id, {
+            $set: { status: isActive ? 'online' : 'error', lastSync: new Date() }
         });
-        
+
         res.json({ success: isActive, output: result.output });
     } catch (error) {
         res.status(500).json({ error: error.message });

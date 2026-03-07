@@ -439,8 +439,10 @@
 </style>
 
 <script>
+const nodeType = '<%= node?.type || "hysteria" %>';
 const i18n = {
     autoSetupConfirm: <%- JSON.stringify(t("nodes.autoSetupConfirm")) %>,
+    autoSetupConfirmXray: <%- JSON.stringify(t("nodes.autoSetupConfirmXray")) %>,
     setupRunning: <%- JSON.stringify(t("nodes.setupRunning")) %>,
     loadingLogs: <%- JSON.stringify(t("nodes.loadingLogs")) %>,
     checking: <%- JSON.stringify(t("nodes.checking")) %>,
@@ -482,7 +484,8 @@ function clearLogs() {
 }
 
 async function setupNode() {
-    if (!confirm(i18n.autoSetupConfirm)) return;
+    const confirmMsg = nodeType === 'xray' ? i18n.autoSetupConfirmXray : i18n.autoSetupConfirm;
+    if (!confirm(confirmMsg)) return;
     
     const btn = document.getElementById('btnSetup');
     btn.disabled = true;
