@@ -69,7 +69,7 @@ class SyncService {
     /**
      * Build xray api adu command for adding a user to an Xray inbound
      * Syntax: xray api adu --server=IP:PORT <config.json>
-     * We use echo + heredoc to pass JSON without creating temp files
+     * The JSON must contain full inbound config with port
      */
     _buildAddUserCmd(node, user) {
         const xray = node.xray || {};
@@ -77,29 +77,40 @@ class SyncService {
         const inboundTag = xray.inboundTag || 'vless-in';
         const transport = xray.transport || 'tcp';
         const security = xray.security || 'reality';
+        const port = node.port || 443;
         const email = user.userId;
         const uuid = user.xrayUuid;
         
-        // Build user account config
+        const flow = ((security === 'reality' || security === 'tls') && transport === 'tcp') 
+            ? (xray.flow || 'xtls-rprx-vision') 
+            : '';
+        
+        // Build full inbound config as required by xray api adu
+        // Use heredoc to avoid shell escaping issues
         const userConfig = {
             inbounds: [{
+                listen: '0.0.0.0',
+                port: port,
+                protocol: 'vless',
                 tag: inboundTag,
-                users: [{
-                    email: email,
-                    level: 0,
-                    account: {
+                settings: {
+                    clients: [{
                         id: uuid,
-                        flow: ((security === 'reality' || security === 'tls') && transport === 'tcp') 
-                            ? (xray.flow || 'xtls-rprx-vision') 
-                            : ''
-                    }
-                }]
+                        email: email,
+                        level: 0,
+                        flow: flow
+                    }],
+                    decryption: 'none'
+                }
             }]
         };
         
         const json = JSON.stringify(userConfig);
-        // Use temp file approach: write JSON, run xray api adu, delete temp file
-        return `echo '${json}' > /tmp/xray_user.json && xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xray_user.json`;
+        // Use cat with heredoc to safely write JSON
+        return `cat > /tmp/xray_user.json << 'EOFXRAY'
+${json}
+EOFXRAY
+xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xray_user.json`;
     }
 
     /**
