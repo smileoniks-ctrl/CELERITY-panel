@@ -144,11 +144,11 @@
 
             <%# ========== Xray Settings (shown only for xray type) ========== %>
             <div class="form-section" id="xraySection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
-                <h3><i class="ti ti-shield-check" style="color:#a78bfa"></i> Xray VLESS Settings</h3>
+                <h3><img src="/img/xray.svg" alt="Xray" style="width:20px;height:20px;vertical-align:middle;margin-right:8px;"><%= t('nodes.xraySettings') %></h3>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="xrayTransport">Transport</label>
+                        <label for="xrayTransport"><%= t('nodes.xrayTransport') %></label>
                         <select id="xrayTransport" name="xray.transport" onchange="updateXrayTransportUI()">
                             <option value="tcp" <%= node?.xray?.transport === 'tcp' || !node?.xray?.transport ? 'selected' : '' %>>TCP</option>
                             <option value="ws" <%= node?.xray?.transport === 'ws' ? 'selected' : '' %>>WebSocket</option>
@@ -157,18 +157,18 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="xraySecurity">Security</label>
+                        <label for="xraySecurity"><%= t('nodes.xraySecurity') %></label>
                         <select id="xraySecurity" name="xray.security" onchange="updateXraySecurityUI()">
-                            <option value="reality" <%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'selected' : '' %>>Reality (no cert needed)</option>
-                            <option value="tls" <%= node?.xray?.security === 'tls' ? 'selected' : '' %>>TLS (cert files)</option>
-                            <option value="none" <%= node?.xray?.security === 'none' ? 'selected' : '' %>>None</option>
+                            <option value="reality" <%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'selected' : '' %>><%= t('nodes.xraySecurityReality') %></option>
+                            <option value="tls" <%= node?.xray?.security === 'tls' ? 'selected' : '' %>><%= t('nodes.xraySecurityTls') %></option>
+                            <option value="none" <%= node?.xray?.security === 'none' ? 'selected' : '' %>><%= t('nodes.xraySecurityNone') %></option>
                         </select>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="xrayFingerprint">TLS Fingerprint</label>
+                        <label for="xrayFingerprint"><%= t('nodes.xrayFingerprint') %></label>
                         <select id="xrayFingerprint" name="xray.fingerprint">
                             <option value="chrome" <%= node?.xray?.fingerprint === 'chrome' || !node?.xray?.fingerprint ? 'selected' : '' %>>Chrome</option>
                             <option value="firefox" <%= node?.xray?.fingerprint === 'firefox' ? 'selected' : '' %>>Firefox</option>
@@ -179,64 +179,64 @@
                             <option value="random" <%= node?.xray?.fingerprint === 'random' ? 'selected' : '' %>>Random</option>
                             <option value="randomized" <%= node?.xray?.fingerprint === 'randomized' ? 'selected' : '' %>>Randomized</option>
                         </select>
-                        <small>uTLS fingerprint for TLS handshake (Reality/TLS)</small>
+                        <small><%= t('nodes.xrayFingerprintHint') %></small>
                     </div>
                     <div class="form-group" id="alpnGroup" style="<%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'display:none' : '' %>">
-                        <label for="xrayAlpn">ALPN</label>
+                        <label for="xrayAlpn"><%= t('nodes.xrayAlpn') %></label>
                         <input type="text" id="xrayAlpn" name="xray.alpn" 
                                value="<%= (node?.xray?.alpn || []).join(', ') %>"
                                placeholder="h2, http/1.1">
-                        <small>Comma-separated: h3, h2, http/1.1 (for TLS only)</small>
+                        <small><%= t('nodes.xrayAlpnHint') %></small>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="xrayFlow">Flow (XTLS)</label>
+                    <label for="xrayFlow"><%= t('nodes.xrayFlow') %></label>
                     <input type="text" id="xrayFlow" name="xray.flow" value="<%= node?.xray?.flow || 'xtls-rprx-vision' %>" placeholder="xtls-rprx-vision">
-                    <small>Only for TCP + Reality/TLS. Leave empty for WebSocket/gRPC/XHTTP.</small>
+                    <small><%= t('nodes.xrayFlowHint') %></small>
                 </div>
 
                 <%# Reality-specific fields %>
                 <div id="realityFields" style="<%= node?.xray?.security === 'tls' || node?.xray?.security === 'none' ? 'display:none' : '' %>">
                     <div class="form-group">
-                        <label for="xrayRealityDest">Reality Destination</label>
+                        <label for="xrayRealityDest"><%= t('nodes.xrayRealityDest') %></label>
                         <input type="text" id="xrayRealityDest" name="xray.realityDest" 
                                value="<%= node?.xray?.realityDest || 'www.google.com:443' %>"
                                placeholder="www.google.com:443">
-                        <small>TLS 1.3 + H2 website to impersonate (host:port)</small>
+                        <small><%= t('nodes.xrayRealityDestHint') %></small>
                     </div>
                     <div class="form-group">
-                        <label for="xrayRealitySni">Reality SNI (serverNames)</label>
+                        <label for="xrayRealitySni"><%= t('nodes.xrayRealitySni') %></label>
                         <input type="text" id="xrayRealitySni" name="xray.realitySni" 
                                value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
                                placeholder="www.google.com">
-                        <small>Comma-separated server names matching destination certificate</small>
+                        <small><%= t('nodes.xrayRealitySniHint') %></small>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="xrayRealityPrivKey">Private Key</label>
+                            <label for="xrayRealityPrivKey"><%= t('nodes.xrayPrivateKey') %></label>
                             <div class="input-with-button">
                                 <input type="text" id="xrayRealityPrivKey" name="xray.realityPrivateKey"
                                        value="<%= node?.xray?.realityPrivateKey || '' %>"
-                                       placeholder="Auto-generated on Setup">
+                                       placeholder="<%= t('nodes.xrayAutoGenerated') %>">
                                 <% if (node) { %>
-                                <button type="button" class="btn btn-sm" onclick="generateXrayKeys()" title="Generate via SSH"><i class="ti ti-refresh"></i></button>
+                                <button type="button" class="btn btn-sm" onclick="generateXrayKeys()" title="<%= t('nodes.xrayGenerateKeys') %>"><i class="ti ti-refresh"></i></button>
                                 <% } %>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="xrayRealityPubKey">Public Key</label>
+                            <label for="xrayRealityPubKey"><%= t('nodes.xrayPublicKey') %></label>
                             <input type="text" id="xrayRealityPubKey" name="xray.realityPublicKey"
                                    value="<%= node?.xray?.realityPublicKey || '' %>"
-                                   placeholder="Auto-generated on Setup" readonly>
+                                   placeholder="<%= t('nodes.xrayAutoGenerated') %>" readonly>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="xrayRealityShortIds">Short IDs</label>
+                        <label for="xrayRealityShortIds"><%= t('nodes.xrayShortIds') %></label>
                         <input type="text" id="xrayRealityShortIds" name="xray.realityShortIds"
                                value="<%= (node?.xray?.realityShortIds || ['']).join(', ') %>"
                                placeholder=", 0123456789abcdef">
-                        <small>Comma-separated hex strings (0-16 chars each). Empty string is valid.</small>
+                        <small><%= t('nodes.xrayShortIdsHint') %></small>
                     </div>
                 </div>
 
@@ -244,15 +244,15 @@
                 <div id="wsFields" style="<%= node?.xray?.transport === 'ws' ? '' : 'display:none' %>">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="xrayWsPath">WebSocket Path</label>
+                            <label for="xrayWsPath"><%= t('nodes.xrayWsPath') %></label>
                             <input type="text" id="xrayWsPath" name="xray.wsPath" 
                                    value="<%= node?.xray?.wsPath || '/' %>" placeholder="/">
                         </div>
                         <div class="form-group">
-                            <label for="xrayWsHost">WebSocket Host Header</label>
+                            <label for="xrayWsHost"><%= t('nodes.xrayWsHost') %></label>
                             <input type="text" id="xrayWsHost" name="xray.wsHost"
                                    value="<%= node?.xray?.wsHost || '' %>" placeholder="cdn.example.com">
-                            <small>For CDN (Cloudflare) bypassing. Leave empty if not using CDN.</small>
+                            <small><%= t('nodes.xrayWsHostHint') %></small>
                         </div>
                     </div>
                 </div>
@@ -260,7 +260,7 @@
                 <%# gRPC-specific fields %>
                 <div id="grpcFields" style="<%= node?.xray?.transport === 'grpc' ? '' : 'display:none' %>">
                     <div class="form-group">
-                        <label for="xrayGrpcService">gRPC Service Name</label>
+                        <label for="xrayGrpcService"><%= t('nodes.xrayGrpcService') %></label>
                         <input type="text" id="xrayGrpcService" name="xray.grpcServiceName"
                                value="<%= node?.xray?.grpcServiceName || 'grpc' %>" placeholder="grpc">
                     </div>
@@ -270,33 +270,33 @@
                 <div id="xhttpFields" style="<%= node?.xray?.transport === 'xhttp' ? '' : 'display:none' %>">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="xrayXhttpPath">XHTTP Path</label>
+                            <label for="xrayXhttpPath"><%= t('nodes.xrayXhttpPath') %></label>
                             <input type="text" id="xrayXhttpPath" name="xray.xhttpPath"
                                    value="<%= node?.xray?.xhttpPath || '/' %>" placeholder="/">
                         </div>
                         <div class="form-group">
-                            <label for="xrayXhttpHost">XHTTP Host Header</label>
+                            <label for="xrayXhttpHost"><%= t('nodes.xrayXhttpHost') %></label>
                             <input type="text" id="xrayXhttpHost" name="xray.xhttpHost"
                                    value="<%= node?.xray?.xhttpHost || '' %>" placeholder="cdn.example.com">
-                            <small>For CDN usage (e.g., Cloudflare). Leave empty if not using CDN.</small>
+                            <small><%= t('nodes.xrayXhttpHostHint') %></small>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="xrayXhttpMode">XHTTP Mode</label>
+                        <label for="xrayXhttpMode"><%= t('nodes.xrayXhttpMode') %></label>
                         <select id="xrayXhttpMode" name="xray.xhttpMode">
                             <option value="auto" <%= node?.xray?.xhttpMode === 'auto' || !node?.xray?.xhttpMode ? 'selected' : '' %>>Auto</option>
                             <option value="packet-up" <%= node?.xray?.xhttpMode === 'packet-up' ? 'selected' : '' %>>Packet Up</option>
                             <option value="stream-up" <%= node?.xray?.xhttpMode === 'stream-up' ? 'selected' : '' %>>Stream Up</option>
                         </select>
-                        <small>Upload mode: auto (recommended), packet-up (for restrictive CDN), stream-up (for H2/H3)</small>
+                        <small><%= t('nodes.xrayXhttpModeHint') %></small>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="xrayApiPort">Xray gRPC API Port (local)</label>
+                    <label for="xrayApiPort"><%= t('nodes.xrayApiPort') %></label>
                     <input type="number" id="xrayApiPort" name="xray.apiPort"
                            value="<%= node?.xray?.apiPort || 61000 %>" placeholder="61000">
-                    <small>Local port for user management API (not exposed publicly, default 61000)</small>
+                    <small><%= t('nodes.xrayApiPortHint') %></small>
                 </div>
             </div>
 
