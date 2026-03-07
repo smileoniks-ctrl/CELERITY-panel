@@ -321,10 +321,11 @@ function generateXrayConfig(node, users) {
     const security = xray.security || 'reality';
 
     // Build clients list from users
+    // Use only userId as email to ensure consistent add/remove via API
     const clients = (users || []).map(u => {
         const client = {
             id: u.xrayUuid,
-            email: `${u.userId}.${u.username || 'user'}`,
+            email: u.userId,
             level: 0,
         };
         // flow only makes sense for tcp+reality or tcp+tls

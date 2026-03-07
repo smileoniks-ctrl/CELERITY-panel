@@ -75,11 +75,12 @@ class SyncService {
         const inboundTag = xray.inboundTag || 'vless-in';
         const transport = xray.transport || 'tcp';
         const security = xray.security || 'reality';
-        const email = `${user.userId}.${user.username || 'user'}`;
+        // Use only userId for email to ensure consistent add/remove
+        const email = user.userId;
         const uuid = user.xrayUuid;
-        let cmd = `xray api adu --server=127.0.0.1:${apiPort} -inbound-tag ${inboundTag} -id ${uuid} -email "${email}" -level 0`;
+        let cmd = `xray api adu --server=127.0.0.1:${apiPort} --inbound-tag="${inboundTag}" --id="${uuid}" --email="${email}" --level=0`;
         if ((security === 'reality' || security === 'tls') && transport === 'tcp') {
-            cmd += ` -flow "${xray.flow || 'xtls-rprx-vision'}"`;
+            cmd += ` --flow="${xray.flow || 'xtls-rprx-vision'}"`;
         }
         return cmd;
     }
@@ -91,8 +92,9 @@ class SyncService {
         const xray = node.xray || {};
         const apiPort = xray.apiPort || 61000;
         const inboundTag = xray.inboundTag || 'vless-in';
-        const email = `${user.userId}.${user.username || 'user'}`;
-        return `xray api rmu --server=127.0.0.1:${apiPort} -inbound-tag ${inboundTag} -email "${email}"`;
+        // Use only userId for email to ensure consistent add/remove
+        const email = user.userId;
+        return `xray api rmu --server=127.0.0.1:${apiPort} --inbound-tag="${inboundTag}" --email="${email}"`;
     }
 
     /**
@@ -128,7 +130,12 @@ class SyncService {
         try {
             await ssh.connect();
             const cmd = this._buildRemoveUserCmd(node, user);
-            await ssh.exec(cmd);
+            logger.debug(`[Xray] Running: ${cmd}`);
+            const result = await ssh.exec(cmd);
+            logger.debug(`[Xray] rmu output: ${result}`);
+            if (result && result.toLowerCase().includes('error')) {
+                logger.warn(`[Xray] rmu may have failed for ${user.userId}: ${result}`);
+            }
             logger.info(`[Xray] Removed user ${user.userId} from ${node.name}`);
             return true;
         } catch (error) {
