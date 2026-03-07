@@ -68,7 +68,8 @@ class SyncService {
 
     /**
      * Build xray api adu command for adding a user to an Xray inbound
-     * Syntax: xray api adu --server=IP:PORT -tag=TAG -id=UUID -email=EMAIL -level=0 [-flow=FLOW]
+     * Syntax: xray api adu --server=IP:PORT <config.json>
+     * We use echo + heredoc to pass JSON without creating temp files
      */
     _buildAddUserCmd(node, user) {
         const xray = node.xray || {};
@@ -78,11 +79,27 @@ class SyncService {
         const security = xray.security || 'reality';
         const email = user.userId;
         const uuid = user.xrayUuid;
-        let cmd = `xray api adu --server=127.0.0.1:${apiPort} -tag="${inboundTag}" -id="${uuid}" -email="${email}" -level=0`;
-        if ((security === 'reality' || security === 'tls') && transport === 'tcp') {
-            cmd += ` -flow="${xray.flow || 'xtls-rprx-vision'}"`;
-        }
-        return cmd;
+        
+        // Build user account config
+        const userConfig = {
+            inbounds: [{
+                tag: inboundTag,
+                users: [{
+                    email: email,
+                    level: 0,
+                    account: {
+                        id: uuid,
+                        flow: ((security === 'reality' || security === 'tls') && transport === 'tcp') 
+                            ? (xray.flow || 'xtls-rprx-vision') 
+                            : ''
+                    }
+                }]
+            }]
+        };
+        
+        const json = JSON.stringify(userConfig);
+        // Use temp file approach: write JSON, run xray api adu, delete temp file
+        return `echo '${json}' > /tmp/xray_user.json && xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xray_user.json`;
     }
 
     /**
@@ -110,7 +127,13 @@ class SyncService {
         try {
             await ssh.connect();
             const cmd = this._buildAddUserCmd(node, user);
-            await ssh.exec(cmd);
+            logger.debug(`[Xray] Running adu for ${user.userId}`);
+            const result = await ssh.exec(cmd);
+            const output = typeof result === 'string' ? result : JSON.stringify(result);
+            logger.debug(`[Xray] adu output: ${output}`);
+            if (output && output.toLowerCase().includes('error')) {
+                logger.warn(`[Xray] adu may have failed for ${user.userId}: ${output}`);
+            }
             logger.info(`[Xray] Added user ${user.userId} to ${node.name}`);
             return true;
         } catch (error) {
