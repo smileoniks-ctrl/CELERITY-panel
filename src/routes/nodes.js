@@ -1,5 +1,5 @@
 /**
- * API для управления нодами Hysteria
+ * API для управления нодами Hysteria + Xray
  */
 
 const express = require('express');
@@ -78,11 +78,16 @@ router.post('/', requireScope('nodes:write'), async (req, res) => {
     try {
         const {
             name, ip, domain, sni, port, portRange, statsPort,
-            groups, ssh, paths, settings, rankingCoefficient
+            groups, ssh, paths, settings, rankingCoefficient,
+            type, xray,
         } = req.body;
         
         if (!name || !ip) {
             return res.status(400).json({ error: 'name и ip обязательны' });
+        }
+
+        if (type && !['hysteria', 'xray'].includes(type)) {
+            return res.status(400).json({ error: 'type должен быть hysteria или xray' });
         }
         
         // Проверяем уникальность IP
@@ -91,12 +96,13 @@ router.post('/', requireScope('nodes:write'), async (req, res) => {
             return res.status(409).json({ error: 'Нода с таким IP уже существует' });
         }
         
-        // Генерируем секрет для API статистики
+        // Генерируем секрет для API статистики (Hysteria)
         const statsSecret = cryptoService.generateNodeSecret();
         
-        const node = new HyNode({
+        const nodeData = {
             name,
             ip,
+            type: type || 'hysteria',
             domain: domain || '',
             sni: sni || '',
             port: port || 443,
@@ -110,14 +116,19 @@ router.post('/', requireScope('nodes:write'), async (req, res) => {
             rankingCoefficient: rankingCoefficient || 1.0,
             active: true,
             status: 'offline',
-        });
-        
+        };
+
+        if (type === 'xray' && xray) {
+            nodeData.xray = xray;
+        }
+
+        const node = new HyNode(nodeData);
         await node.save();
         
         // Инвалидируем кэш
         await invalidateNodesCache();
         
-        logger.info(`[Nodes API] Created node ${name} (${ip})`);
+        logger.info(`[Nodes API] Created ${type || 'hysteria'} node ${name} (${ip})`);
         
         res.status(201).json(node);
     } catch (error) {
@@ -133,7 +144,8 @@ router.put('/:id', requireScope('nodes:write'), async (req, res) => {
     try {
         const allowedUpdates = [
             'name', 'domain', 'sni', 'port', 'portRange', 'statsPort',
-            'groups', 'ssh', 'paths', 'settings', 'active', 'rankingCoefficient'
+            'groups', 'ssh', 'paths', 'settings', 'active', 'rankingCoefficient',
+            'type', 'xray',
         ];
         
         const updates = {};
@@ -421,6 +433,48 @@ router.post('/:id/update-config', requireScope('nodes:write'), async (req, res) 
 });
 
 /**
+ * POST /nodes/:id/generate-xray-keys - Generate x25519 Reality keys via SSH
+ * Saves the keys to the node and returns the public key.
+ */
+router.post('/:id/generate-xray-keys', requireScope('nodes:write'), async (req, res) => {
+    try {
+        const node = await HyNode.findById(req.params.id);
+
+        if (!node) return res.status(404).json({ error: 'Нода не найдена' });
+        if (node.type !== 'xray') return res.status(400).json({ error: 'Нода не является Xray-нодой' });
+        if (!node.ssh?.password && !node.ssh?.privateKey) {
+            return res.status(400).json({ error: 'SSH credentials not configured' });
+        }
+
+        const nodeSetup = require('../services/nodeSetup');
+        const { connectSSH, generateX25519Keys } = nodeSetup;
+
+        const conn = await connectSSH(node);
+        let keys;
+        try {
+            keys = await generateX25519Keys(conn);
+        } finally {
+            conn.end();
+        }
+
+        await HyNode.findByIdAndUpdate(req.params.id, {
+            $set: {
+                'xray.realityPrivateKey': keys.privateKey,
+                'xray.realityPublicKey': keys.publicKey,
+            },
+        });
+
+        await invalidateNodesCache();
+
+        logger.info(`[Nodes API] x25519 keys generated for ${node.name}`);
+        res.json({ success: true, privateKey: keys.privateKey, publicKey: keys.publicKey });
+    } catch (error) {
+        logger.error(`[Nodes API] Generate xray keys error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * POST /nodes/:id/setup - Auto-setup node via SSH
  *
  * Installs Hysteria, generates certs, configures port hopping, opens firewall ports
@@ -459,17 +513,24 @@ router.post('/:id/setup', requireScope('nodes:write'), async (req, res) => {
         logger.info(`[Nodes API] Auto-setup started for ${node.name} (${node.ip}) via API`);
 
         const nodeSetup = require('../services/nodeSetup');
-        const result = await nodeSetup.setupNode(node, {
-            installHysteria,
-            setupPortHopping,
-            restartService,
-        });
+
+        let result;
+        if (node.type === 'xray') {
+            result = await nodeSetup.setupXrayNode(node, { restartService });
+        } else {
+            result = await nodeSetup.setupNode(node, {
+                installHysteria,
+                setupPortHopping,
+                restartService,
+            });
+        }
 
         if (result.success) {
-            await HyNode.findByIdAndUpdate(req.params.id, {
-                $set: { status: 'online', lastSync: new Date(), lastError: '', useTlsFiles: result.useTlsFiles },
-            });
-            logger.info(`[Nodes API] Auto-setup completed for ${node.name}`);
+            const updateFields = { status: 'online', lastSync: new Date(), lastError: '' };
+            if (node.type !== 'xray') updateFields.useTlsFiles = result.useTlsFiles;
+            await HyNode.findByIdAndUpdate(req.params.id, { $set: updateFields });
+            await invalidateNodesCache();
+            logger.info(`[Nodes API] Auto-setup completed for ${node.name} (${node.type})`);
             res.json({ success: true, logs: result.logs });
         } else {
             await HyNode.findByIdAndUpdate(req.params.id, {

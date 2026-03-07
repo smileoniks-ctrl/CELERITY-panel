@@ -519,6 +519,217 @@ async function getNodeLogs(node, lines = 50) {
     }
 }
 
+// ==================== XRAY SETUP ====================
+
+const XRAY_INSTALL_SCRIPT = `#!/bin/bash
+set -e
+
+echo "=== [1/4] Installing Xray-core ==="
+
+if ! command -v xray &> /dev/null; then
+    echo "Xray not found. Installing..."
+    bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh) @ latest
+    echo "Done: Xray installed"
+else
+    echo "Done: Xray already installed ($(xray version | head -1))"
+fi
+
+mkdir -p /etc/xray
+echo "Done: Directory /etc/xray ready"
+`;
+
+/**
+ * Generate x25519 keys for Xray Reality via SSH
+ * @returns {{ privateKey: string, publicKey: string } | null}
+ */
+async function generateX25519Keys(conn) {
+    const result = await execSSH(conn, 'xray x25519');
+    if (!result.success) {
+        throw new Error(`Failed to generate x25519 keys: ${result.output}`);
+    }
+    const output = result.output;
+    const privMatch = output.match(/Private key:\s*(\S+)/);
+    const pubMatch = output.match(/Public key:\s*(\S+)/);
+    if (!privMatch || !pubMatch) {
+        throw new Error(`Could not parse x25519 output: ${output}`);
+    }
+    return { privateKey: privMatch[1], publicKey: pubMatch[1] };
+}
+
+/**
+ * Setup Xray node via SSH:
+ * 1. Install xray-core
+ * 2. Generate x25519 Reality keys (if security=reality and no keys yet)
+ * 3. Upload config.json
+ * 4. Open firewall ports
+ * 5. Enable and restart xray service
+ *
+ * @param {Object} node - Node document
+ * @param {Object} options - { restartService }
+ * @returns {{ success, logs, realityKeys? }}
+ */
+async function setupXrayNode(node, options = {}) {
+    const { restartService = true } = options;
+
+    const logs = [];
+    const log = (msg) => {
+        const line = `[${new Date().toISOString()}] ${msg}`;
+        logs.push(line);
+        logger.info(`[XraySetup] ${msg}`);
+    };
+
+    log(`Starting Xray setup for ${node.name} (${node.ip})`);
+
+    let conn;
+    let generatedKeys = null;
+
+    try {
+        log('Connecting via SSH...');
+        conn = await connectSSH(node);
+        log('SSH connected');
+
+        // Install Xray
+        log('Installing Xray-core...');
+        const installResult = await execSSH(conn, XRAY_INSTALL_SCRIPT);
+        logs.push(installResult.output);
+        if (!installResult.success) {
+            throw new Error(`Xray installation failed: ${installResult.error}`);
+        }
+        log('Xray-core installed');
+
+        // Generate Reality keys if needed
+        const xrayCfg = node.xray || {};
+        if (xrayCfg.security === 'reality' && !xrayCfg.realityPrivateKey) {
+            log('Generating x25519 Reality keys...');
+            generatedKeys = await generateX25519Keys(conn);
+            log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
+
+            // Persist keys to DB
+            const HyNode = require('../models/hyNodeModel');
+            await HyNode.updateOne(
+                { _id: node._id },
+                {
+                    $set: {
+                        'xray.realityPrivateKey': generatedKeys.privateKey,
+                        'xray.realityPublicKey': generatedKeys.publicKey,
+                    },
+                }
+            );
+
+            // Update local node object so config is generated with the new keys
+            node.xray = {
+                ...xrayCfg,
+                realityPrivateKey: generatedKeys.privateKey,
+                realityPublicKey: generatedKeys.publicKey,
+            };
+            log('Reality keys saved to database');
+        }
+
+        // Generate and upload config
+        log('Generating Xray config...');
+        const configGenerator = require('./configGenerator');
+        const syncService = require('./syncService');
+        const users = await syncService._getUsersForNode(node);
+        const configContent = configGenerator.generateXrayConfig(node, users);
+        const configPath = '/etc/xray/config.json';
+
+        await uploadFile(conn, configContent, configPath);
+        log(`Config uploaded to ${configPath} (${users.length} users)`);
+        logs.push('--- Config preview ---');
+        logs.push(configContent.substring(0, 500) + (configContent.length > 500 ? '\n...' : ''));
+        logs.push('--- End config preview ---');
+
+        // Open firewall ports
+        const mainPort = node.port || 443;
+        const apiPort = (node.xray || {}).apiPort || 61000;
+        log(`Opening firewall ports (${mainPort}, api:${apiPort})...`);
+        const firewallResult = await execSSH(conn, `
+echo "=== Opening firewall ports ==="
+if command -v iptables &> /dev/null; then
+    iptables -I INPUT -p tcp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
+    iptables -I INPUT -p udp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
+    echo "Done: iptables rules added"
+fi
+if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow ${mainPort}/tcp 2>/dev/null || true
+    ufw allow ${mainPort}/udp 2>/dev/null || true
+    echo "Done: UFW rules added"
+fi
+echo "Done: Firewall configured"
+        `);
+        logs.push(firewallResult.output);
+        log('Firewall configured');
+
+        if (restartService) {
+            log('Installing systemd service and starting Xray...');
+            const serviceContent = configGenerator.generateXraySystemdService();
+            await uploadFile(conn, serviceContent, '/etc/systemd/system/xray.service');
+            const restartResult = await execSSH(conn, `
+echo "=== Starting Xray service ==="
+systemctl daemon-reload
+systemctl enable xray
+systemctl restart xray
+sleep 2
+echo "Service status:"
+systemctl status xray --no-pager -l || true
+echo ""
+echo "Journal (last 15 lines):"
+journalctl -u xray -n 15 --no-pager || true
+            `);
+            logs.push(restartResult.output);
+            if (!restartResult.success) {
+                log(`Service restart warning: ${restartResult.error}`);
+            } else {
+                log('Xray service started');
+            }
+        }
+
+        log('Xray setup completed successfully!');
+        return { success: true, logs, realityKeys: generatedKeys };
+
+    } catch (error) {
+        log(`Error: ${error.message}`);
+        return { success: false, error: error.message, logs, realityKeys: generatedKeys };
+
+    } finally {
+        if (conn) conn.end();
+    }
+}
+
+/**
+ * Check Xray service status via SSH
+ */
+async function checkXrayNodeStatus(node) {
+    try {
+        const conn = await connectSSH(node);
+        try {
+            const result = await execSSH(conn, 'systemctl is-active xray');
+            return result.output.trim() === 'active' ? 'online' : 'offline';
+        } finally {
+            conn.end();
+        }
+    } catch (error) {
+        return 'error';
+    }
+}
+
+/**
+ * Get Xray node logs via SSH
+ */
+async function getXrayNodeLogs(node, lines = 50) {
+    try {
+        const conn = await connectSSH(node);
+        try {
+            const result = await execSSH(conn, `journalctl -u xray -n ${lines} --no-pager`);
+            return { success: true, logs: result.output };
+        } finally {
+            conn.end();
+        }
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     setupNode,
     checkNodeStatus,
@@ -526,4 +737,8 @@ module.exports = {
     connectSSH,
     execSSH,
     uploadFile,
+    setupXrayNode,
+    generateX25519Keys,
+    checkXrayNodeStatus,
+    getXrayNodeLogs,
 };

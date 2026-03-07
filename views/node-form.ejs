@@ -22,6 +22,29 @@
                            placeholder="123.45.67.89" required>
                 </div>
             </div>
+
+            <%# ========== Protocol Type ========== %>
+            <div class="form-section">
+                <h3>Протокол</h3>
+                <div class="proto-switcher">
+                    <label class="proto-option <% if ((node?.type || 'hysteria') === 'hysteria') { %>active<% } %>" id="protoHysteriaLabel">
+                        <input type="radio" name="type" value="hysteria" id="protoHysteria"
+                               <%= (node?.type || 'hysteria') === 'hysteria' ? 'checked' : '' %>
+                               onchange="switchProto('hysteria')">
+                        <span class="proto-icon"><i class="ti ti-bolt"></i></span>
+                        <span class="proto-name">Hysteria 2</span>
+                        <span class="proto-desc">QUIC · HTTP auth · port hopping</span>
+                    </label>
+                    <label class="proto-option <% if (node?.type === 'xray') { %>active<% } %>" id="protoXrayLabel">
+                        <input type="radio" name="type" value="xray" id="protoXray"
+                               <%= node?.type === 'xray' ? 'checked' : '' %>
+                               onchange="switchProto('xray')">
+                        <span class="proto-icon"><i class="ti ti-shield-check"></i></span>
+                        <span class="proto-name">Xray VLESS</span>
+                        <span class="proto-desc">Reality / TLS · WebSocket · gRPC</span>
+                    </label>
+                </div>
+            </div>
             
             <div class="form-row">
                 <div class="form-group">
@@ -97,6 +120,115 @@
                 </div>
             </div>
             
+            <%# ========== Xray Settings (shown only for xray type) ========== %>
+            <div class="form-section" id="xraySection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
+                <h3><i class="ti ti-shield-check" style="color:#a78bfa"></i> Xray VLESS Settings</h3>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="xrayTransport">Transport</label>
+                        <select id="xrayTransport" name="xray.transport" onchange="updateXrayTransportUI()">
+                            <option value="tcp" <%= node?.xray?.transport === 'tcp' || !node?.xray?.transport ? 'selected' : '' %>>TCP</option>
+                            <option value="ws" <%= node?.xray?.transport === 'ws' ? 'selected' : '' %>>WebSocket</option>
+                            <option value="grpc" <%= node?.xray?.transport === 'grpc' ? 'selected' : '' %>>gRPC</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="xraySecurity">Security</label>
+                        <select id="xraySecurity" name="xray.security" onchange="updateXraySecurityUI()">
+                            <option value="reality" <%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'selected' : '' %>>Reality (no cert needed)</option>
+                            <option value="tls" <%= node?.xray?.security === 'tls' ? 'selected' : '' %>>TLS (cert files)</option>
+                            <option value="none" <%= node?.xray?.security === 'none' ? 'selected' : '' %>>None</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="xrayFlow">Flow (XTLS)</label>
+                    <input type="text" id="xrayFlow" name="xray.flow" value="<%= node?.xray?.flow || 'xtls-rprx-vision' %>" placeholder="xtls-rprx-vision">
+                    <small>Only for TCP + Reality/TLS. Leave empty for WebSocket/gRPC.</small>
+                </div>
+
+                <%# Reality-specific fields %>
+                <div id="realityFields" style="<%= node?.xray?.security === 'tls' || node?.xray?.security === 'none' ? 'display:none' : '' %>">
+                    <div class="form-group">
+                        <label for="xrayRealityDest">Reality Destination</label>
+                        <input type="text" id="xrayRealityDest" name="xray.realityDest" 
+                               value="<%= node?.xray?.realityDest || 'www.google.com:443' %>"
+                               placeholder="www.google.com:443">
+                        <small>TLS 1.3 + H2 website to impersonate (host:port)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="xrayRealitySni">Reality SNI (serverNames)</label>
+                        <input type="text" id="xrayRealitySni" name="xray.realitySni" 
+                               value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
+                               placeholder="www.google.com">
+                        <small>Comma-separated server names matching destination certificate</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="xrayRealityPrivKey">Private Key</label>
+                            <div class="input-with-button">
+                                <input type="text" id="xrayRealityPrivKey" name="xray.realityPrivateKey"
+                                       value="<%= node?.xray?.realityPrivateKey || '' %>"
+                                       placeholder="Auto-generated on Setup">
+                                <% if (node) { %>
+                                <button type="button" class="btn btn-sm" onclick="generateXrayKeys()" title="Generate via SSH"><i class="ti ti-refresh"></i></button>
+                                <% } %>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="xrayRealityPubKey">Public Key</label>
+                            <input type="text" id="xrayRealityPubKey" name="xray.realityPublicKey"
+                                   value="<%= node?.xray?.realityPublicKey || '' %>"
+                                   placeholder="Auto-generated on Setup" readonly>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="xrayRealityShortIds">Short IDs</label>
+                        <input type="text" id="xrayRealityShortIds" name="xray.realityShortIds"
+                               value="<%= (node?.xray?.realityShortIds || ['']).join(', ') %>"
+                               placeholder=", 0123456789abcdef">
+                        <small>Comma-separated hex strings (0-16 chars each). Empty string is valid.</small>
+                    </div>
+                </div>
+
+                <%# WebSocket-specific fields %>
+                <div id="wsFields" style="<%= node?.xray?.transport === 'ws' ? '' : 'display:none' %>">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="xrayWsPath">WebSocket Path</label>
+                            <input type="text" id="xrayWsPath" name="xray.wsPath" 
+                                   value="<%= node?.xray?.wsPath || '/' %>" placeholder="/">
+                        </div>
+                        <div class="form-group">
+                            <label for="xrayWsHost">WebSocket Host Header</label>
+                            <input type="text" id="xrayWsHost" name="xray.wsHost"
+                                   value="<%= node?.xray?.wsHost || '' %>" placeholder="cdn.example.com">
+                            <small>For CDN (Cloudflare) bypassing. Leave empty if not using CDN.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <%# gRPC-specific fields %>
+                <div id="grpcFields" style="<%= node?.xray?.transport === 'grpc' ? '' : 'display:none' %>">
+                    <div class="form-group">
+                        <label for="xrayGrpcService">gRPC Service Name</label>
+                        <input type="text" id="xrayGrpcService" name="xray.grpcServiceName"
+                               value="<%= node?.xray?.grpcServiceName || 'grpc' %>" placeholder="grpc">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="xrayApiPort">Xray gRPC API Port (local)</label>
+                    <input type="number" id="xrayApiPort" name="xray.apiPort"
+                           value="<%= node?.xray?.apiPort || 61000 %>" placeholder="61000">
+                    <small>Local port for user management API (not exposed publicly, default 61000)</small>
+                </div>
+            </div>
+
+            <%# ========== Hysteria-specific sections (hidden for xray) ========== %>
+            <div id="hysteriaSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
             <div class="form-section">
                 <h3><%= t('nodes.statsPort') %> API</h3>
                 <div class="form-row">
@@ -159,6 +291,7 @@
                     <button type="button" class="btn btn-sm" onclick="loadCurrentConfig()"><i class="ti ti-cloud-download"></i> <%= t('nodes.loadCurrentConfig') %></button>
                 </div>
             </div>
+            </div><%# end #hysteriaSection %>
             
             <div class="form-group">
                 <label class="checkbox-label">
@@ -432,6 +565,31 @@ acl:
 <% } %>
 
 <style>
+/* Protocol switcher */
+.proto-switcher {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+.proto-option {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+}
+.proto-option input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.proto-option:hover { border-color: var(--accent); background: var(--accent-glow); }
+.proto-option.active { border-color: var(--accent); background: var(--accent-glow); }
+.proto-icon { font-size: 22px; }
+.proto-name { font-weight: 600; font-size: 14px; }
+.proto-desc { font-size: 11px; color: var(--text-muted); }
+
 .code-textarea {
     font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
     font-size: 13px;
@@ -604,4 +762,89 @@ async function loadCurrentConfig() {
     alert(i18nConfig.saveFirst);
     <% } %>
 }
+
+// ==================== XRAY UI ====================
+
+function switchProto(proto) {
+    const xraySection = document.getElementById('xraySection');
+    const hysteriaSection = document.getElementById('hysteriaSection');
+    const labelHysteria = document.getElementById('protoHysteriaLabel');
+    const labelXray = document.getElementById('protoXrayLabel');
+
+    if (proto === 'xray') {
+        xraySection.style.display = '';
+        hysteriaSection.style.display = 'none';
+        labelXray.classList.add('active');
+        labelHysteria.classList.remove('active');
+    } else {
+        xraySection.style.display = 'none';
+        hysteriaSection.style.display = '';
+        labelHysteria.classList.add('active');
+        labelXray.classList.remove('active');
+    }
+}
+
+function updateXrayTransportUI() {
+    const transport = document.getElementById('xrayTransport').value;
+    document.getElementById('wsFields').style.display = transport === 'ws' ? '' : 'none';
+    document.getElementById('grpcFields').style.display = transport === 'grpc' ? '' : 'none';
+    // Flow only makes sense for TCP
+    const flowGroup = document.getElementById('xrayFlow').closest('.form-group');
+    if (flowGroup) flowGroup.style.display = transport === 'tcp' ? '' : 'none';
+}
+
+function updateXraySecurityUI() {
+    const security = document.getElementById('xraySecurity').value;
+    document.getElementById('realityFields').style.display = security === 'reality' ? '' : 'none';
+}
+
+<% if (node && node.type === 'xray') { %>
+async function generateXrayKeys() {
+    if (!confirm('Generate new x25519 Reality keys via SSH? This will overwrite existing keys.')) return;
+
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2"></i>';
+
+    try {
+        const res = await fetch('/api/nodes/<%= node._id %>/generate-xray-keys', {
+            method: 'POST',
+            credentials: 'include',
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById('xrayRealityPrivKey').value = data.privateKey;
+            document.getElementById('xrayRealityPubKey').value = data.publicKey;
+            alert('Keys generated successfully! Public key: ' + data.publicKey);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-refresh"></i>';
+    }
+}
+<% } %>
+
+// Preprocess comma-separated Xray array fields on form submit
+document.querySelector('form').addEventListener('submit', function(e) {
+    const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
+    if (proto !== 'xray') return;
+
+    // Convert comma-separated SNI string to JSON array via hidden input trick:
+    // We set the value back as comma-separated; server will split it.
+    // (The panel form handler needs to handle this - done in nodes panel route)
+});
+
+// Init UI state on page load
+(function() {
+    const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
+    if (proto === 'xray') {
+        updateXrayTransportUI();
+        updateXraySecurityUI();
+    }
+})();
 </script>

@@ -239,9 +239,193 @@ WantedBy=multi-user.target
 `;
 }
 
+// ==================== XRAY ====================
+
+/**
+ * Build Xray streamSettings object based on node transport/security config
+ * @param {Object} node - Node with xray sub-object
+ * @returns {Object} streamSettings
+ */
+function buildXrayStreamSettings(node) {
+    const xray = node.xray || {};
+    const transport = xray.transport || 'tcp';
+    const security = xray.security || 'reality';
+
+    const streamSettings = { network: transport };
+
+    // Security layer
+    if (security === 'reality') {
+        streamSettings.security = 'reality';
+        streamSettings.realitySettings = {
+            dest: xray.realityDest || 'www.google.com:443',
+            serverNames: xray.realitySni && xray.realitySni.length > 0
+                ? xray.realitySni
+                : ['www.google.com'],
+            privateKey: xray.realityPrivateKey || '',
+            shortIds: xray.realityShortIds && xray.realityShortIds.length > 0
+                ? xray.realityShortIds
+                : [''],
+            spiderX: xray.realitySpiderX || '/',
+        };
+    } else if (security === 'tls') {
+        streamSettings.security = 'tls';
+        streamSettings.tlsSettings = {
+            serverName: node.domain || node.sni || '',
+            certificates: [{
+                certificateFile: node.paths?.cert || '/etc/xray/cert.pem',
+                keyFile: node.paths?.key || '/etc/xray/key.pem',
+            }],
+        };
+    } else {
+        streamSettings.security = 'none';
+    }
+
+    // Transport-specific settings
+    if (transport === 'ws') {
+        streamSettings.wsSettings = {
+            path: xray.wsPath || '/',
+            headers: xray.wsHost ? { Host: xray.wsHost } : {},
+        };
+    } else if (transport === 'grpc') {
+        streamSettings.grpcSettings = {
+            serviceName: xray.grpcServiceName || 'grpc',
+        };
+    }
+
+    return streamSettings;
+}
+
+/**
+ * Generate Xray JSON config for a node with all its users
+ * @param {Object} node - Node document (with xray sub-object)
+ * @param {Array} users - Array of user documents (with xrayUuid)
+ * @returns {string} JSON string
+ */
+function generateXrayConfig(node, users) {
+    const xray = node.xray || {};
+    const apiPort = xray.apiPort || 61000;
+    const inboundTag = xray.inboundTag || 'vless-in';
+    const transport = xray.transport || 'tcp';
+    const security = xray.security || 'reality';
+
+    // Build clients list from users
+    const clients = (users || []).map(u => {
+        const client = {
+            id: u.xrayUuid,
+            email: `${u.userId}.${u.username || 'user'}`,
+            level: 0,
+        };
+        // flow only makes sense for tcp+reality or tcp+tls
+        if ((security === 'reality' || security === 'tls') && transport === 'tcp') {
+            client.flow = xray.flow || 'xtls-rprx-vision';
+        }
+        return client;
+    });
+
+    const config = {
+        log: {
+            loglevel: 'warning',
+        },
+        api: {
+            services: ['HandlerService', 'StatsService'],
+            tag: 'API',
+        },
+        stats: {},
+        policy: {
+            levels: {
+                '0': {
+                    statsUserUplink: true,
+                    statsUserDownlink: true,
+                },
+            },
+            system: {
+                statsInboundUplink: true,
+                statsInboundDownlink: true,
+            },
+        },
+        inbounds: [
+            // gRPC API inbound (local only, for user management)
+            {
+                listen: '127.0.0.1',
+                port: apiPort,
+                protocol: 'dokodemo-door',
+                settings: { address: '127.0.0.1' },
+                tag: 'API_INBOUND',
+            },
+            // VLESS inbound
+            {
+                listen: '0.0.0.0',
+                port: node.port || 443,
+                protocol: 'vless',
+                tag: inboundTag,
+                settings: {
+                    clients,
+                    decryption: 'none',
+                },
+                streamSettings: buildXrayStreamSettings(node),
+                sniffing: {
+                    enabled: true,
+                    destOverride: ['http', 'tls', 'quic'],
+                    routeOnly: true,
+                },
+            },
+        ],
+        outbounds: [
+            { protocol: 'freedom', tag: 'direct' },
+            { protocol: 'blackhole', tag: 'block' },
+        ],
+        routing: {
+            domainStrategy: 'IPIfNonMatch',
+            rules: [
+                // Route API traffic to API service
+                {
+                    inboundTag: ['API_INBOUND'],
+                    outboundTag: 'API',
+                    type: 'field',
+                },
+                // Block private IPs
+                {
+                    type: 'field',
+                    ip: ['geoip:private'],
+                    outboundTag: 'block',
+                },
+            ],
+        },
+    };
+
+    return JSON.stringify(config, null, 2);
+}
+
+/**
+ * Generate systemd service file for Xray
+ */
+function generateXraySystemdService() {
+    return `[Unit]
+Description=Xray Service
+After=network.target nss-lookup.target
+
+[Service]
+User=nobody
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+Type=simple
+ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
 module.exports = {
     generateNodeConfig,
     generateNodeConfigACME,
     generateSystemdService,
     applyOutboundsAndAcl,
+    generateXrayConfig,
+    buildXrayStreamSettings,
+    generateXraySystemdService,
 };

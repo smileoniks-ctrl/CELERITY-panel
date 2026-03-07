@@ -23,6 +23,8 @@ const { countRequest } = require('./src/middleware/rpsCounter');
 const syncService = require('./src/services/syncService');
 const cacheService = require('./src/services/cacheService');
 const statsService = require('./src/services/statsService');
+const HyUser = require('./src/models/hyUserModel');
+const HyNode = require('./src/models/hyNodeModel');
 const backupService = require('./src/services/backupService');
 
 const usersRoutes = require('./src/routes/users');
@@ -222,9 +224,6 @@ app.get('/api/groups', requireAuth, requireScope('stats:read'), async (req, res)
 
 app.get('/api/stats', requireAuth, requireScope('stats:read'), async (req, res) => {
     try {
-        const HyUser = require('./src/models/hyUserModel');
-        const HyNode = require('./src/models/hyNodeModel');
-        
         const [usersTotal, usersEnabled, nodesTotal, nodesOnline] = await Promise.all([
             HyUser.countDocuments(),
             HyUser.countDocuments({ enabled: true }),
@@ -361,10 +360,26 @@ async function startServer() {
         logger.info('[MongoDB] Connected');
         
         await cacheService.connect();
-        
+
         initSessionMiddleware();
         logger.info('[Redis] Session store initialized');
-        
+
+        // Migration: ensure all users have xrayUuid (for Xray VLESS support)
+        const usersWithoutUuid = await HyUser.find({
+            $or: [{ xrayUuid: { $exists: false } }, { xrayUuid: null }, { xrayUuid: '' }]
+        }).select('_id');
+        if (usersWithoutUuid.length > 0) {
+            const crypto = require('crypto');
+            const bulkOps = usersWithoutUuid.map(u => ({
+                updateOne: {
+                    filter: { _id: u._id },
+                    update: { $set: { xrayUuid: crypto.randomUUID() } }
+                }
+            }));
+            await HyUser.bulkWrite(bulkOps, { ordered: false });
+            logger.info(`[Migration] Generated xrayUuid for ${usersWithoutUuid.length} existing users`);
+        }
+
         await reloadSettings();
         
         const PORT = process.env.PORT || 3000;
@@ -450,7 +465,6 @@ function setupWebSocketServer(server) {
     const wssTerminal = new WebSocketServer({ noServer: true });
     const wssLogs = new WebSocketServer({ noServer: true });
     const sshTerminal = require('./src/services/sshTerminal');
-    const HyNode = require('./src/models/hyNodeModel');
     const crypto = require('crypto');
     const cookie = require('cookie');
     

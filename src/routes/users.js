@@ -1,5 +1,5 @@
 /**
- * API для управления пользователями Hysteria
+ * API для управления пользователями Hysteria + Xray
  */
 
 const express = require('express');
@@ -22,10 +22,33 @@ async function invalidateUserCache(userId, subscriptionToken) {
     if (subscriptionToken) {
         await cache.invalidateSubscription(subscriptionToken);
     }
-    // Очищаем устройства пользователя
     await cache.clearDeviceIPs(userId);
-    // Инвалидируем счётчики дашборда
     await cache.invalidateDashboardCounts();
+}
+
+/**
+ * Lazy-load syncService to avoid circular dependency
+ */
+function getSyncService() {
+    return require('../services/syncService');
+}
+
+/**
+ * Add user to all Xray nodes they belong to (fire-and-forget, non-blocking)
+ */
+function xrayAddUser(user) {
+    getSyncService().addUserToAllXrayNodes(user).catch(err => {
+        logger.error(`[Users API] Xray addUser error for ${user.userId}: ${err.message}`);
+    });
+}
+
+/**
+ * Remove user from all Xray nodes (fire-and-forget, non-blocking)
+ */
+function xrayRemoveUser(user) {
+    getSyncService().removeUserFromAllXrayNodes(user).catch(err => {
+        logger.error(`[Users API] Xray removeUser error for ${user.userId}: ${err.message}`);
+    });
 }
 
 /**
@@ -177,11 +200,13 @@ router.post('/', requireScope('users:write'), async (req, res) => {
         });
         
         await user.save();
-        
-        logger.info(`[Users API] Created user ${userId}, groups: ${userGroups.length}`);
 
+        logger.info(`[Users API] Created user ${userId}, groups: ${userGroups.length}`);
         webhook.emit(webhook.EVENTS.USER_CREATED, { userId, username: username || '', groups: userGroups });
-        
+
+        // Add to Xray nodes if user is enabled
+        if (user.enabled) xrayAddUser(user.toObject());
+
         res.status(201).json(user);
     } catch (error) {
         logger.error(`[Users API] Create user error: ${error.message}`);
@@ -259,12 +284,14 @@ router.delete('/:userId', requireScope('users:write'), async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
-        
+
+        // Remove from Xray nodes
+        xrayRemoveUser(user.toObject());
+
         // Инвалидируем кэш
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Deleted user ${req.params.userId}`);
-
         webhook.emit(webhook.EVENTS.USER_DELETED, { userId: req.params.userId });
         
         res.json({ success: true, message: 'Пользователь удалён' });
@@ -288,7 +315,10 @@ router.post('/:userId/enable', requireScope('users:write'), async (req, res) => 
         if (!user) {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
-        
+
+        // Add to Xray nodes (user just got enabled)
+        xrayAddUser(user.toObject());
+
         // Инвалидируем кэш
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
@@ -314,7 +344,10 @@ router.post('/:userId/disable', requireScope('users:write'), async (req, res) =>
         if (!user) {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
-        
+
+        // Remove from Xray nodes (user is disabled)
+        xrayRemoveUser(user.toObject());
+
         // Инвалидируем кэш
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         

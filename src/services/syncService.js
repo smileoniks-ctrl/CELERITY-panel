@@ -1,12 +1,14 @@
 /**
- * Hysteria nodes sync service
- * 
- * With HTTP auth, user sync is NOT needed - auth happens in realtime via HTTP.
- * 
+ * Hysteria + Xray nodes sync service
+ *
+ * Hysteria: HTTP auth callback — no user sync needed, auth happens in realtime.
+ * Xray: users embedded in config + managed via SSH + xray api gRPC commands.
+ *
  * This service handles:
- * - Node config updates
+ * - Node config updates (Hysteria YAML / Xray JSON)
  * - Traffic stats collection
  * - Node health checks
+ * - Xray user add/remove via gRPC API over SSH
  */
 
 const HyUser = require('../models/hyUserModel');
@@ -37,10 +39,332 @@ class SyncService {
         return `${config.BASE_URL}/api/auth`;
     }
 
+    // ==================== XRAY METHODS ====================
+
     /**
-     * Update config on a specific node
+     * Get all enabled users for a given node (by groups or explicit node list)
+     */
+    async _getUsersForNode(node) {
+        const nodeId = node._id.toString();
+        // Users with explicit node assignment
+        const byNodes = await HyUser.find({ nodes: node._id, enabled: true }).lean();
+        // Users linked via groups
+        const nodeGroupIds = (node.groups || []).map(g => g._id?.toString() || g.toString());
+        let byGroups = [];
+        if (nodeGroupIds.length > 0) {
+            byGroups = await HyUser.find({ groups: { $in: node.groups }, enabled: true, nodes: { $size: 0 } }).lean();
+        } else {
+            // Node has no groups — all users without group assignment
+            byGroups = await HyUser.find({ enabled: true, nodes: { $size: 0 }, groups: { $size: 0 } }).lean();
+        }
+        // Merge and deduplicate by userId
+        const seen = new Set();
+        return [...byNodes, ...byGroups].filter(u => {
+            if (seen.has(u.userId)) return false;
+            seen.add(u.userId);
+            return true;
+        });
+    }
+
+    /**
+     * Build xray api adu command for adding a user to an Xray inbound
+     */
+    _buildAddUserCmd(node, user) {
+        const xray = node.xray || {};
+        const apiPort = xray.apiPort || 61000;
+        const inboundTag = xray.inboundTag || 'vless-in';
+        const transport = xray.transport || 'tcp';
+        const security = xray.security || 'reality';
+        const email = `${user.userId}.${user.username || 'user'}`;
+        const uuid = user.xrayUuid;
+        let cmd = `xray api adu --server=127.0.0.1:${apiPort} -inbound-tag ${inboundTag} -id ${uuid} -email "${email}" -level 0`;
+        if ((security === 'reality' || security === 'tls') && transport === 'tcp') {
+            cmd += ` -flow "${xray.flow || 'xtls-rprx-vision'}"`;
+        }
+        return cmd;
+    }
+
+    /**
+     * Build xray api rmu command for removing a user from an Xray inbound
+     */
+    _buildRemoveUserCmd(node, user) {
+        const xray = node.xray || {};
+        const apiPort = xray.apiPort || 61000;
+        const inboundTag = xray.inboundTag || 'vless-in';
+        const email = `${user.userId}.${user.username || 'user'}`;
+        return `xray api rmu --server=127.0.0.1:${apiPort} -inbound-tag ${inboundTag} -email "${email}"`;
+    }
+
+    /**
+     * Add a single user to a running Xray node via gRPC API (SSH exec)
+     * No restart needed.
+     */
+    async addXrayUser(node, user) {
+        if (!user.xrayUuid) {
+            logger.warn(`[Xray] User ${user.userId} has no xrayUuid, skipping`);
+            return false;
+        }
+        const ssh = new NodeSSH(node);
+        try {
+            await ssh.connect();
+            const cmd = this._buildAddUserCmd(node, user);
+            await ssh.exec(cmd);
+            logger.info(`[Xray] Added user ${user.userId} to ${node.name}`);
+            return true;
+        } catch (error) {
+            logger.error(`[Xray] addXrayUser ${node.name}/${user.userId}: ${error.message}`);
+            return false;
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    /**
+     * Remove a single user from a running Xray node via gRPC API (SSH exec)
+     * No restart needed.
+     */
+    async removeXrayUser(node, user) {
+        const ssh = new NodeSSH(node);
+        try {
+            await ssh.connect();
+            const cmd = this._buildRemoveUserCmd(node, user);
+            await ssh.exec(cmd);
+            logger.info(`[Xray] Removed user ${user.userId} from ${node.name}`);
+            return true;
+        } catch (error) {
+            logger.error(`[Xray] removeXrayUser ${node.name}/${user.userId}: ${error.message}`);
+            return false;
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    /**
+     * Add user to all active Xray nodes they belong to (fire-and-forget safe)
+     */
+    async addUserToAllXrayNodes(user) {
+        const xrayNodes = await HyNode.find({ type: 'xray', active: true });
+        for (const node of xrayNodes) {
+            const nodeUsers = await this._getUsersForNode(node);
+            const belongs = nodeUsers.some(u => u.userId === user.userId);
+            if (belongs) {
+                this.addXrayUser(node, user).catch(() => {});
+            }
+        }
+    }
+
+    /**
+     * Remove user from all active Xray nodes (fire-and-forget safe)
+     */
+    async removeUserFromAllXrayNodes(user) {
+        const xrayNodes = await HyNode.find({ type: 'xray', active: true });
+        for (const node of xrayNodes) {
+            this.removeXrayUser(node, user).catch(() => {});
+        }
+    }
+
+    /**
+     * Full config update for an Xray node — generates JSON with all users, uploads, restarts
+     */
+    async updateXrayNodeConfig(node) {
+        logger.info(`[Xray Sync] Updating config for node ${node.name} (${node.ip})`);
+
+        await HyNode.updateOne({ _id: node._id }, { $set: { status: 'syncing' } });
+
+        const ssh = new NodeSSH(node);
+        try {
+            await ssh.connect();
+
+            const users = await this._getUsersForNode(node);
+            const configContent = configGenerator.generateXrayConfig(node, users);
+
+            // Upload config.json
+            await ssh.uploadContent(configContent, node.paths?.config || '/etc/xray/config.json');
+
+            // Restart xray service
+            await ssh.exec('systemctl restart xray');
+            const statusResult = await ssh.exec('systemctl is-active xray 2>/dev/null || echo inactive').catch(() => ({ stdout: 'inactive' }));
+            const isRunning = (statusResult.stdout || '').trim() === 'active';
+
+            await HyNode.updateOne(
+                { _id: node._id },
+                {
+                    $set: {
+                        status: isRunning ? 'online' : 'error',
+                        lastSync: new Date(),
+                        lastError: isRunning ? '' : 'Xray service not running after sync',
+                    },
+                }
+            );
+
+            logger.info(`[Xray Sync] Node ${node.name}: config updated, ${users.length} users`);
+            return true;
+        } catch (error) {
+            logger.error(`[Xray Sync] Node ${node.name} error: ${error.message}`);
+            await HyNode.updateOne({ _id: node._id }, { $set: { status: 'error', lastError: error.message } });
+            webhook.emit(webhook.EVENTS.NODE_ERROR, { nodeId: node._id, name: node.name, error: error.message });
+            return false;
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    /**
+     * Collect traffic stats from Xray node via SSH + xray api statsquery
+     * Parses: user>>>userId.username>>>traffic>>>uplink/downlink
+     */
+    async collectXrayTrafficStats(node) {
+        const xray = node.xray || {};
+        const apiPort = xray.apiPort || 61000;
+
+        const ssh = new NodeSSH(node);
+        try {
+            await ssh.connect();
+            const execResult = await ssh.exec(
+                `xray api statsquery --server=127.0.0.1:${apiPort} -pattern "user>>>" -reset 2>/dev/null || true`
+            );
+            const output = execResult.stdout || '';
+
+            // Parse output lines: stat:<  name:"user>>>id.name>>>traffic>>>uplink"  value:12345  >
+            const stats = {};
+            const lineRe = /name:"user>>>([^>]+)>>>traffic>>>(uplink|downlink)"\s+value:(\d+)/g;
+            let match;
+            while ((match = lineRe.exec(output)) !== null) {
+                const email = match[1];   // "userId.username"
+                const direction = match[2]; // uplink | downlink
+                const value = parseInt(match[3], 10) || 0;
+                const userId = email.split('.')[0];
+                if (!stats[userId]) stats[userId] = { tx: 0, rx: 0 };
+                if (direction === 'uplink') stats[userId].tx += value;
+                else stats[userId].rx += value;
+            }
+
+            if (Object.keys(stats).length === 0) return;
+
+            let nodeTx = 0;
+            let nodeRx = 0;
+            const bulkOps = [];
+            const now = new Date();
+
+            for (const [userId, traffic] of Object.entries(stats)) {
+                nodeTx += traffic.tx;
+                nodeRx += traffic.rx;
+                bulkOps.push({
+                    updateOne: {
+                        filter: { userId },
+                        update: {
+                            $inc: { 'traffic.tx': traffic.tx, 'traffic.rx': traffic.rx },
+                            $set: { 'traffic.lastUpdate': now },
+                        },
+                    },
+                });
+            }
+
+            if (bulkOps.length > 0) {
+                const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
+                logger.debug(`[Xray Stats] ${node.name}: updated ${result.modifiedCount}/${bulkOps.length} users`);
+                this._checkUserLimits(Object.keys(stats)).catch(() => {});
+            }
+
+            await HyNode.updateOne(
+                { _id: node._id },
+                {
+                    $inc: { 'traffic.tx': nodeTx, 'traffic.rx': nodeRx },
+                    $set: { 'traffic.lastUpdate': now },
+                }
+            );
+
+            logger.info(`[Xray Stats] ${node.name}: ${Object.keys(stats).length} users, ↑${(nodeTx / 1024 / 1024).toFixed(1)}MB ↓${(nodeRx / 1024 / 1024).toFixed(1)}MB`);
+        } catch (error) {
+            logger.error(`[Xray Stats] ${node.name} error: ${error.message}`);
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    /**
+     * Get online user count from Xray node via SSH + xray api statsquery (no reset)
+     */
+    async getXrayOnlineUsers(node) {
+        const xray = node.xray || {};
+        const apiPort = xray.apiPort || 61000;
+
+        const ssh = new NodeSSH(node);
+        try {
+            await ssh.connect();
+
+            // Check service is running first
+            const activeResult = await ssh.exec('systemctl is-active xray 2>/dev/null || echo inactive').catch(() => ({ stdout: 'inactive' }));
+            const active = (activeResult.stdout || '').trim();
+            if (active !== 'active') {
+                const prevNode = await HyNode.findOneAndUpdate(
+                    { _id: node._id },
+                    { $set: { onlineUsers: 0, status: 'offline' } }
+                );
+                if (prevNode && prevNode.status === 'online') {
+                    webhook.emit(webhook.EVENTS.NODE_OFFLINE, { nodeId: node._id, name: node.name });
+                }
+                return 0;
+            }
+
+            // Count users with non-zero stats in last interval (approximate online)
+            const statsResult = await ssh.exec(
+                `xray api statsquery --server=127.0.0.1:${apiPort} -pattern "user>>>" 2>/dev/null || true`
+            ).catch(() => ({ stdout: '' }));
+            const output = statsResult.stdout || '';
+
+            const activeUsers = new Set();
+            const lineRe = /name:"user>>>([^>]+)>>>traffic>>>(uplink|downlink)"\s+value:(\d+)/g;
+            let match;
+            while ((match = lineRe.exec(output)) !== null) {
+                if (parseInt(match[3], 10) > 0) {
+                    activeUsers.add(match[1].split('.')[0]);
+                }
+            }
+            const online = activeUsers.size;
+
+            const prevNode = await HyNode.findOneAndUpdate(
+                { _id: node._id },
+                { $set: { onlineUsers: online, status: 'online' } }
+            );
+
+            if (prevNode && prevNode.status !== 'online') {
+                webhook.emit(webhook.EVENTS.NODE_ONLINE, { nodeId: node._id, name: node.name });
+            }
+
+            if (online > 0) logger.info(`[Xray Stats] ${node.name}: ${online} online`);
+            return online;
+        } catch (error) {
+            logger.warn(`[Xray Stats] ${node.name}: unavailable - ${error.message}`);
+            const prevNode = await HyNode.findOneAndUpdate(
+                { _id: node._id },
+                { $set: { lastError: `Stats: ${error.message}` } }
+            );
+            if (prevNode && prevNode.status === 'online') {
+                webhook.emit(webhook.EVENTS.NODE_OFFLINE, { nodeId: node._id, name: node.name, lastError: error.message });
+            }
+            return 0;
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    // ==================== HYSTERIA / COMMON METHODS ====================
+
+    /**
+     * Update config on a specific node (dispatches by type)
      */
     async updateNodeConfig(node) {
+        if (node.type === 'xray') {
+            return this.updateXrayNodeConfig(node);
+        }
+        return this._updateHysteriaNodeConfig(node);
+    }
+
+    /**
+     * Update Hysteria config on a specific node
+     */
+    async _updateHysteriaNodeConfig(node) {
         logger.info(`[Sync] Updating config for node ${node.name} (${node.ip})`);
         
         await HyNode.updateOne(
@@ -149,10 +473,20 @@ class SyncService {
     }
 
     /**
-     * Collect traffic stats from node and update users
-     * Uses bulkWrite for optimization (99% fewer MongoDB queries)
+     * Collect traffic stats from node and update users (dispatches by type)
      */
     async collectTrafficStats(node) {
+        if (node.type === 'xray') {
+            return this.collectXrayTrafficStats(node);
+        }
+        return this._collectHysteriaTrafficStats(node);
+    }
+
+    /**
+     * Collect traffic stats from Hysteria node via HTTP API
+     * Uses bulkWrite for optimization (99% fewer MongoDB queries)
+     */
+    async _collectHysteriaTrafficStats(node) {
         try {
             if (!node.statsPort || !node.statsSecret) {
                 return;
@@ -221,9 +555,19 @@ class SyncService {
     }
 
     /**
-     * Get online users from node
+     * Get online users from node (dispatches by type)
      */
     async getOnlineUsers(node) {
+        if (node.type === 'xray') {
+            return this.getXrayOnlineUsers(node);
+        }
+        return this._getHysteriaOnlineUsers(node);
+    }
+
+    /**
+     * Get online users from Hysteria node via HTTP Stats API
+     */
+    async _getHysteriaOnlineUsers(node) {
         try {
             // If Stats API not configured - skip, don't change status
             if (!node.statsPort || !node.statsSecret) {

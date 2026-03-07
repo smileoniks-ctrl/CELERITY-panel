@@ -1,5 +1,5 @@
 /**
- * Hysteria node model
+ * Hysteria + Xray node model
  */
 
 const mongoose = require('mongoose');
@@ -19,17 +19,53 @@ const outboundSchema = new mongoose.Schema({
     password: { type: String, default: '' },
 }, { _id: false });
 
+const xrayConfigSchema = new mongoose.Schema({
+    // Transport: tcp (Reality/TLS), ws (WebSocket), grpc
+    transport: { type: String, enum: ['tcp', 'ws', 'grpc'], default: 'tcp' },
+    // Security: reality (no cert needed), tls (cert files), none
+    security: { type: String, enum: ['reality', 'tls', 'none'], default: 'reality' },
+    // XTLS flow — only for tcp+reality/tls
+    flow: { type: String, default: 'xtls-rprx-vision' },
+
+    // Reality-specific
+    realityDest: { type: String, default: 'www.google.com:443' },
+    realitySni: { type: [String], default: ['www.google.com'] },
+    realityPrivateKey: { type: String, default: '' },
+    realityPublicKey: { type: String, default: '' },
+    realityShortIds: { type: [String], default: [''] },
+    realitySpiderX: { type: String, default: '/' },
+
+    // WebSocket-specific
+    wsPath: { type: String, default: '/' },
+    wsHost: { type: String, default: '' },
+
+    // gRPC-specific
+    grpcServiceName: { type: String, default: 'grpc' },
+
+    // gRPC API port for user management (local, not exposed)
+    apiPort: { type: Number, default: 61000 },
+
+    // Inbound tag used in config and API calls
+    inboundTag: { type: String, default: 'vless-in' },
+}, { _id: false });
+
 const hyNodeSchema = new mongoose.Schema({
+    // 'hysteria' (default) or 'xray'
+    type: { type: String, enum: ['hysteria', 'xray'], default: 'hysteria' },
+
     name: { type: String, required: true },
     flag: { type: String, default: '' },
     ip: { type: String, required: true, unique: true },
     domain: { type: String, default: '' },
-    sni: { type: String, default: '' }, // Custom SNI for client (if different from domain)
+    sni: { type: String, default: '' },
     port: { type: Number, default: 443 },
     portRange: { type: String, default: '20000-50000' },
     portConfigs: { type: [portConfigSchema], default: [] },
     statsPort: { type: Number, default: 9999 },
     statsSecret: { type: String, default: '' },
+
+    // Xray-specific configuration (only used when type === 'xray')
+    xray: { type: xrayConfigSchema, default: () => ({}) },
     
     groups: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -70,7 +106,7 @@ const hyNodeSchema = new mongoose.Schema({
     customConfig: { type: String, default: '' },
     useCustomConfig: { type: Boolean, default: false },
     useTlsFiles: { type: Boolean, default: false },
-    
+
 }, { timestamps: true });
 
 hyNodeSchema.index({ active: 1 });

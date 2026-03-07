@@ -48,6 +48,46 @@ const statsService = require('../services/statsService');
 // Кэш скомпилированных шаблонов (для production)
 const templateCache = new Map();
 
+/**
+ * Parse Xray-related form fields from req.body into an xray sub-document object.
+ * Handles comma-separated arrays (SNI, shortIds).
+ */
+function parseXrayFormFields(body) {
+    const xray = {};
+
+    if (body['xray.transport']) xray.transport = body['xray.transport'];
+    if (body['xray.security']) xray.security = body['xray.security'];
+    if (body['xray.flow'] !== undefined) xray.flow = body['xray.flow'];
+
+    // Reality
+    if (body['xray.realityDest']) xray.realityDest = body['xray.realityDest'];
+    if (body['xray.realityPrivateKey'] !== undefined) xray.realityPrivateKey = body['xray.realityPrivateKey'];
+    if (body['xray.realityPublicKey'] !== undefined) xray.realityPublicKey = body['xray.realityPublicKey'];
+    if (body['xray.realitySpiderX'] !== undefined) xray.realitySpiderX = body['xray.realitySpiderX'];
+
+    if (body['xray.realitySni']) {
+        xray.realitySni = body['xray.realitySni']
+            .split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (body['xray.realityShortIds'] !== undefined) {
+        xray.realityShortIds = body['xray.realityShortIds']
+            .split(',').map(s => s.trim());
+        if (xray.realityShortIds.length === 0) xray.realityShortIds = [''];
+    }
+
+    // WebSocket
+    if (body['xray.wsPath'] !== undefined) xray.wsPath = body['xray.wsPath'];
+    if (body['xray.wsHost'] !== undefined) xray.wsHost = body['xray.wsHost'];
+
+    // gRPC
+    if (body['xray.grpcServiceName']) xray.grpcServiceName = body['xray.grpcServiceName'];
+
+    // API port
+    if (body['xray.apiPort']) xray.apiPort = parseInt(body['xray.apiPort']) || 61000;
+
+    return xray;
+}
+
 // Rate limiter для защиты от brute-force
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 минут
@@ -387,9 +427,12 @@ router.post('/nodes', requireAuth, async (req, res) => {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
         
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+
         const nodeData = {
             name: req.body.name,
             ip: req.body.ip,
+            type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
             flag: req.body.flag || '',
@@ -409,7 +452,11 @@ router.post('/nodes', requireAuth, async (req, res) => {
                 password: encryptedPassword,
             },
         };
-        
+
+        if (nodeType === 'xray') {
+            nodeData.xray = parseXrayFormFields(req.body);
+        }
+
         const newNode = await HyNode.create(nodeData);
         res.redirect(`/panel/nodes/${newNode._id}`);
     } catch (error) {
@@ -449,9 +496,12 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
         
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+
         const updates = {
             name: req.body.name,
             ip: req.body.ip,
+            type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
             port: parseInt(req.body.port) || 443,
@@ -468,6 +518,10 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             'ssh.port': parseInt(req.body['ssh.port']) || 22,
             'ssh.username': req.body['ssh.username'] || 'root',
         };
+
+        if (nodeType === 'xray') {
+            updates.xray = parseXrayFormFields(req.body);
+        }
         
         // Обновляем пароль только если указан (шифруем)
         if (req.body['ssh.password']) {
@@ -494,18 +548,22 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'SSH данные не настроены' });
         }
         
-        // Запускаем настройку
-        const result = await nodeSetup.setupNode(node, {
-            installHysteria: true,
-            setupPortHopping: true,
-            restartService: true,
-        });
+        // Запускаем настройку в зависимости от типа ноды
+        let result;
+        if (node.type === 'xray') {
+            result = await nodeSetup.setupXrayNode(node, { restartService: true });
+        } else {
+            result = await nodeSetup.setupNode(node, {
+                installHysteria: true,
+                setupPortHopping: true,
+                restartService: true,
+            });
+        }
         
         if (result.success) {
-            // Обновляем статус и сохраняем useTlsFiles
-            await HyNode.findByIdAndUpdate(req.params.id, { 
-                $set: { status: 'online', lastSync: new Date(), lastError: '', useTlsFiles: result.useTlsFiles } 
-            });
+            const updateFields = { status: 'online', lastSync: new Date(), lastError: '' };
+            if (node.type !== 'xray') updateFields.useTlsFiles = result.useTlsFiles;
+            await HyNode.findByIdAndUpdate(req.params.id, { $set: updateFields });
             res.json({ success: true, message: 'Нода успешно настроена', logs: result.logs });
         } else {
             await HyNode.findByIdAndUpdate(req.params.id, { 

@@ -1,5 +1,5 @@
 /**
- * Hysteria user model
+ * Hysteria + Xray user model
  */
 
 const mongoose = require('mongoose');
@@ -28,7 +28,14 @@ const hyUserSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    
+
+    // UUID used for Xray VLESS authentication (auto-generated on first save)
+    xrayUuid: {
+        type: String,
+        default: () => crypto.randomUUID(),
+        index: true,
+    },
+
     enabled: {
         type: Boolean,
         default: false,
@@ -86,6 +93,10 @@ hyUserSchema.pre('save', function(next) {
             .digest('hex')
             .substring(0, 16);
         this.subscriptionToken = hash;
+    }
+    // Ensure xrayUuid exists for existing users (migration on save)
+    if (!this.xrayUuid) {
+        this.xrayUuid = crypto.randomUUID();
     }
     next();
 });

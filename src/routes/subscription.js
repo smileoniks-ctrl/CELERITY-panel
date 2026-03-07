@@ -46,7 +46,7 @@ async function getUserByToken(token) {
             { userId: token }
         ]
     })
-        .populate('nodes', 'active name status onlineUsers maxOnlineUsers rankingCoefficient domain sni ip port portRange portConfigs flag')
+        .populate('nodes', 'active name type status onlineUsers maxOnlineUsers rankingCoefficient domain sni ip port portRange portConfigs flag xray')
         .populate('groups', '_id name subscriptionTitle');
     
     return user;
@@ -79,8 +79,11 @@ function encodeTitle(text) {
 async function getActiveNodesWithCache() {
     const cached = await cache.getActiveNodes();
     if (cached) return cached;
-    
-    const nodes = await HyNode.find({ active: true }).lean();
+
+    // Include type and xray fields needed for VLESS URI generation
+    const nodes = await HyNode.find({ active: true })
+        .select('name type flag ip domain sni port portRange portConfigs active status onlineUsers maxOnlineUsers rankingCoefficient groups xray')
+        .lean();
     await cache.setActiveNodes(nodes);
     return nodes;
 }
@@ -217,16 +220,124 @@ function generateURI(user, node, config) {
     return uri;
 }
 
+/**
+ * Generate VLESS URI for an Xray node
+ * vless://{uuid}@{host}:{port}?type={transport}&security={security}&...#{name}
+ */
+function generateVlessURI(user, node) {
+    const uuid = user.xrayUuid;
+    if (!uuid) return null;
+
+    const xray = node.xray || {};
+    const host = node.domain || node.ip;
+    const port = node.port || 443;
+    const transport = xray.transport || 'tcp';
+    const security = xray.security || 'reality';
+
+    const params = new URLSearchParams();
+    params.set('type', transport);
+    params.set('security', security);
+
+    if (security === 'reality') {
+        if (xray.flow && transport === 'tcp') params.set('flow', xray.flow);
+        if (xray.realityPublicKey) params.set('pbk', xray.realityPublicKey);
+        const sni = xray.realitySni && xray.realitySni[0] ? xray.realitySni[0] : '';
+        if (sni) params.set('sni', sni);
+        const sid = xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : '';
+        params.set('sid', sid);
+        if (xray.realitySpiderX) params.set('spx', xray.realitySpiderX);
+        params.set('fp', 'chrome');
+    } else if (security === 'tls') {
+        if (xray.flow && transport === 'tcp') params.set('flow', xray.flow);
+        const sni = node.domain || node.sni || '';
+        if (sni) params.set('sni', sni);
+        params.set('fp', 'chrome');
+    }
+
+    if (transport === 'ws') {
+        params.set('path', xray.wsPath || '/');
+        if (xray.wsHost) params.set('host', xray.wsHost);
+    } else if (transport === 'grpc') {
+        params.set('serviceName', xray.grpcServiceName || 'grpc');
+        params.set('mode', 'gun');
+    }
+
+    const transportLabel = {
+        tcp: security === 'reality' ? 'Reality' : 'TCP',
+        ws: 'WebSocket',
+        grpc: 'gRPC',
+    }[transport] || transport.toUpperCase();
+
+    const name = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
+    return `vless://${uuid}@${host}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
+}
+
 // ==================== FORMAT GENERATORS ====================
 
 function generateURIList(user, nodes) {
     const uris = [];
     nodes.forEach(node => {
-        getNodeConfigs(node).forEach(cfg => {
-            uris.push(generateURI(user, node, cfg));
-        });
+        if (node.type === 'xray') {
+            const uri = generateVlessURI(user, node);
+            if (uri) uris.push(uri);
+        } else {
+            getNodeConfigs(node).forEach(cfg => {
+                uris.push(generateURI(user, node, cfg));
+            });
+        }
     });
     return uris.join('\n');
+}
+
+function _buildClashVlessProxy(user, node) {
+    const xray = node.xray || {};
+    const host = node.domain || node.ip;
+    const transport = xray.transport || 'tcp';
+    const security = xray.security || 'reality';
+    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC' }[transport] || transport;
+    const name = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
+
+    let proxy = `  - name: "${name}"
+    type: vless
+    server: ${host}
+    port: ${node.port || 443}
+    uuid: "${user.xrayUuid}"
+    udp: true`;
+
+    if (security === 'reality') {
+        const sni = xray.realitySni && xray.realitySni[0] ? xray.realitySni[0] : host;
+        proxy += `
+    network: ${transport}
+    tls: true
+    reality-opts:
+      public-key: "${xray.realityPublicKey || ''}"
+      short-id: "${xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : ''}"
+    servername: ${sni}
+    client-fingerprint: chrome`;
+        if (transport === 'tcp' && xray.flow) proxy += `\n    flow: ${xray.flow}`;
+    } else if (security === 'tls') {
+        proxy += `
+    network: ${transport}
+    tls: true
+    servername: ${node.domain || node.sni || host}
+    client-fingerprint: chrome`;
+        if (transport === 'tcp' && xray.flow) proxy += `\n    flow: ${xray.flow}`;
+    } else {
+        proxy += `\n    network: ${transport}`;
+    }
+
+    if (transport === 'ws') {
+        proxy += `
+    ws-opts:
+      path: "${xray.wsPath || '/'}"`;
+        if (xray.wsHost) proxy += `\n      headers:\n        Host: "${xray.wsHost}"`;
+    } else if (transport === 'grpc') {
+        proxy += `
+    grpc-opts:
+      grpc-service-name: "${xray.grpcServiceName || 'grpc'}"`;
+    }
+
+    return { name, proxy };
 }
 
 function generateClashYAML(user, nodes) {
@@ -235,11 +346,17 @@ function generateClashYAML(user, nodes) {
     const proxyNames = [];
     
     nodes.forEach(node => {
-        getNodeConfigs(node).forEach(cfg => {
-            const name = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
+        if (node.type === 'xray') {
+            if (!user.xrayUuid) return;
+            const { name, proxy } = _buildClashVlessProxy(user, node);
             proxyNames.push(name);
-            
-            let proxy = `  - name: "${name}"
+            proxies.push(proxy);
+        } else {
+            getNodeConfigs(node).forEach(cfg => {
+                const name = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
+                proxyNames.push(name);
+
+                let proxy = `  - name: "${name}"
     type: hysteria2
     server: ${cfg.host}
     port: ${cfg.port}
@@ -248,14 +365,69 @@ function generateClashYAML(user, nodes) {
     skip-cert-verify: ${!cfg.hasCert}
     alpn:
       - h3`;
-            
-            if (cfg.portRange) proxy += `\n    ports: ${cfg.portRange}`;
-            
-            proxies.push(proxy);
-        });
+
+                if (cfg.portRange) proxy += `\n    ports: ${cfg.portRange}`;
+                proxies.push(proxy);
+            });
+        }
     });
     
     return `proxies:\n${proxies.join('\n')}\n\nproxy-groups:\n  - name: "Proxy"\n    type: select\n    proxies:\n${proxyNames.map(n => `      - "${n}"`).join('\n')}\n`;
+}
+
+function _buildSingboxVlessOutbound(user, node) {
+    const xray = node.xray || {};
+    const host = node.domain || node.ip;
+    const transport = xray.transport || 'tcp';
+    const security = xray.security || 'reality';
+    const transportLabel = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC' }[transport] || transport;
+    const tag = `${node.flag || ''} ${node.name} ${transportLabel}`.trim();
+
+    const outbound = {
+        type: 'vless',
+        tag,
+        server: host,
+        server_port: node.port || 443,
+        uuid: user.xrayUuid,
+    };
+
+    if (transport === 'tcp' && (security === 'reality' || security === 'tls')) {
+        outbound.flow = xray.flow || 'xtls-rprx-vision';
+    }
+
+    if (security === 'reality') {
+        outbound.tls = {
+            enabled: true,
+            server_name: xray.realitySni && xray.realitySni[0] ? xray.realitySni[0] : host,
+            utls: { enabled: true, fingerprint: 'chrome' },
+            reality: {
+                enabled: true,
+                public_key: xray.realityPublicKey || '',
+                short_id: xray.realityShortIds && xray.realityShortIds[0] ? xray.realityShortIds[0] : '',
+            },
+        };
+    } else if (security === 'tls') {
+        outbound.tls = {
+            enabled: true,
+            server_name: node.domain || node.sni || host,
+            utls: { enabled: true, fingerprint: 'chrome' },
+        };
+    }
+
+    if (transport === 'ws') {
+        outbound.transport = {
+            type: 'ws',
+            path: xray.wsPath || '/',
+            headers: xray.wsHost ? { Host: xray.wsHost } : {},
+        };
+    } else if (transport === 'grpc') {
+        outbound.transport = {
+            type: 'grpc',
+            service_name: xray.grpcServiceName || 'grpc',
+        };
+    }
+
+    return { tag, outbound };
 }
 
 function generateSingboxJSON(user, nodes) {
@@ -264,33 +436,38 @@ function generateSingboxJSON(user, nodes) {
     const tags = [];
     
     nodes.forEach(node => {
-        getNodeConfigs(node).forEach(cfg => {
-            const tag = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
+        if (node.type === 'xray') {
+            if (!user.xrayUuid) return;
+            const { tag, outbound } = _buildSingboxVlessOutbound(user, node);
             tags.push(tag);
-            
-            const outbound = {
-                type: 'hysteria2',
-                tag,
-                server: cfg.host,
-                password: auth,
-                tls: {
-                    enabled: true,
-                    server_name: cfg.sni || cfg.host,
-                    insecure: !cfg.hasCert,
-                    alpn: ['h3']
-                }
-            };
-            
-            // Port hopping: use server_ports (sing-box 1.11+) instead of server_port
-            // Format: "20000-50000" -> ["20000:50000"]
-            if (cfg.portRange) {
-                outbound.server_ports = [cfg.portRange.replace('-', ':')];
-            } else {
-                outbound.server_port = cfg.port;
-            }
-            
             proxyOutbounds.push(outbound);
-        });
+        } else {
+            getNodeConfigs(node).forEach(cfg => {
+                const tag = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
+                tags.push(tag);
+
+                const outbound = {
+                    type: 'hysteria2',
+                    tag,
+                    server: cfg.host,
+                    password: auth,
+                    tls: {
+                        enabled: true,
+                        server_name: cfg.sni || cfg.host,
+                        insecure: !cfg.hasCert,
+                        alpn: ['h3'],
+                    },
+                };
+
+                if (cfg.portRange) {
+                    outbound.server_ports = [cfg.portRange.replace('-', ':')];
+                } else {
+                    outbound.server_port = cfg.port;
+                }
+
+                proxyOutbounds.push(outbound);
+            });
+        }
     });
     
     const outbounds = [
@@ -347,14 +524,30 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
     // Собираем все конфиги
     const allConfigs = [];
     nodes.forEach(node => {
-        getNodeConfigs(node).forEach(cfg => {
-            allConfigs.push({
-                location: node.name,
-                flag: node.flag || '🌐',
-                name: cfg.name,
-                uri: generateURI(user, node, cfg),
+        if (node.type === 'xray') {
+            const uri = generateVlessURI(user, node);
+            if (uri) {
+                const xray = node.xray || {};
+                const transport = xray.transport || 'tcp';
+                const security = xray.security || 'reality';
+                const label = { tcp: security === 'reality' ? 'Reality' : 'TCP', ws: 'WebSocket', grpc: 'gRPC' }[transport] || transport;
+                allConfigs.push({
+                    location: node.name,
+                    flag: node.flag || '🌐',
+                    name: `VLESS ${label}`,
+                    uri,
+                });
+            }
+        } else {
+            getNodeConfigs(node).forEach(cfg => {
+                allConfigs.push({
+                    location: node.name,
+                    flag: node.flag || '🌐',
+                    name: cfg.name,
+                    uri: generateURI(user, node, cfg),
+                });
             });
-        });
+        }
     });
     
     const trafficUsed = ((user.traffic?.tx || 0) + (user.traffic?.rx || 0)) / (1024 * 1024 * 1024);
