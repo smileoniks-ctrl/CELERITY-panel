@@ -555,12 +555,14 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ success: false, error: 'Нода не найдена', logs: [] });
         }
         
         if (!node.ssh?.password && !node.ssh?.privateKey) {
-            return res.status(400).json({ error: 'SSH данные не настроены' });
+            return res.status(400).json({ success: false, error: 'SSH данные не настроены', logs: [] });
         }
+        
+        logger.info(`[Panel] Starting setup for node ${node.name} (type: ${node.type || 'hysteria'})`);
         
         // Запускаем настройку в зависимости от типа ноды
         let result;
@@ -578,15 +580,16 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
             const updateFields = { status: 'online', lastSync: new Date(), lastError: '' };
             if (node.type !== 'xray') updateFields.useTlsFiles = result.useTlsFiles;
             await HyNode.findByIdAndUpdate(req.params.id, { $set: updateFields });
-            res.json({ success: true, message: 'Нода успешно настроена', logs: result.logs });
+            res.json({ success: true, message: 'Нода успешно настроена', logs: result.logs || [] });
         } else {
             await HyNode.findByIdAndUpdate(req.params.id, { 
                 $set: { status: 'error', lastError: result.error } 
             });
-            res.status(500).json({ success: false, error: result.error, logs: result.logs });
+            res.status(500).json({ success: false, error: result.error, logs: result.logs || [] });
         }
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error(`[Panel] Setup error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message, logs: [`Exception: ${error.message}`] });
     }
 });
 

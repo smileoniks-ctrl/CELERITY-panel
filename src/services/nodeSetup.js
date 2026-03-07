@@ -522,14 +522,35 @@ async function getNodeLogs(node, lines = 50) {
 // ==================== XRAY SETUP ====================
 
 const XRAY_INSTALL_SCRIPT = `#!/bin/bash
-set -e
 
 echo "=== [1/4] Installing Xray-core ==="
+echo "Checking system..."
+echo "OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || uname -a)"
+echo "Arch: $(uname -m)"
+
+# Check if curl is available
+if ! command -v curl &> /dev/null; then
+    echo "curl not found, installing..."
+    apt-get update && apt-get install -y curl || yum install -y curl || apk add curl
+fi
 
 if ! command -v xray &> /dev/null; then
-    echo "Xray not found. Installing..."
-    bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh) @ latest
-    echo "Done: Xray installed"
+    echo "Xray not found. Installing via official script..."
+    curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o /tmp/xray-install.sh
+    chmod +x /tmp/xray-install.sh
+    bash /tmp/xray-install.sh install 2>&1
+    INSTALL_EXIT=$?
+    rm -f /tmp/xray-install.sh
+    if [ $INSTALL_EXIT -ne 0 ]; then
+        echo "ERROR: Xray installation script exited with code $INSTALL_EXIT"
+        exit 1
+    fi
+    # Verify installation
+    if ! command -v xray &> /dev/null; then
+        echo "ERROR: xray command not found after installation"
+        exit 1
+    fi
+    echo "Done: Xray installed ($(xray version | head -1))"
 else
     echo "Done: Xray already installed ($(xray version | head -1))"
 fi
