@@ -9,6 +9,9 @@ on:
 env:
   IMAGE_NAME: clickdevtech/hysteria-panel
 
+permissions:
+  contents: write
+
 jobs:
   build-agent:
     runs-on: ubuntu-latest
