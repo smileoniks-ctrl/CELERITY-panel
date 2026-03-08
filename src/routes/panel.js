@@ -567,7 +567,7 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
         // Запускаем настройку в зависимости от типа ноды
         let result;
         if (node.type === 'xray') {
-            result = await nodeSetup.setupXrayNode(node, { restartService: true });
+            result = await nodeSetup.setupXrayNodeWithAgent(node, { restartService: true });
         } else {
             result = await nodeSetup.setupNode(node, {
                 installHysteria: true,

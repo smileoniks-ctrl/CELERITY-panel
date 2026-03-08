@@ -362,6 +362,52 @@
     </div>
 </div>
 
+<% if (node && node.type === 'xray') { %>
+<div class="card mt-3" id="xrayNodeInfoCard">
+    <div class="card-header">
+        <h2><img src="/img/xray.svg" alt="Xray" style="width:18px;height:18px;vertical-align:middle;margin-right:8px;"><%= t('nodes.nodeInfo') %></h2>
+        <button class="btn btn-sm" onclick="refreshNodeInfo()" id="btnRefreshInfo" title="<%= t('common.refresh') %>">
+            <i class="ti ti-refresh"></i>
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="node-info-grid" id="nodeInfoGrid">
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.xrayVersion') %></span>
+                <span class="node-info-value" id="infoXrayVersion"><%= node.xrayVersion || '—' %></span>
+            </div>
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.agentVersion') %></span>
+                <span class="node-info-value" id="infoAgentVersion"><%= node.agentVersion || '—' %></span>
+            </div>
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.agentStatus') %></span>
+                <span class="node-info-value" id="infoAgentStatus">
+                    <span class="badge badge-<%= node.agentStatus === 'online' ? 'success' : (node.agentStatus === 'offline' ? 'danger' : 'warning') %>">
+                        <%= node.agentStatus || 'unknown' %>
+                    </span>
+                </span>
+            </div>
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.usersInMemory') %></span>
+                <span class="node-info-value" id="infoUsersCount">—</span>
+            </div>
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.agentLastSeen') %></span>
+                <span class="node-info-value" id="infoLastSeen">
+                    <%= node.agentLastSeen ? new Date(node.agentLastSeen).toLocaleString() : '—' %>
+                </span>
+            </div>
+            <div class="node-info-item">
+                <span class="node-info-label"><%= t('nodes.agentPort') %></span>
+                <span class="node-info-value"><%= node.xray?.agentPort || 62080 %></span>
+            </div>
+        </div>
+        <div id="nodeInfoError" class="mt-2" style="display:none;"></div>
+    </div>
+</div>
+<% } %>
+
 <% if (node) { %>
 <div class="card mt-3">
     <div class="card-header">
@@ -577,6 +623,39 @@ async function resetStatus() {
         document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
     }
 }
+
+<% if (node && node.type === 'xray') { %>
+async function refreshNodeInfo() {
+    const btn = document.getElementById('btnRefreshInfo');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'; }
+    const errEl = document.getElementById('nodeInfoError');
+    if (errEl) errEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/nodes/<%= node._id %>/agent-info', { credentials: 'include' });
+        const data = await res.json();
+
+        if (data.xray_version) document.getElementById('infoXrayVersion').textContent = data.xray_version;
+        if (data.agent_version) document.getElementById('infoAgentVersion').textContent = data.agent_version;
+        if (data.users_count !== undefined) document.getElementById('infoUsersCount').textContent = data.users_count;
+
+        const statusEl = document.getElementById('infoAgentStatus');
+        if (statusEl) {
+            const online = res.ok && !data.error;
+            statusEl.innerHTML = `<span class="badge badge-${online ? 'success' : 'danger'}">${online ? 'online' : 'offline'}</span>`;
+        }
+
+        document.getElementById('infoLastSeen').textContent = new Date().toLocaleString();
+    } catch (e) {
+        if (errEl) {
+            errEl.innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + e.message + '</div>';
+            errEl.style.display = 'block';
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i>'; }
+    }
+}
+<% } %>
 </script>
 
 <div class="card mt-3 hysteria-only" id="configPreviewCard" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
@@ -687,6 +766,31 @@ acl:
 }
 .ssh-warning-icon {
     font-size: 20px;
+}
+.node-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+.node-info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.node-info-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.node-info-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 </style>
 

@@ -57,6 +57,11 @@ const xrayConfigSchema = new mongoose.Schema({
 
     // Inbound tag used in config and API calls
     inboundTag: { type: String, default: 'vless-in' },
+
+    // CC Agent settings
+    agentPort: { type: Number, default: 62080 },
+    agentToken: { type: String, default: '' },
+    agentTls: { type: Boolean, default: true },
 }, { _id: false });
 
 const hyNodeSchema = new mongoose.Schema({
@@ -102,6 +107,12 @@ const hyNodeSchema = new mongoose.Schema({
     status: { type: String, enum: ['online', 'offline', 'error', 'syncing'], default: 'offline' },
     lastError: { type: String, default: '' },
     lastSync: { type: Date, default: null },
+
+    // Agent & Xray version info (populated by health checks)
+    xrayVersion: { type: String, default: '' },
+    agentVersion: { type: String, default: '' },
+    agentStatus: { type: String, enum: ['online', 'offline', 'unknown'], default: 'unknown' },
+    agentLastSeen: { type: Date, default: null },
     onlineUsers: { type: Number, default: 0 },
     maxOnlineUsers: { type: Number, default: 0 },
     
