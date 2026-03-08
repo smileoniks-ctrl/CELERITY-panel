@@ -846,7 +846,7 @@ fi
 
 # Try panel (dev), then GitHub releases (prod)
 PANEL_URL="${panelDownloadBase}/$BIN_NAME"
-GITHUB_URL="https://github.com/ClickDevTech/hysteria-panel/releases/latest/download/$BIN_NAME"
+GITHUB_URL="https://github.com/ClickDevTech/CELERITY-panel/releases/latest/download/$BIN_NAME"
 
 if curl -sSL --max-time 30 "$PANEL_URL" -o /usr/local/bin/cc-agent 2>&1 && [ -s /usr/local/bin/cc-agent ]; then
     chmod +x /usr/local/bin/cc-agent
