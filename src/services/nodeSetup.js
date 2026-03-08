@@ -519,6 +519,469 @@ async function getNodeLogs(node, lines = 50) {
     }
 }
 
+// ==================== XRAY SETUP ====================
+
+const XRAY_INSTALL_SCRIPT = `#!/bin/bash
+
+echo "=== [1/4] Installing Xray-core ==="
+echo "Checking system..."
+echo "OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || uname -a)"
+echo "Arch: $(uname -m)"
+
+# Check if curl is available
+if ! command -v curl &> /dev/null; then
+    echo "curl not found, installing..."
+    apt-get update && apt-get install -y curl || yum install -y curl || apk add curl
+fi
+
+if ! command -v xray &> /dev/null; then
+    echo "Xray not found. Installing via official script..."
+    curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o /tmp/xray-install.sh
+    chmod +x /tmp/xray-install.sh
+    bash /tmp/xray-install.sh install 2>&1
+    INSTALL_EXIT=$?
+    rm -f /tmp/xray-install.sh
+    if [ $INSTALL_EXIT -ne 0 ]; then
+        echo "ERROR: Xray installation script exited with code $INSTALL_EXIT"
+        exit 1
+    fi
+    # Verify installation
+    if ! command -v xray &> /dev/null; then
+        echo "ERROR: xray command not found after installation"
+        exit 1
+    fi
+    echo "Done: Xray installed ($(xray version | head -1))"
+else
+    echo "Done: Xray already installed ($(xray version | head -1))"
+fi
+
+mkdir -p /usr/local/etc/xray
+echo "Done: Directory /usr/local/etc/xray ready"
+`;
+
+/**
+ * Generate x25519 keys for Xray Reality via SSH
+ * Supports multiple output formats:
+ * - Old: "Private key: xxx\nPublic key: xxx"
+ * - New: "PrivateKey: xxx\nPublicKey: xxx"
+ * @returns {{ privateKey: string, publicKey: string } | null}
+ */
+async function generateX25519Keys(conn) {
+    const result = await execSSH(conn, 'xray x25519');
+    if (!result.success) {
+        throw new Error(`Failed to generate x25519 keys: ${result.output}`);
+    }
+    const output = result.output;
+    
+    // Try different formats (case-insensitive, with/without space)
+    const privMatch = output.match(/Private\s*[Kk]ey:\s*(\S+)/i);
+    const pubMatch = output.match(/Public\s*[Kk]ey:\s*(\S+)/i);
+    
+    if (!privMatch || !pubMatch) {
+        // Fallback: try to extract first two base64-like strings
+        const base64Pattern = /:\s*([A-Za-z0-9_-]{40,})/g;
+        const matches = [...output.matchAll(base64Pattern)];
+        if (matches.length >= 2) {
+            return { privateKey: matches[0][1], publicKey: matches[1][1] };
+        }
+        throw new Error(`Could not parse x25519 output: ${output}`);
+    }
+    return { privateKey: privMatch[1], publicKey: pubMatch[1] };
+}
+
+/**
+ * Setup Xray node via SSH:
+ * 1. Install xray-core
+ * 2. Generate x25519 Reality keys (if security=reality and no keys yet)
+ * 3. Upload config.json
+ * 4. Open firewall ports
+ * 5. Enable and restart xray service
+ *
+ * @param {Object} node - Node document
+ * @param {Object} options - { restartService }
+ * @returns {{ success, logs, realityKeys? }}
+ */
+async function setupXrayNode(node, options = {}) {
+    const { restartService = true } = options;
+
+    const logs = [];
+    const log = (msg) => {
+        const line = `[${new Date().toISOString()}] ${msg}`;
+        logs.push(line);
+        logger.info(`[XraySetup] ${msg}`);
+    };
+
+    log(`Starting Xray setup for ${node.name} (${node.ip})`);
+
+    let conn;
+    let generatedKeys = null;
+
+    try {
+        log('Connecting via SSH...');
+        conn = await connectSSH(node);
+        log('SSH connected');
+
+        // Install Xray
+        log('Installing Xray-core...');
+        const installResult = await execSSH(conn, XRAY_INSTALL_SCRIPT);
+        logs.push(installResult.output);
+        if (!installResult.success) {
+            throw new Error(`Xray installation failed: ${installResult.error}`);
+        }
+        log('Xray-core installed');
+
+        // Generate Reality keys and shortId if needed
+        const xrayCfg = node.xray || {};
+        if (xrayCfg.security === 'reality') {
+            const updates = {};
+            let needsUpdate = false;
+
+            // Generate x25519 keys if not set
+            if (!xrayCfg.realityPrivateKey) {
+                log('Generating x25519 Reality keys...');
+                generatedKeys = await generateX25519Keys(conn);
+                log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
+                updates['xray.realityPrivateKey'] = generatedKeys.privateKey;
+                updates['xray.realityPublicKey'] = generatedKeys.publicKey;
+                node.xray = { ...node.xray, realityPrivateKey: generatedKeys.privateKey, realityPublicKey: generatedKeys.publicKey };
+                needsUpdate = true;
+            }
+
+            // Generate shortId if not set or only contains empty string
+            const currentShortIds = xrayCfg.realityShortIds || [''];
+            const hasRealShortId = currentShortIds.some(id => id && id.length > 0);
+            if (!hasRealShortId) {
+                const shortId = require('crypto').randomBytes(8).toString('hex'); // 16 hex chars
+                log(`Generated shortId: ${shortId}`);
+                updates['xray.realityShortIds'] = ['', shortId]; // empty + random
+                node.xray = { ...node.xray, realityShortIds: ['', shortId] };
+                needsUpdate = true;
+            }
+
+            // Save to DB
+            if (needsUpdate) {
+                const HyNode = require('../models/hyNodeModel');
+                await HyNode.updateOne({ _id: node._id }, { $set: updates });
+                log('Reality settings saved to database');
+            }
+        }
+
+        // Generate and upload config
+        log('Generating Xray config...');
+        const configGenerator = require('./configGenerator');
+        const syncService = require('./syncService');
+        const users = await syncService._getUsersForNode(node);
+        const configContent = configGenerator.generateXrayConfig(node, users);
+        const configPath = '/usr/local/etc/xray/config.json';
+
+        await uploadFile(conn, configContent, configPath);
+        log(`Config uploaded to ${configPath} (${users.length} users)`);
+        logs.push('--- Config preview ---');
+        logs.push(configContent.substring(0, 500) + (configContent.length > 500 ? '\n...' : ''));
+        logs.push('--- End config preview ---');
+
+        // Open firewall ports
+        const mainPort = node.port || 443;
+        const apiPort = (node.xray || {}).apiPort || 61000;
+        log(`Opening firewall ports (${mainPort}, api:${apiPort})...`);
+        const firewallResult = await execSSH(conn, `
+echo "=== Opening firewall ports ==="
+if command -v iptables &> /dev/null; then
+    iptables -I INPUT -p tcp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
+    iptables -I INPUT -p udp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
+    echo "Done: iptables rules added"
+fi
+if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow ${mainPort}/tcp 2>/dev/null || true
+    ufw allow ${mainPort}/udp 2>/dev/null || true
+    echo "Done: UFW rules added"
+fi
+echo "Done: Firewall configured"
+        `);
+        logs.push(firewallResult.output);
+        log('Firewall configured');
+
+        if (restartService) {
+            log('Installing systemd service and starting Xray...');
+            const serviceContent = configGenerator.generateXraySystemdService();
+            await uploadFile(conn, serviceContent, '/etc/systemd/system/xray.service');
+            const restartResult = await execSSH(conn, `
+echo "=== Starting Xray service ==="
+systemctl daemon-reload
+systemctl enable xray
+systemctl restart xray
+sleep 2
+echo "Service status:"
+systemctl status xray --no-pager -l || true
+echo ""
+echo "Journal (last 15 lines):"
+journalctl -u xray -n 15 --no-pager || true
+            `);
+            logs.push(restartResult.output);
+            if (!restartResult.success) {
+                log(`Service restart warning: ${restartResult.error}`);
+            } else {
+                log('Xray service started');
+            }
+        }
+
+        log('Xray setup completed successfully!');
+        return { success: true, logs, realityKeys: generatedKeys };
+
+    } catch (error) {
+        log(`Error: ${error.message}`);
+        return { success: false, error: error.message, logs, realityKeys: generatedKeys };
+
+    } finally {
+        if (conn) conn.end();
+    }
+}
+
+/**
+ * Check Xray service status via SSH
+ */
+async function checkXrayNodeStatus(node) {
+    try {
+        const conn = await connectSSH(node);
+        try {
+            const result = await execSSH(conn, 'systemctl is-active xray');
+            return result.output.trim() === 'active' ? 'online' : 'offline';
+        } finally {
+            conn.end();
+        }
+    } catch (error) {
+        return 'error';
+    }
+}
+
+/**
+ * Get Xray node logs via SSH
+ */
+async function getXrayNodeLogs(node, lines = 50) {
+    try {
+        const conn = await connectSSH(node);
+        try {
+            const result = await execSSH(conn, `journalctl -u xray -n ${lines} --no-pager`);
+            return { success: true, logs: result.output };
+        } finally {
+            conn.end();
+        }
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== CC AGENT SETUP ====================
+
+/**
+ * Generate a secure random token for the CC Agent
+ */
+function generateAgentToken() {
+    return require('crypto').randomBytes(32).toString('hex');
+}
+
+/**
+ * Install and configure cc-agent on an Xray node via SSH.
+ *
+ * Flow:
+ *  1. Download binary from GitHub releases (or fallback URL)
+ *  2. Write /etc/cc-agent/config.json with token + TLS settings
+ *  3. If TLS: generate self-signed cert with openssl
+ *  4. Open port in firewall only for the panel's IP
+ *  5. Install & start cc-agent.service
+ *
+ * @param {Object} conn  - Active ssh2 connection
+ * @param {Object} node  - Node document
+ * @param {string} token - Pre-generated agent token
+ * @param {string} panelIp - Panel's outbound IP (for firewall whitelist)
+ * @param {Function} log - Logging callback
+ * @returns {{ success, agentVersion }}
+ */
+async function installCCAgent(conn, node, token, panelIp, log) {
+    const agentPort = (node.xray || {}).agentPort || 62080;
+    const useTls = (node.xray || {}).agentTls !== false;
+    const apiPort = (node.xray || {}).apiPort || 61000;
+    const inboundTag = (node.xray || {}).inboundTag || 'vless-in';
+
+    const agentConfig = {
+        listen: `0.0.0.0:${agentPort}`,
+        token: token,
+        xray_api: `127.0.0.1:${apiPort}`,
+        inbound_tag: inboundTag,
+        data_dir: '/var/lib/cc-agent',
+        tls: {
+            enabled: useTls,
+            cert: '/etc/cc-agent/cert.pem',
+            key: '/etc/cc-agent/key.pem',
+        },
+    };
+
+    const configJson = JSON.stringify(agentConfig, null, 2);
+
+    // TLS setup: generate self-signed certificate with openssl
+    const tlsSetupScript = useTls ? `
+echo "=== Generating self-signed TLS cert for cc-agent ==="
+openssl req -x509 -nodes -newkey rsa:2048 \\
+    -keyout /etc/cc-agent/key.pem \\
+    -out /etc/cc-agent/cert.pem \\
+    -subj "/CN=cc-agent" -days 36500 2>&1
+chmod 600 /etc/cc-agent/key.pem /etc/cc-agent/cert.pem
+echo "Done: TLS cert generated"
+` : `
+echo "TLS disabled, skipping cert generation"
+`;
+
+    const panelDownloadBase = `${config.BASE_URL}/downloads`;
+    const AGENT_INSTALL = `#!/bin/bash
+# NOTE: set -e is intentionally NOT used here so agent install failure
+# doesn't break the rest of the script (Xray is already set up).
+
+echo "=== [1/5] Downloading CC Agent ==="
+ARCH=$(uname -m)
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    BIN_NAME="cc-agent-linux-arm64"
+else
+    BIN_NAME="cc-agent-linux-amd64"
+fi
+
+# Try panel (dev), then GitHub releases (prod)
+PANEL_URL="${panelDownloadBase}/$BIN_NAME"
+GITHUB_URL="https://github.com/ClickDevTech/CELERITY-panel/releases/latest/download/$BIN_NAME"
+
+if curl -sSL --max-time 30 "$PANEL_URL" -o /usr/local/bin/cc-agent 2>&1 && [ -s /usr/local/bin/cc-agent ]; then
+    chmod +x /usr/local/bin/cc-agent
+    echo "Done: cc-agent downloaded from panel"
+elif curl -sSL --max-time 60 "$GITHUB_URL" -o /usr/local/bin/cc-agent 2>&1 && [ -s /usr/local/bin/cc-agent ]; then
+    chmod +x /usr/local/bin/cc-agent
+    echo "Done: cc-agent downloaded from GitHub"
+else
+    echo "WARNING: Could not download cc-agent binary."
+    echo "Place the binary at /usr/local/bin/cc-agent and restart cc-agent.service"
+    echo "Continuing with Xray setup (agent will be missing)..."
+    exit 0
+fi
+
+echo "=== [2/5] Creating directories ==="
+mkdir -p /etc/cc-agent /var/lib/cc-agent
+
+echo "=== [3/5] Writing config ==="
+cat > /etc/cc-agent/config.json << 'EOFCONFIG'
+${configJson}
+EOFCONFIG
+echo "Done: config written"
+
+${tlsSetupScript}
+
+echo "=== [4/5] Installing systemd service ==="
+cat > /etc/systemd/system/cc-agent.service << 'EOFSVC'
+[Unit]
+Description=CC Xray Agent
+After=network.target xray.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cc-agent
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOFSVC
+
+echo "=== [5/5] Opening firewall for panel IP ${panelIp} ==="
+if command -v iptables &> /dev/null; then
+    iptables -I INPUT -p tcp -s ${panelIp} --dport ${agentPort} -j ACCEPT 2>/dev/null || true
+    echo "Done: iptables rule added"
+fi
+if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow from ${panelIp} to any port ${agentPort} proto tcp 2>/dev/null || true
+    echo "Done: ufw rule added"
+fi
+
+echo "=== Starting cc-agent ==="
+systemctl daemon-reload
+systemctl enable cc-agent
+systemctl restart cc-agent
+sleep 2
+systemctl is-active cc-agent && echo "cc-agent: running" || echo "cc-agent: check logs with: journalctl -u cc-agent -n 30"
+echo "Done: cc-agent installed"
+`;
+
+    const result = await execSSH(conn, AGENT_INSTALL);
+    const agentVersion = result.output.match(/cc-agent[:\s]+(v[\d.]+)/)?.[1] || 'installed';
+    return { success: result.success, agentVersion, output: result.output };
+}
+
+/**
+ * Setup Xray node + CC Agent via SSH.
+ * Extends setupXrayNode to also install the agent.
+ */
+async function setupXrayNodeWithAgent(node, options = {}) {
+    const result = await setupXrayNode(node, options);
+
+    if (!result.success) {
+        return result;
+    }
+
+    const log = (msg) => {
+        const line = `[${new Date().toISOString()}] ${msg}`;
+        result.logs.push(line);
+        logger.info(`[AgentSetup] ${msg}`);
+    };
+
+    let conn;
+    try {
+        log('Connecting via SSH for agent installation...');
+        conn = await connectSSH(node);
+
+        // Generate agent token if not set
+        let agentToken = (node.xray || {}).agentToken;
+        if (!agentToken) {
+            agentToken = generateAgentToken();
+            log(`Generated agent token: ${agentToken.substring(0, 8)}...`);
+        }
+
+        // Determine panel IP from config (the IP the node can reach the panel from)
+        const panelIpRaw = config.BASE_URL || '';
+        const panelIp = panelIpRaw.replace(/^https?:\/\//, '').split(':')[0].split('/')[0] || '0.0.0.0';
+        log(`Panel IP for firewall: ${panelIp}`);
+
+        log('Installing CC Agent...');
+        const agentResult = await installCCAgent(conn, node, agentToken, panelIp, log);
+        result.logs.push(agentResult.output);
+
+        if (!agentResult.success) {
+            log(`Agent install warning: may have failed, check logs above`);
+        } else {
+            log(`Agent installed: ${agentResult.agentVersion}`);
+        }
+
+        // Persist agent token and version to DB
+        const HyNode = require('../models/hyNodeModel');
+        const updates = {
+            'xray.agentToken': agentToken,
+            agentVersion: agentResult.agentVersion,
+            agentStatus: 'unknown', // will be updated on first health check
+        };
+        await HyNode.updateOne({ _id: node._id }, { $set: updates });
+        log('Agent token saved to database');
+
+        result.agentToken = agentToken;
+
+    } catch (error) {
+        const line = `[${new Date().toISOString()}] Agent install error: ${error.message}`;
+        result.logs.push(line);
+        logger.error(`[AgentSetup] ${error.message}`);
+        // Don't fail the whole setup if agent install fails
+    } finally {
+        if (conn) conn.end();
+    }
+
+    return result;
+}
+
 module.exports = {
     setupNode,
     checkNodeStatus,
@@ -526,4 +989,11 @@ module.exports = {
     connectSSH,
     execSSH,
     uploadFile,
+    setupXrayNode,
+    setupXrayNodeWithAgent,
+    installCCAgent,
+    generateAgentToken,
+    generateX25519Keys,
+    checkXrayNodeStatus,
+    getXrayNodeLogs,
 };

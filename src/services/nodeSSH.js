@@ -294,6 +294,18 @@ class NodeSSH {
     }
 
     /**
+     * Upload file content to a remote path (alias for writeFile)
+     */
+    async uploadContent(content, remotePath) {
+        // Ensure parent directory exists
+        const dir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+        if (dir) {
+            await this.exec(`mkdir -p ${dir} 2>/dev/null || true`);
+        }
+        return this.writeFile(remotePath, content);
+    }
+
+    /**
      * Update config on node
      */
     async updateConfig(configContent) {

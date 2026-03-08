@@ -51,6 +51,60 @@ const statsService = require('../services/statsService');
 // Кэш скомпилированных шаблонов (для production)
 const templateCache = new Map();
 
+/**
+ * Parse Xray-related form fields from req.body into an xray sub-document object.
+ * Handles comma-separated arrays (SNI, shortIds, alpn).
+ */
+function parseXrayFormFields(body) {
+    const xray = {};
+
+    if (body['xray.transport']) xray.transport = body['xray.transport'];
+    if (body['xray.security']) xray.security = body['xray.security'];
+    if (body['xray.flow'] !== undefined) xray.flow = body['xray.flow'];
+
+    // TLS fingerprint (uTLS)
+    if (body['xray.fingerprint']) xray.fingerprint = body['xray.fingerprint'];
+
+    // ALPN (comma-separated)
+    if (body['xray.alpn'] !== undefined) {
+        const alpnStr = body['xray.alpn'].trim();
+        xray.alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
+
+    // Reality
+    if (body['xray.realityDest']) xray.realityDest = body['xray.realityDest'];
+    if (body['xray.realityPrivateKey'] !== undefined) xray.realityPrivateKey = body['xray.realityPrivateKey'];
+    if (body['xray.realityPublicKey'] !== undefined) xray.realityPublicKey = body['xray.realityPublicKey'];
+    if (body['xray.realitySpiderX'] !== undefined) xray.realitySpiderX = body['xray.realitySpiderX'];
+
+    if (body['xray.realitySni']) {
+        xray.realitySni = body['xray.realitySni']
+            .split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (body['xray.realityShortIds'] !== undefined) {
+        xray.realityShortIds = body['xray.realityShortIds']
+            .split(',').map(s => s.trim());
+        if (xray.realityShortIds.length === 0) xray.realityShortIds = [''];
+    }
+
+    // WebSocket
+    if (body['xray.wsPath'] !== undefined) xray.wsPath = body['xray.wsPath'];
+    if (body['xray.wsHost'] !== undefined) xray.wsHost = body['xray.wsHost'];
+
+    // gRPC
+    if (body['xray.grpcServiceName']) xray.grpcServiceName = body['xray.grpcServiceName'];
+
+    // XHTTP (SplitHTTP)
+    if (body['xray.xhttpPath'] !== undefined) xray.xhttpPath = body['xray.xhttpPath'];
+    if (body['xray.xhttpHost'] !== undefined) xray.xhttpHost = body['xray.xhttpHost'];
+    if (body['xray.xhttpMode']) xray.xhttpMode = body['xray.xhttpMode'];
+
+    // API port
+    if (body['xray.apiPort']) xray.apiPort = parseInt(body['xray.apiPort']) || 61000;
+
+    return xray;
+}
+
 // Rate limiter для защиты от brute-force
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 минут
@@ -390,9 +444,12 @@ router.post('/nodes', requireAuth, async (req, res) => {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
         
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+
         const nodeData = {
             name: req.body.name,
             ip: req.body.ip,
+            type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
             flag: req.body.flag || '',
@@ -412,7 +469,11 @@ router.post('/nodes', requireAuth, async (req, res) => {
                 password: encryptedPassword,
             },
         };
-        
+
+        if (nodeType === 'xray') {
+            nodeData.xray = parseXrayFormFields(req.body);
+        }
+
         const newNode = await HyNode.create(nodeData);
         res.redirect(`/panel/nodes/${newNode._id}`);
     } catch (error) {
@@ -452,9 +513,12 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
         
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+
         const updates = {
             name: req.body.name,
             ip: req.body.ip,
+            type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
             port: parseInt(req.body.port) || 443,
@@ -471,6 +535,10 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             'ssh.port': parseInt(req.body['ssh.port']) || 22,
             'ssh.username': req.body['ssh.username'] || 'root',
         };
+
+        if (nodeType === 'xray') {
+            updates.xray = parseXrayFormFields(req.body);
+        }
         
         // Обновляем пароль только если указан (шифруем)
         if (req.body['ssh.password']) {
@@ -490,34 +558,41 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ success: false, error: 'Нода не найдена', logs: [] });
         }
         
         if (!node.ssh?.password && !node.ssh?.privateKey) {
-            return res.status(400).json({ error: 'SSH данные не настроены' });
+            return res.status(400).json({ success: false, error: 'SSH данные не настроены', logs: [] });
         }
         
-        // Запускаем настройку
-        const result = await nodeSetup.setupNode(node, {
-            installHysteria: true,
-            setupPortHopping: true,
-            restartService: true,
-        });
+        logger.info(`[Panel] Starting setup for node ${node.name} (type: ${node.type || 'hysteria'})`);
+        
+        // Запускаем настройку в зависимости от типа ноды
+        let result;
+        if (node.type === 'xray') {
+            result = await nodeSetup.setupXrayNodeWithAgent(node, { restartService: true });
+        } else {
+            result = await nodeSetup.setupNode(node, {
+                installHysteria: true,
+                setupPortHopping: true,
+                restartService: true,
+            });
+        }
         
         if (result.success) {
-            // Обновляем статус и сохраняем useTlsFiles
-            await HyNode.findByIdAndUpdate(req.params.id, { 
-                $set: { status: 'online', lastSync: new Date(), lastError: '', useTlsFiles: result.useTlsFiles } 
-            });
-            res.json({ success: true, message: 'Нода успешно настроена', logs: result.logs });
+            const updateFields = { status: 'online', lastSync: new Date(), lastError: '' };
+            if (node.type !== 'xray') updateFields.useTlsFiles = result.useTlsFiles;
+            await HyNode.findByIdAndUpdate(req.params.id, { $set: updateFields });
+            res.json({ success: true, message: 'Нода успешно настроена', logs: result.logs || [] });
         } else {
             await HyNode.findByIdAndUpdate(req.params.id, { 
                 $set: { status: 'error', lastError: result.error } 
             });
-            res.status(500).json({ success: false, error: result.error, logs: result.logs });
+            res.status(500).json({ success: false, error: result.error, logs: result.logs || [] });
         }
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error(`[Panel] Setup error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message, logs: [`Exception: ${error.message}`] });
     }
 });
 
@@ -583,7 +658,10 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
         }
         
         const conn = await nodeSetup.connectSSH(node);
-        const configPath = node.paths?.config || '/etc/hysteria/config.yaml';
+        // Use appropriate config path based on node type
+        const configPath = node.type === 'xray'
+            ? '/usr/local/etc/xray/config.json'
+            : (node.paths?.config || '/etc/hysteria/config.yaml');
         const result = await nodeSetup.execSSH(conn, `cat ${configPath}`);
         conn.end();
         
@@ -601,19 +679,24 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
 router.get('/nodes/:id/logs', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
-        
+
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ success: false, error: 'Нода не найдена' });
         }
-        
+
         if (!node.ssh?.password && !node.ssh?.privateKey) {
-            return res.status(400).json({ error: 'SSH данные не настроены' });
+            return res.status(400).json({ success: false, error: 'SSH данные не настроены' });
         }
-        
-        const result = await nodeSetup.getNodeLogs(node, 100);
+
+        // Use appropriate function based on node type
+        logger.debug(`[Panel] Getting logs for node ${node.name} (type: ${node.type})`);
+        const result = node.type === 'xray'
+            ? await nodeSetup.getXrayNodeLogs(node, 100)
+            : await nodeSetup.getNodeLogs(node, 100);
         res.json(result);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error(`[Panel] Get logs error for node ${req.params.id}: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -884,6 +967,9 @@ router.post('/users/:userId', requireAuth, async (req, res) => {
             maxDevices: userMaxDevices,
         };
 
+        const wasEnabled = user.enabled;
+        const nowEnabled = updates.enabled;
+
         await HyUser.findOneAndUpdate({ userId: req.params.userId }, { $set: updates });
 
         await cache.invalidateUser(req.params.userId);
@@ -892,6 +978,22 @@ router.post('/users/:userId', requireAuth, async (req, res) => {
         }
         await cache.clearDeviceIPs(req.params.userId);
         await cache.invalidateDashboardCounts();
+
+        // Sync with Xray nodes if enabled status changed
+        if (wasEnabled !== nowEnabled) {
+            const updatedUser = { ...user.toObject(), ...updates };
+            if (nowEnabled) {
+                // User enabled -> add to all Xray nodes
+                syncService.addUserToAllXrayNodes(updatedUser).catch(err => {
+                    logger.error(`[Panel] Xray addUser error for ${req.params.userId}: ${err.message}`);
+                });
+            } else {
+                // User disabled -> remove from all Xray nodes
+                syncService.removeUserFromAllXrayNodes(updatedUser).catch(err => {
+                    logger.error(`[Panel] Xray removeUser error for ${req.params.userId}: ${err.message}`);
+                });
+            }
+        }
 
         webhookService.emit(webhookService.EVENTS.USER_UPDATED, { userId: req.params.userId, updates });
 
@@ -1286,29 +1388,31 @@ router.post('/settings/flush-cache', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/nodes/:id/restart - Перезапуск Hysteria на ноде
+// POST /panel/nodes/:id/restart - Перезапуск сервиса на ноде
 router.post('/nodes/:id/restart', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
-        
+
         if (!node) {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
-        
+
         if (!node.ssh?.password && !node.ssh?.privateKey) {
             return res.status(400).json({ error: 'SSH данные не настроены' });
         }
-        
+
         const conn = await nodeSetup.connectSSH(node);
-        const result = await nodeSetup.execSSH(conn, 'systemctl restart hysteria-server && sleep 2 && systemctl is-active hysteria-server');
+        // Use appropriate service name based on node type
+        const serviceName = node.type === 'xray' ? 'xray' : 'hysteria-server';
+        const result = await nodeSetup.execSSH(conn, `systemctl restart ${serviceName} && sleep 2 && systemctl is-active ${serviceName}`);
         conn.end();
-        
+
         const isActive = result.output.trim().includes('active');
-        
-        await HyNode.findByIdAndUpdate(req.params.id, { 
-            $set: { status: isActive ? 'online' : 'error', lastSync: new Date() } 
+
+        await HyNode.findByIdAndUpdate(req.params.id, {
+            $set: { status: isActive ? 'online' : 'error', lastSync: new Date() }
         });
-        
+
         res.json({ success: isActive, output: result.output });
     } catch (error) {
         res.status(500).json({ error: error.message });

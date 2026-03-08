@@ -10,8 +10,43 @@ env:
   IMAGE_NAME: clickdevtech/hysteria-panel
 
 jobs:
+  build-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: cc-agent/go.sum
+
+      - name: Build cc-agent
+        working-directory: cc-agent
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cc-agent-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cc-agent-linux-arm64 .
+
+      - name: Upload agent binaries as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-agent-binaries
+          path: |
+            cc-agent/cc-agent-linux-amd64
+            cc-agent/cc-agent-linux-arm64
+
+      - name: Publish to GitHub Release (on tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cc-agent/cc-agent-linux-amd64
+            cc-agent/cc-agent-linux-arm64
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: build-agent
     
     steps:
       - name: Checkout
