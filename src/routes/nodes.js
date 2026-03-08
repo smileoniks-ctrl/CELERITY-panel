@@ -255,6 +255,24 @@ router.post('/:id/reset-status', requireScope('nodes:write'), async (req, res) =
 });
 
 /**
+ * GET /nodes/:id/agent-info - Fetch live info from CC Agent (version, users, uptime)
+ */
+router.get('/:id/agent-info', requireScope('nodes:read'), async (req, res) => {
+    try {
+        const node = await HyNode.findById(req.params.id);
+        if (!node) return res.status(404).json({ error: 'Node not found' });
+        if (node.type !== 'xray') return res.status(400).json({ error: 'Not an Xray node' });
+
+        const syncService = require('../services/syncService');
+        const response = await syncService._agentRequest(node, 'GET', '/info');
+        res.json(response.data);
+    } catch (error) {
+        logger.error(`[Nodes API] agent-info error: ${error.message}`);
+        res.status(502).json({ error: error.message });
+    }
+});
+
+/**
  * POST /nodes/:id/sync - Принудительная синхронизация ноды
  */
 router.post('/:id/sync', requireScope('nodes:write'), async (req, res) => {

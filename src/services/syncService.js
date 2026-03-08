@@ -2,13 +2,14 @@
  * Hysteria + Xray nodes sync service
  *
  * Hysteria: HTTP auth callback — no user sync needed, auth happens in realtime.
- * Xray: users embedded in config + managed via SSH + xray api gRPC commands.
+ * Xray: managed via CC Agent HTTP API (add/remove users, traffic stats, health).
+ *       SSH is only used for full config uploads (rare: node setup / config changes).
  *
  * This service handles:
  * - Node config updates (Hysteria YAML / Xray JSON)
  * - Traffic stats collection
  * - Node health checks
- * - Xray user add/remove via gRPC API over SSH
+ * - Xray user add/remove via Agent HTTP API (no SSH per-operation)
  */
 
 const HyUser = require('../models/hyUserModel');
@@ -19,8 +20,12 @@ const configGenerator = require('./configGenerator');
 const cache = require('./cacheService');
 const logger = require('../utils/logger');
 const axios = require('axios');
+const https = require('https');
 const config = require('../../config');
 const webhook = require('./webhookService');
+
+// HTTPS agent that ignores self-signed certs (agent uses self-signed cert by default)
+const selfSignedAgent = new https.Agent({ rejectUnauthorized: false });
 
 class SyncService {
     constructor() {
@@ -39,7 +44,131 @@ class SyncService {
         return `${config.BASE_URL}/api/auth`;
     }
 
-    // ==================== XRAY METHODS ====================
+    // ==================== XRAY AGENT METHODS ====================
+
+    /**
+     * Make an authenticated HTTP request to the CC Agent on a node.
+     * Uses HTTPS if agentTls !== false, HTTP otherwise.
+     * Self-signed certificates are accepted.
+     */
+    async _agentRequest(node, method, path, body = null) {
+        const xray = node.xray || {};
+        const useTls = xray.agentTls !== false;
+        const port = xray.agentPort || 62080;
+        const token = xray.agentToken;
+
+        if (!token) {
+            throw new Error(`[Agent] Node ${node.name} has no agentToken — install agent first`);
+        }
+
+        const protocol = useTls ? 'https' : 'http';
+        const url = `${protocol}://${node.ip}:${port}${path}`;
+
+        const options = {
+            method,
+            url,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+            validateStatus: null, // handle errors manually
+        };
+
+        if (body !== null) {
+            options.data = body;
+        }
+
+        if (useTls) {
+            options.httpsAgent = selfSignedAgent;
+        }
+
+        const response = await axios(options);
+
+        if (response.status === 401) {
+            throw new Error(`[Agent] Unauthorized — check agentToken for node ${node.name}`);
+        }
+
+        return response;
+    }
+
+    /**
+     * Check agent health and update node metadata (xrayVersion, agentVersion, agentStatus).
+     * Called by the periodic health check loop.
+     */
+    async checkXrayAgentHealth(node) {
+        try {
+            const response = await this._agentRequest(node, 'GET', '/info');
+            const data = response.data || {};
+
+            await HyNode.updateOne({ _id: node._id }, {
+                $set: {
+                    xrayVersion: data.xray_version || '',
+                    agentVersion: data.agent_version || '',
+                    agentStatus: 'online',
+                    agentLastSeen: new Date(),
+                    onlineUsers: data.users_count || 0,
+                    status: 'online',
+                },
+            });
+
+            return { online: true, xrayVersion: data.xray_version, usersCount: data.users_count };
+        } catch (error) {
+            logger.warn(`[Agent] ${node.name} health check failed: ${error.message}`);
+            const prevNode = await HyNode.findOneAndUpdate(
+                { _id: node._id },
+                { $set: { agentStatus: 'offline', lastError: `Agent: ${error.message}` } }
+            );
+            if (prevNode && prevNode.status === 'online') {
+                webhook.emit(webhook.EVENTS.NODE_OFFLINE, { nodeId: node._id, name: node.name, lastError: error.message });
+            }
+            return { online: false };
+        }
+    }
+
+    /**
+     * Add a single user to a running Xray node via Agent HTTP API.
+     * No SSH, no restart needed.
+     */
+    async addXrayUser(node, user) {
+        if (!user.xrayUuid) {
+            logger.warn(`[Agent] User ${user.userId} has no xrayUuid, skipping`);
+            return false;
+        }
+
+        const xray = node.xray || {};
+        const flow = ((xray.security === 'reality' || xray.security === 'tls') && xray.transport === 'tcp')
+            ? (xray.flow || 'xtls-rprx-vision')
+            : '';
+
+        try {
+            await this._agentRequest(node, 'POST', '/users', {
+                id: user.xrayUuid,
+                email: user.userId,
+                flow,
+            });
+            logger.info(`[Agent] Added user ${user.userId} to ${node.name}`);
+            return true;
+        } catch (error) {
+            logger.error(`[Agent] addXrayUser ${node.name}/${user.userId}: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Remove a single user from a running Xray node via Agent HTTP API.
+     * No SSH, no restart needed.
+     */
+    async removeXrayUser(node, user) {
+        try {
+            await this._agentRequest(node, 'DELETE', `/users/${encodeURIComponent(user.userId)}`);
+            logger.info(`[Agent] Removed user ${user.userId} from ${node.name}`);
+            return true;
+        } catch (error) {
+            logger.error(`[Agent] removeXrayUser ${node.name}/${user.userId}: ${error.message}`);
+            return false;
+        }
+    }
 
     /**
      * Get all enabled users for a given node (by groups or explicit node list)
@@ -67,121 +196,6 @@ class SyncService {
     }
 
     /**
-     * Build xray api adu command for adding a user to an Xray inbound
-     * Syntax: xray api adu --server=IP:PORT <config.json>
-     * The JSON must contain full inbound config with port
-     */
-    _buildAddUserCmd(node, user) {
-        const xray = node.xray || {};
-        const apiPort = xray.apiPort || 61000;
-        const inboundTag = xray.inboundTag || 'vless-in';
-        const transport = xray.transport || 'tcp';
-        const security = xray.security || 'reality';
-        const port = node.port || 443;
-        const email = user.userId;
-        const uuid = user.xrayUuid;
-        
-        const flow = ((security === 'reality' || security === 'tls') && transport === 'tcp') 
-            ? (xray.flow || 'xtls-rprx-vision') 
-            : '';
-        
-        // Build full inbound config as required by xray api adu
-        // Use heredoc to avoid shell escaping issues
-        const userConfig = {
-            inbounds: [{
-                listen: '0.0.0.0',
-                port: port,
-                protocol: 'vless',
-                tag: inboundTag,
-                settings: {
-                    clients: [{
-                        id: uuid,
-                        email: email,
-                        level: 0,
-                        flow: flow
-                    }],
-                    decryption: 'none'
-                }
-            }]
-        };
-        
-        const json = JSON.stringify(userConfig);
-        // Use cat with heredoc to safely write JSON
-        return `cat > /tmp/xray_user.json << 'EOFXRAY'
-${json}
-EOFXRAY
-xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xray_user.json`;
-    }
-
-    /**
-     * Build xray api rmu command for removing a user from an Xray inbound
-     * Syntax: xray api rmu --server=IP:PORT -tag=TAG "email1" "email2" ...
-     */
-    _buildRemoveUserCmd(node, user) {
-        const xray = node.xray || {};
-        const apiPort = xray.apiPort || 61000;
-        const inboundTag = xray.inboundTag || 'vless-in';
-        const email = user.userId;
-        return `xray api rmu --server=127.0.0.1:${apiPort} -tag="${inboundTag}" "${email}"`;
-    }
-
-    /**
-     * Add a single user to a running Xray node via gRPC API (SSH exec)
-     * No restart needed.
-     */
-    async addXrayUser(node, user) {
-        if (!user.xrayUuid) {
-            logger.warn(`[Xray] User ${user.userId} has no xrayUuid, skipping`);
-            return false;
-        }
-        const ssh = new NodeSSH(node);
-        try {
-            await ssh.connect();
-            const cmd = this._buildAddUserCmd(node, user);
-            logger.debug(`[Xray] Running adu for ${user.userId}`);
-            const result = await ssh.exec(cmd);
-            const output = typeof result === 'string' ? result : JSON.stringify(result);
-            logger.debug(`[Xray] adu output: ${output}`);
-            if (output && output.toLowerCase().includes('error')) {
-                logger.warn(`[Xray] adu may have failed for ${user.userId}: ${output}`);
-            }
-            logger.info(`[Xray] Added user ${user.userId} to ${node.name}`);
-            return true;
-        } catch (error) {
-            logger.error(`[Xray] addXrayUser ${node.name}/${user.userId}: ${error.message}`);
-            return false;
-        } finally {
-            ssh.disconnect();
-        }
-    }
-
-    /**
-     * Remove a single user from a running Xray node via gRPC API (SSH exec)
-     * No restart needed.
-     */
-    async removeXrayUser(node, user) {
-        const ssh = new NodeSSH(node);
-        try {
-            await ssh.connect();
-            const cmd = this._buildRemoveUserCmd(node, user);
-            logger.debug(`[Xray] Running: ${cmd}`);
-            const result = await ssh.exec(cmd);
-            const output = typeof result === 'string' ? result : JSON.stringify(result);
-            logger.debug(`[Xray] rmu output: ${output}`);
-            if (output && output.toLowerCase().includes('error')) {
-                logger.warn(`[Xray] rmu may have failed for ${user.userId}: ${output}`);
-            }
-            logger.info(`[Xray] Removed user ${user.userId} from ${node.name}`);
-            return true;
-        } catch (error) {
-            logger.error(`[Xray] removeXrayUser ${node.name}/${user.userId}: ${error.message}`);
-            return false;
-        } finally {
-            ssh.disconnect();
-        }
-    }
-
-    /**
      * Add user to all active Xray nodes they belong to (fire-and-forget safe)
      */
     async addUserToAllXrayNodes(user) {
@@ -206,80 +220,106 @@ xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xra
     }
 
     /**
-     * Full config update for an Xray node — generates JSON with all users, uploads, restarts
+     * Full config update for an Xray node.
+     *
+     * Step 1: Upload xray config.json via SSH (inbound/outbound settings, no user list).
+     * Step 2: Restart Xray via Agent API (no SSH restart needed).
+     * Step 3: Sync all users to Xray runtime via Agent /sync endpoint.
+     *
+     * SSH is only used for the config upload. If agent is not yet installed,
+     * falls back to SSH restart.
      */
     async updateXrayNodeConfig(node) {
         logger.info(`[Xray Sync] Updating config for node ${node.name} (${node.ip})`);
-
         await HyNode.updateOne({ _id: node._id }, { $set: { status: 'syncing' } });
 
-        const ssh = new NodeSSH(node);
-        try {
-            await ssh.connect();
+        const users = await this._getUsersForNode(node);
 
-            const users = await this._getUsersForNode(node);
-            const configContent = configGenerator.generateXrayConfig(node, users);
-
-            // Upload config.json
-            await ssh.uploadContent(configContent, node.paths?.config || '/usr/local/etc/xray/config.json');
-
-            // Restart xray service
-            await ssh.exec('systemctl restart xray');
-            const statusResult = await ssh.exec('systemctl is-active xray 2>/dev/null || echo inactive').catch(() => ({ stdout: 'inactive' }));
-            const isRunning = (statusResult.stdout || '').trim() === 'active';
-
-            await HyNode.updateOne(
-                { _id: node._id },
-                {
-                    $set: {
-                        status: isRunning ? 'online' : 'error',
-                        lastSync: new Date(),
-                        lastError: isRunning ? '' : 'Xray service not running after sync',
-                    },
-                }
-            );
-
-            logger.info(`[Xray Sync] Node ${node.name}: config updated, ${users.length} users`);
-            return true;
-        } catch (error) {
-            logger.error(`[Xray Sync] Node ${node.name} error: ${error.message}`);
-            await HyNode.updateOne({ _id: node._id }, { $set: { status: 'error', lastError: error.message } });
-            webhook.emit(webhook.EVENTS.NODE_ERROR, { nodeId: node._id, name: node.name, error: error.message });
-            return false;
-        } finally {
-            ssh.disconnect();
+        // Step 1: Upload config.json via SSH (only if SSH is configured)
+        if (node.ssh?.password || node.ssh?.privateKey) {
+            const ssh = new NodeSSH(node);
+            try {
+                await ssh.connect();
+                const configContent = configGenerator.generateXrayConfig(node, users);
+                await ssh.uploadContent(configContent, node.paths?.config || '/usr/local/etc/xray/config.json');
+                logger.info(`[Xray Sync] Node ${node.name}: config uploaded`);
+            } catch (error) {
+                logger.warn(`[Xray Sync] Node ${node.name}: config upload failed (SSH): ${error.message}`);
+            } finally {
+                ssh.disconnect();
+            }
         }
+
+        // Step 2: Restart Xray via Agent (preferred) or SSH fallback
+        const hasAgent = !!(node.xray?.agentToken);
+        if (hasAgent) {
+            try {
+                // /restart blocks until Xray is running and users are restored (~2-3s)
+                await this._agentRequest(node, 'POST', '/restart');
+                logger.info(`[Xray Sync] Node ${node.name}: restarted via agent`);
+            } catch (error) {
+                logger.warn(`[Xray Sync] Node ${node.name}: agent restart failed: ${error.message}`);
+            }
+        } else if (node.ssh?.password || node.ssh?.privateKey) {
+            const ssh = new NodeSSH(node);
+            try {
+                await ssh.connect();
+                await ssh.exec('systemctl restart xray');
+                logger.info(`[Xray Sync] Node ${node.name}: restarted via SSH`);
+            } catch (error) {
+                logger.warn(`[Xray Sync] Node ${node.name}: SSH restart failed: ${error.message}`);
+            } finally {
+                ssh.disconnect();
+            }
+        }
+
+        // Step 3: Sync users via Agent (builds the runtime user list in Xray without restart)
+        if (hasAgent) {
+            try {
+                const xray = node.xray || {};
+                const userPayload = users.map(u => {
+                    const flow = ((xray.security === 'reality' || xray.security === 'tls') && xray.transport === 'tcp')
+                        ? (xray.flow || 'xtls-rprx-vision') : '';
+                    return { id: u.xrayUuid, email: u.userId, flow };
+                }).filter(u => u.id);
+
+                await this._agentRequest(node, 'POST', '/sync', { users: userPayload });
+                logger.info(`[Xray Sync] Node ${node.name}: synced ${userPayload.length} users via agent`);
+            } catch (error) {
+                logger.warn(`[Xray Sync] Node ${node.name}: agent sync failed: ${error.message}`);
+            }
+        }
+
+        // Update node status
+        try {
+            const health = await this.checkXrayAgentHealth(node);
+            if (!health.online && hasAgent) {
+                await HyNode.updateOne({ _id: node._id }, { $set: { status: 'error', lastSync: new Date() } });
+                return false;
+            }
+        } catch (_) {}
+
+        await HyNode.updateOne({ _id: node._id }, {
+            $set: { status: 'online', lastSync: new Date(), lastError: '' },
+        });
+
+        logger.info(`[Xray Sync] Node ${node.name}: sync complete, ${users.length} users`);
+        return true;
     }
 
     /**
-     * Collect traffic stats from Xray node via SSH + xray api statsquery
-     * Parses: user>>>userId.username>>>traffic>>>uplink/downlink
+     * Collect traffic stats from Xray node via Agent GET /stats.
+     * Agent accumulates stats between polls (Xray counters are reset on each agent collection).
      */
     async collectXrayTrafficStats(node) {
-        const xray = node.xray || {};
-        const apiPort = xray.apiPort || 61000;
+        if (!(node.xray?.agentToken)) {
+            logger.debug(`[Agent Stats] ${node.name}: no agent token, skipping`);
+            return;
+        }
 
-        const ssh = new NodeSSH(node);
         try {
-            await ssh.connect();
-            const execResult = await ssh.exec(
-                `xray api statsquery --server=127.0.0.1:${apiPort} -pattern "user>>>" -reset 2>/dev/null || true`
-            );
-            const output = execResult.stdout || '';
-
-            // Parse output lines: stat:<  name:"user>>>id.name>>>traffic>>>uplink"  value:12345  >
-            const stats = {};
-            const lineRe = /name:"user>>>([^>]+)>>>traffic>>>(uplink|downlink)"\s+value:(\d+)/g;
-            let match;
-            while ((match = lineRe.exec(output)) !== null) {
-                const email = match[1];   // "userId.username"
-                const direction = match[2]; // uplink | downlink
-                const value = parseInt(match[3], 10) || 0;
-                const userId = email.split('.')[0];
-                if (!stats[userId]) stats[userId] = { tx: 0, rx: 0 };
-                if (direction === 'uplink') stats[userId].tx += value;
-                else stats[userId].rx += value;
-            }
+            const response = await this._agentRequest(node, 'GET', '/stats');
+            const stats = response.data || {};
 
             if (Object.keys(stats).length === 0) return;
 
@@ -288,14 +328,20 @@ xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xra
             const bulkOps = [];
             const now = new Date();
 
-            for (const [userId, traffic] of Object.entries(stats)) {
-                nodeTx += traffic.tx;
-                nodeRx += traffic.rx;
+            for (const [email, traffic] of Object.entries(stats)) {
+                const tx = traffic.tx || 0;
+                const rx = traffic.rx || 0;
+                if (tx === 0 && rx === 0) continue;
+
+                nodeTx += tx;
+                nodeRx += rx;
+
+                // email == userId (as set in configGenerator and agent)
                 bulkOps.push({
                     updateOne: {
-                        filter: { userId },
+                        filter: { userId: email },
                         update: {
-                            $inc: { 'traffic.tx': traffic.tx, 'traffic.rx': traffic.rx },
+                            $inc: { 'traffic.tx': tx, 'traffic.rx': rx },
                             $set: { 'traffic.lastUpdate': now },
                         },
                     },
@@ -304,90 +350,70 @@ xray api adu --server=127.0.0.1:${apiPort} /tmp/xray_user.json && rm -f /tmp/xra
 
             if (bulkOps.length > 0) {
                 const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
-                logger.debug(`[Xray Stats] ${node.name}: updated ${result.modifiedCount}/${bulkOps.length} users`);
+                logger.debug(`[Agent Stats] ${node.name}: updated ${result.modifiedCount}/${bulkOps.length} users`);
                 this._checkUserLimits(Object.keys(stats)).catch(() => {});
             }
 
-            await HyNode.updateOne(
-                { _id: node._id },
-                {
-                    $inc: { 'traffic.tx': nodeTx, 'traffic.rx': nodeRx },
-                    $set: { 'traffic.lastUpdate': now },
-                }
-            );
-
-            logger.info(`[Xray Stats] ${node.name}: ${Object.keys(stats).length} users, ↑${(nodeTx / 1024 / 1024).toFixed(1)}MB ↓${(nodeRx / 1024 / 1024).toFixed(1)}MB`);
+            if (nodeTx > 0 || nodeRx > 0) {
+                await HyNode.updateOne(
+                    { _id: node._id },
+                    {
+                        $inc: { 'traffic.tx': nodeTx, 'traffic.rx': nodeRx },
+                        $set: { 'traffic.lastUpdate': now },
+                    }
+                );
+                logger.info(`[Agent Stats] ${node.name}: ${bulkOps.length} users, ↑${(nodeTx / 1024 / 1024).toFixed(1)}MB ↓${(nodeRx / 1024 / 1024).toFixed(1)}MB`);
+            }
         } catch (error) {
-            logger.error(`[Xray Stats] ${node.name} error: ${error.message}`);
-        } finally {
-            ssh.disconnect();
+            logger.error(`[Agent Stats] ${node.name} error: ${error.message}`);
         }
     }
 
     /**
-     * Get online user count from Xray node via SSH + xray api statsquery (no reset)
+     * Get online users and health info from Xray node via Agent GET /info.
+     * Also updates xrayVersion and agentStatus in DB.
      */
     async getXrayOnlineUsers(node) {
-        const xray = node.xray || {};
-        const apiPort = xray.apiPort || 61000;
+        if (!(node.xray?.agentToken)) {
+            logger.debug(`[Agent] ${node.name}: no agent token, skipping health check`);
+            return 0;
+        }
 
-        const ssh = new NodeSSH(node);
         try {
-            await ssh.connect();
+            const response = await this._agentRequest(node, 'GET', '/info');
+            const data = response.data || {};
 
-            // Check service is running first
-            const activeResult = await ssh.exec('systemctl is-active xray 2>/dev/null || echo inactive').catch(() => ({ stdout: 'inactive' }));
-            const active = (activeResult.stdout || '').trim();
-            if (active !== 'active') {
-                const prevNode = await HyNode.findOneAndUpdate(
-                    { _id: node._id },
-                    { $set: { onlineUsers: 0, status: 'offline' } }
-                );
-                if (prevNode && prevNode.status === 'online') {
-                    webhook.emit(webhook.EVENTS.NODE_OFFLINE, { nodeId: node._id, name: node.name });
-                }
-                return 0;
-            }
-
-            // Count users with non-zero stats in last interval (approximate online)
-            const statsResult = await ssh.exec(
-                `xray api statsquery --server=127.0.0.1:${apiPort} -pattern "user>>>" 2>/dev/null || true`
-            ).catch(() => ({ stdout: '' }));
-            const output = statsResult.stdout || '';
-
-            const activeUsers = new Set();
-            const lineRe = /name:"user>>>([^>]+)>>>traffic>>>(uplink|downlink)"\s+value:(\d+)/g;
-            let match;
-            while ((match = lineRe.exec(output)) !== null) {
-                if (parseInt(match[3], 10) > 0) {
-                    activeUsers.add(match[1].split('.')[0]);
-                }
-            }
-            const online = activeUsers.size;
+            const usersCount = data.users_count || 0;
 
             const prevNode = await HyNode.findOneAndUpdate(
                 { _id: node._id },
-                { $set: { onlineUsers: online, status: 'online' } }
+                {
+                    $set: {
+                        onlineUsers: usersCount,
+                        status: 'online',
+                        xrayVersion: data.xray_version || '',
+                        agentVersion: data.agent_version || '',
+                        agentStatus: 'online',
+                        agentLastSeen: new Date(),
+                    },
+                }
             );
 
             if (prevNode && prevNode.status !== 'online') {
                 webhook.emit(webhook.EVENTS.NODE_ONLINE, { nodeId: node._id, name: node.name });
             }
 
-            if (online > 0) logger.info(`[Xray Stats] ${node.name}: ${online} online`);
-            return online;
+            return usersCount;
         } catch (error) {
-            logger.warn(`[Xray Stats] ${node.name}: unavailable - ${error.message}`);
+            logger.warn(`[Agent] ${node.name}: unavailable - ${error.message}`);
             const prevNode = await HyNode.findOneAndUpdate(
                 { _id: node._id },
-                { $set: { lastError: `Stats: ${error.message}` } }
+                { $set: { agentStatus: 'offline', lastError: `Agent: ${error.message}` } }
             );
             if (prevNode && prevNode.status === 'online') {
                 webhook.emit(webhook.EVENTS.NODE_OFFLINE, { nodeId: node._id, name: node.name, lastError: error.message });
             }
             return 0;
-        } finally {
-            ssh.disconnect();
         }
     }
 

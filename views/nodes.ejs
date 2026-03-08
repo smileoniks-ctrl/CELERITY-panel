@@ -35,13 +35,14 @@
                         <th><%= t('common.status') %></th>
                         <th><%= t('common.online') %></th>
                         <th><%= t('nodes.groups') %></th>
+                        <th><%= t('nodes.nodeInfo') %></th>
                         <th><%= t('common.actions') %></th>
                     </tr>
                 </thead>
                 <tbody>
                     <% if (nodes.length === 0) { %>
                     <tr>
-                        <td colspan="7" class="text-center text-muted">
+                        <td colspan="8" class="text-center text-muted">
                             <div class="empty-state">
                                 <span class="empty-icon"><i class="ti ti-server"></i></span>
                                 <p><%= t('nodes.noNodes') %></p>
@@ -102,6 +103,20 @@
                                 <% } %>
                             <% } else { %>
                                 <span class="text-muted"><%= t('common.all') %></span>
+                            <% } %>
+                        </td>
+                        <td class="node-info-cell">
+                            <% if (node.type === 'xray') { %>
+                                <% if (node.xrayVersion) { %>
+                                <span class="node-info-badge" title="<%= t('nodes.xrayVersion') %>">
+                                    <img src="/img/xray.svg" style="width:12px;height:12px;vertical-align:middle;"> v<%= node.xrayVersion %>
+                                </span>
+                                <% } %>
+                                <span class="node-info-badge badge-agent-<%= node.agentStatus || 'unknown' %>" title="<%= t('nodes.agentStatus') %>">
+                                    <i class="ti ti-cpu"></i> <%= node.agentStatus || 'unknown' %>
+                                </span>
+                            <% } else { %>
+                                <span class="text-muted">—</span>
                             <% } %>
                         </td>
                         <td>
@@ -189,6 +204,36 @@
     letter-spacing: 0.5px;
     margin-left: 4px;
     vertical-align: middle;
+}
+.node-info-cell {
+    white-space: nowrap;
+}
+.node-info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 1px 2px 1px 0;
+}
+.badge-agent-online {
+    border-color: var(--success, #22c55e);
+    color: var(--success, #22c55e);
+    background: rgba(34,197,94,0.08);
+}
+.badge-agent-offline {
+    border-color: var(--danger, #ef4444);
+    color: var(--danger, #ef4444);
+    background: rgba(239,68,68,0.08);
+}
+.badge-agent-unknown {
+    border-color: var(--warning, #f59e0b);
+    color: var(--warning, #f59e0b);
+    background: rgba(245,158,11,0.08);
 }
 </style>
 

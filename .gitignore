@@ -36,3 +36,8 @@ Thumbs.db
 
 # Docker volumes (local dev)
 mongo_data/
+
+# CC Agent binaries (large files, deploy separately)
+public/downloads/
+cc-agent/cc-agent-linux-amd64
+cc-agent/cc-agent-linux-arm64
