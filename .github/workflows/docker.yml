@@ -43,6 +43,18 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          body: |
+            ## CC Agent binaries
+
+            Lightweight Go agent for managing Xray on nodes.
+            Downloaded automatically during node auto-setup from the panel.
+
+            | File | Architecture |
+            |------|-------------|
+            | `cc-agent-linux-amd64` | x86_64 (most VPS) |
+            | `cc-agent-linux-arm64` | ARM64 |
+
+            > Panel source code is distributed via Docker Hub: `clickdevtech/hysteria-panel`
           files: |
             cc-agent/cc-agent-linux-amd64
             cc-agent/cc-agent-linux-arm64
