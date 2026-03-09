@@ -33,11 +33,17 @@ const subscriptionRoutes = require('./src/routes/subscription');
 const authRoutes = require('./src/routes/auth');
 const panelRoutes = require('./src/routes/panel');
 
+const helmet = require('helmet');
 const app = express();
 
 app.set('trust proxy', 1);
 
 // ==================== MIDDLEWARE ====================
+
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+}));
 
 app.use(compression({
     filter: (req, res) => {

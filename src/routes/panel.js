@@ -1958,7 +1958,7 @@ router.post('/settings/test-s3', requireAuth, async (req, res) => {
 router.get('/settings/backups', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
-        const backups = backupService.listBackups();
+        const backups = await backupService.listBackups();
         res.json({ backups });
     } catch (error) {
         res.status(500).json({ error: error.message });

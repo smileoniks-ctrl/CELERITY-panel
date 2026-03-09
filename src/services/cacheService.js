@@ -23,11 +23,13 @@ const DEFAULT_TTL = {
     TRAFFIC_STATS: 300,      // 5 minutes
     GROUPS: 300,             // 5 minutes
     DASHBOARD_COUNTS: 60,    // 1 minute
+    QR: 3600,                // 1 hour (QR code for subscription URL)
 };
 
 // Key prefixes
 const PREFIX = {
     SUB: 'sub:',             // sub:{token}:{format}
+    QR: 'qr:',               // qr:{baseUrl}
     USER: 'user:',           // user:{userId}
     DEVICES: 'devices:',     // devices:{userId} - Hash with device IPs
     ONLINE: 'online',        // online (stores all sessions) - legacy
@@ -192,6 +194,33 @@ class CacheService {
         }
     }
     
+    /**
+     * Get cached QR code data URL for subscription link
+     */
+    async getQR(baseUrl) {
+        if (!this.isConnected()) return null;
+        try {
+            const key = `${PREFIX.QR}${baseUrl}`;
+            return await this.redis.get(key);
+        } catch (err) {
+            logger.error(`[Cache] getQR error: ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Cache QR code data URL
+     */
+    async setQR(baseUrl, dataUrl) {
+        if (!this.isConnected()) return;
+        try {
+            const key = `${PREFIX.QR}${baseUrl}`;
+            await this.redis.setex(key, DEFAULT_TTL.QR, dataUrl);
+        } catch (err) {
+            logger.error(`[Cache] setQR error: ${err.message}`);
+        }
+    }
+
     /**
      * Non-blocking key search via SCAN
      * @param {string} pattern - search pattern

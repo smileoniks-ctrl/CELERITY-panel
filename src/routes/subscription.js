@@ -622,12 +622,15 @@ async function generateHTML(user, nodes, token, baseUrl, settings) {
         ? `<img src="${logoUrl}" style="height:48px; border-radius:10px; object-fit:contain;" onerror="this.style.display='none'">`
         : '<i class="ti ti-rocket"></i>';
 
-    // QR-код ссылки подписки
-    let qrDataUrl = '';
-    try {
-        qrDataUrl = await QRCode.toDataURL(baseUrl, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#141414' } });
-    } catch (e) {
-        logger.warn(`[Sub] QR generation failed: ${e.message}`);
+    // QR code for subscription link (cached)
+    let qrDataUrl = await cache.getQR(baseUrl);
+    if (!qrDataUrl) {
+        try {
+            qrDataUrl = await QRCode.toDataURL(baseUrl, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#141414' } });
+            await cache.setQR(baseUrl, qrDataUrl);
+        } catch (e) {
+            logger.warn(`[Sub] QR generation failed: ${e.message}`);
+        }
     }
 
     const qrSectionHtml = qrDataUrl

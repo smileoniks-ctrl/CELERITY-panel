@@ -77,6 +77,8 @@ const hyUserSchema = new mongoose.Schema({
 hyUserSchema.index({ enabled: 1 });
 hyUserSchema.index({ groups: 1 });
 hyUserSchema.index({ expireAt: 1 });
+hyUserSchema.index({ enabled: 1, nodes: 1 });
+hyUserSchema.index({ enabled: 1, groups: 1 });
 
 hyUserSchema.virtual('trafficUsedGB').get(function() {
     return ((this.traffic.tx + this.traffic.rx) / (1024 * 1024 * 1024)).toFixed(2);

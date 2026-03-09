@@ -47,6 +47,7 @@
     "ejs": "^3.1.9",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
     "express-session": "^1.17.3",
     "greenlock-manager-fs": "^3.0.1",
     "greenlock-store-fs": "^3.2.2",
