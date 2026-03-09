@@ -76,6 +76,10 @@ const hyNodeSchema = new mongoose.Schema({
     port: { type: Number, default: 443 },
     portRange: { type: String, default: '20000-50000' },
     portConfigs: { type: [portConfigSchema], default: [] },
+    obfs: {
+        type: { type: String, enum: ['', 'salamander'], default: '' },
+        password: { type: String, default: '' },
+    },
     statsPort: { type: Number, default: 9999 },
     statsSecret: { type: String, default: '' },
 

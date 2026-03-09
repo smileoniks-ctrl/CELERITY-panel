@@ -321,6 +321,30 @@
             </div>
             
             <div class="form-section">
+                <h3>Obfuscation (obfs)</h3>
+                <small class="section-hint">Salamander скрывает QUIC-трафик от DPI. Включайте только если оператор блокирует Hysteria без обфускации — на мобильных сетях может работать хуже.</small>
+                <div class="form-row" style="margin-top:12px;">
+                    <div class="form-group">
+                        <label for="obfsType">Тип обфускации</label>
+                        <select id="obfsType" name="obfs.type" onchange="toggleObfsPassword()">
+                            <option value="" <%= !node?.obfs?.type ? 'selected' : '' %>>Отключено</option>
+                            <option value="salamander" <%= node?.obfs?.type === 'salamander' ? 'selected' : '' %>>Salamander</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="obfsPasswordGroup" style="<%= node?.obfs?.type === 'salamander' ? '' : 'display:none' %>">
+                        <label for="obfsPassword">Пароль obfs</label>
+                        <div class="input-with-button">
+                            <input type="text" id="obfsPassword" name="obfs.password"
+                                   value="<%= node?.obfs?.password || '' %>"
+                                   placeholder="cry_me_a_r1ver">
+                            <button type="button" class="btn btn-sm" onclick="generateObfsPassword()" title="Сгенерировать пароль"><i class="ti ti-dice"></i></button>
+                        </div>
+                        <small>Одинаковый пароль должен быть на сервере и в клиенте</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
                 <h3><%= t('nodes.hysteriaConfig') %></h3>
                 <div class="form-group">
                     <label class="checkbox-label">
@@ -817,6 +841,20 @@ function generateSecret() {
         secret += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     document.getElementById('statsSecret').value = secret;
+}
+
+function toggleObfsPassword() {
+    const type = document.getElementById('obfsType').value;
+    document.getElementById('obfsPasswordGroup').style.display = type === 'salamander' ? '' : 'none';
+}
+
+function generateObfsPassword() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    let pwd = '';
+    for (let i = 0; i < 24; i++) {
+        pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    document.getElementById('obfsPassword').value = pwd;
 }
 
 function toggleCustomConfig() {

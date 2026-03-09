@@ -82,6 +82,13 @@ function generateNodeConfig(node, authUrl, options = {}) {
         }
     }
     
+    if (node.obfs?.password) {
+        config.obfs = {
+            type: 'salamander',
+            salamander: { password: node.obfs.password },
+        };
+    }
+
     if (node.statsPort && node.statsSecret) {
         config.trafficStats = {
             listen: `:${node.statsPort}`,
@@ -207,6 +214,13 @@ function generateNodeConfigACME(node, authUrl, domain, email, options = {}) {
         },
     };
     
+    if (node.obfs?.password) {
+        config.obfs = {
+            type: 'salamander',
+            salamander: { password: node.obfs.password },
+        };
+    }
+
     if (node.statsPort && node.statsSecret) {
         config.trafficStats = {
             listen: `:${node.statsPort}`,

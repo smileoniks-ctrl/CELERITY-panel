@@ -46,7 +46,7 @@ async function getUserByToken(token) {
             { userId: token }
         ]
     })
-        .populate('nodes', 'active name type status onlineUsers maxOnlineUsers rankingCoefficient domain sni ip port portRange portConfigs flag xray')
+        .populate('nodes', 'active name type status onlineUsers maxOnlineUsers rankingCoefficient domain sni ip port portRange portConfigs obfs flag xray')
         .populate('groups', '_id name subscriptionTitle');
     
     return user;
@@ -80,9 +80,9 @@ async function getActiveNodesWithCache() {
     const cached = await cache.getActiveNodes();
     if (cached) return cached;
 
-    // Include type and xray fields needed for VLESS URI generation
+    // Include type, xray, and obfs fields needed for URI generation
     const nodes = await HyNode.find({ active: true })
-        .select('name type flag ip domain sni port portRange portConfigs active status onlineUsers maxOnlineUsers rankingCoefficient groups xray')
+        .select('name type flag ip domain sni port portRange portConfigs obfs active status onlineUsers maxOnlineUsers rankingCoefficient groups xray')
         .lean();
     await cache.setActiveNodes(nodes);
     return nodes;
@@ -179,6 +179,9 @@ function getNodeConfigs(node) {
     // hasCert: true if domain is set (ACME = valid cert)
     const hasCert = !!node.domain;
     
+    const obfs = node.obfs?.type || '';
+    const obfsPassword = node.obfs?.password || '';
+
     if (node.portConfigs && node.portConfigs.length > 0) {
         node.portConfigs.filter(c => c.enabled).forEach(cfg => {
             configs.push({
@@ -188,13 +191,15 @@ function getNodeConfigs(node) {
                 portRange: cfg.portRange || '',
                 sni,
                 hasCert,
+                obfs,
+                obfsPassword,
             });
         });
     } else {
-        configs.push({ name: 'TLS', host, port: node.port || 443, portRange: '', sni, hasCert });
+        configs.push({ name: 'TLS', host, port: node.port || 443, portRange: '', sni, hasCert, obfs, obfsPassword });
         // Порт 80 убран (используется для ACME)
         if (node.portRange) {
-            configs.push({ name: 'Hopping', host, port: node.port || 443, portRange: node.portRange, sni, hasCert });
+            configs.push({ name: 'Hopping', host, port: node.port || 443, portRange: node.portRange, sni, hasCert, obfs, obfsPassword });
         }
     }
     
@@ -214,6 +219,10 @@ function generateURI(user, node, config) {
     // insecure=1 only if no valid certificate (self-signed without domain)
     params.push(`insecure=${config.hasCert ? '0' : '1'}`);
     if (config.portRange) params.push(`mport=${config.portRange}`);
+    if (config.obfs === 'salamander' && config.obfsPassword) {
+        params.push('obfs=salamander');
+        params.push(`obfs-password=${encodeURIComponent(config.obfsPassword)}`);
+    }
     
     const name = `${node.flag || ''} ${node.name} ${config.name}`.trim();
     const uri = `hysteria2://${auth}@${config.host}:${config.port}?${params.join('&')}#${encodeURIComponent(name)}`;
@@ -390,6 +399,9 @@ function generateClashYAML(user, nodes) {
       - h3`;
 
                 if (cfg.portRange) proxy += `\n    ports: ${cfg.portRange}`;
+                if (cfg.obfs === 'salamander' && cfg.obfsPassword) {
+                    proxy += `\n    obfs: salamander\n    obfs-password: "${cfg.obfsPassword}"`;
+                }
                 proxies.push(proxy);
             });
         }
@@ -497,6 +509,10 @@ function generateSingboxJSON(user, nodes) {
                     outbound.server_ports = [cfg.portRange.replace('-', ':')];
                 } else {
                     outbound.server_port = cfg.port;
+                }
+
+                if (cfg.obfs === 'salamander' && cfg.obfsPassword) {
+                    outbound.obfs = { type: 'salamander', password: cfg.obfsPassword };
                 }
 
                 proxyOutbounds.push(outbound);

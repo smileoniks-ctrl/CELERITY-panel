@@ -463,6 +463,10 @@ router.post('/nodes', requireAuth, async (req, res) => {
             active: req.body.active === 'on',
             useCustomConfig: req.body.useCustomConfig === 'on',
             customConfig: req.body.customConfig || '',
+            obfs: {
+                type: req.body['obfs.type'] || '',
+                password: req.body['obfs.password'] || '',
+            },
             ssh: {
                 port: parseInt(req.body['ssh.port']) || 22,
                 username: req.body['ssh.username'] || 'root',
@@ -531,6 +535,8 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             active: req.body.active === 'on',
             useCustomConfig: req.body.useCustomConfig === 'on',
             customConfig: req.body.customConfig || '',
+            'obfs.type': req.body['obfs.type'] || '',
+            'obfs.password': req.body['obfs.password'] || '',
             flag: req.body.flag || '',
             'ssh.port': parseInt(req.body['ssh.port']) || 22,
             'ssh.username': req.body['ssh.username'] || 'root',
