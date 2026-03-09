@@ -2,30 +2,41 @@
     <a href="/panel/nodes" class="btn btn-back"><i class="ti ti-chevron-left"></i> <%= t('common.backToList') %></a>
 </div>
 
+<% if (error) { %>
+<div class="alert alert-error" style="margin-bottom:16px;"><i class="ti ti-alert-circle"></i> <%= error %></div>
+<% } %>
+
 <div class="card">
     <div class="card-header">
         <h2><%= node ? t('nodes.editNode') : t('nodes.newNode') %></h2>
     </div>
     <div class="card-body">
         <form method="POST" action="/panel/nodes<%= node ? '/' + node._id : '' %>" class="form">
-            <div class="form-row">
+
+            <%# ========== 1. Identification ========== %>
+            <div class="form-row-3">
                 <div class="form-group">
                     <label for="name"><%= t('nodes.nodeName') %></label>
-                    <input type="text" id="name" name="name" value="<%= node?.name || '' %>" 
+                    <input type="text" id="name" name="name" value="<%= node?.name || '' %>"
                            placeholder="<%= t('nodes.nodeNamePlaceholder') %>" required>
                     <small><%= t('nodes.nodeNameHint') %></small>
                 </div>
-                
                 <div class="form-group">
                     <label for="ip"><%= t('nodes.ipAddress') %></label>
-                    <input type="text" id="ip" name="ip" value="<%= node?.ip || '' %>" 
+                    <input type="text" id="ip" name="ip" value="<%= node?.ip || '' %>"
                            placeholder="123.45.67.89" required>
+                </div>
+                <div class="form-group">
+                    <label for="flag"><%= t('nodes.flag') %></label>
+                    <input type="text" id="flag" name="flag" value="<%= node?.flag || '' %>"
+                           placeholder="<%= t('nodes.flagPlaceholder') %>">
+                    <small><%= t('nodes.flagHint') %></small>
                 </div>
             </div>
 
-            <%# ========== Protocol Type ========== %>
+            <%# ========== 2. Protocol ========== %>
             <div class="form-section">
-                <h3>Протокол</h3>
+                <h3>Protocol</h3>
                 <div class="proto-switcher">
                     <label class="proto-option <% if ((node?.type || 'hysteria') === 'hysteria') { %>active<% } %>" id="protoHysteriaLabel">
                         <input type="radio" name="type" value="hysteria" id="protoHysteria"
@@ -45,35 +56,14 @@
                     </label>
                 </div>
             </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="flag"><%= t('nodes.flag') %></label>
-                    <input type="text" id="flag" name="flag" value="<%= node?.flag || '' %>" 
-                           placeholder="<%= t('nodes.flagPlaceholder') %>">
-                    <small><%= t('nodes.flagHint') %></small>
-                </div>
-            </div>
-            
-                <div class="form-group hysteria-only" id="domainGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                    <label for="domain"><%= t('nodes.domain') %></label>
-                    <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>" 
-                           placeholder="de.example.com">
-                    <small><%= t('nodes.domainHint') %></small>
-                </div>
 
-                <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                    <label for="sni"><%= t('nodes.sni') || 'SNI (Server Name Indication)' %></label>
-                    <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>" 
-                           placeholder="google.com">
-                    <small><%= t('nodes.sniHint') || 'Custom SNI for client connections (for domain fronting). If empty, domain or IP will be used.' %></small>
-                </div>
-                
-                <div class="form-group">
-                <label><%= t('nodes.groups') %></label>
+            <%# ========== 3. Server Groups ========== %>
+            <div class="form-section">
+                <h3><%= t('nodes.groups') %></h3>
+                <small class="section-hint"><%= t('nodes.groupsHint') %></small>
                 <div class="groups-select">
                     <% if (groups && groups.length > 0) { %>
-                        <% groups.forEach(group => { 
+                        <% groups.forEach(group => {
                             const isSelected = node?.groups?.some(g => g._id?.toString() === group._id.toString() || g.toString() === group._id.toString());
                         %>
                             <label class="checkbox-tag" style="border-color: <%= group.color %>">
@@ -86,65 +76,89 @@
                         <p class="hint"><%= t('nodes.noGroups') %> <a href="/panel/groups"><%= t('nodes.createGroup') %></a></p>
                     <% } %>
                 </div>
-                <small><%= t('nodes.groupsHint') %></small>
             </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="port"><%= t('nodes.port') %></label>
-                    <input type="number" id="port" name="port" value="<%= node?.port || 443 %>" 
-                           placeholder="443">
-                </div>
-                
-                <div class="form-group hysteria-only" id="portRangeGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                    <label for="portRange"><%= t('nodes.portRange') %></label>
-                    <input type="text" id="portRange" name="portRange" value="<%= node?.portRange || '20000-50000' %>" 
-                           placeholder="20000-50000">
-                    <small><%= t('nodes.portRangeHint') %></small>
-                </div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group hysteria-only" id="maxOnlineGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                    <label for="maxOnlineUsers"><%= t('nodes.maxOnlineUsers') %></label>
-                    <input type="number" id="maxOnlineUsers" name="maxOnlineUsers" 
-                           value="<%= node?.maxOnlineUsers || 0 %>" placeholder="0" min="0">
-                    <small><%= t('nodes.maxOnlineHint') %></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="rankingCoefficient"><%= t('nodes.rankingCoefficient') %></label>
-                    <input type="number" id="rankingCoefficient" name="rankingCoefficient" 
-                           value="<%= node?.rankingCoefficient || 1 %>" placeholder="1" min="0" step="0.1">
-                    <small><%= t('nodes.rankingHint') %></small>
-                </div>
-            </div>
-            
-            <%# ========== SSH Settings (needed for BOTH protocols) ========== %>
+
+            <%# ========== 4. Network ========== %>
             <div class="form-section">
-                <h3><%= t('nodes.sshSettings') %></h3>
-                <small class="section-hint"><%= t('nodes.sshSettingsHint') %></small>
+                <h3>Network</h3>
+
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="sshPort"><%= t('nodes.sshPort') %></label>
-                        <input type="number" id="sshPort" name="ssh.port" value="<%= node?.ssh?.port || 22 %>">
+                        <label for="port"><%= t('nodes.port') %></label>
+                        <input type="number" id="port" name="port" value="<%= node?.port || 443 %>"
+                               placeholder="443">
                     </div>
-                    <div class="form-group">
-                        <label for="sshUsername"><%= t('nodes.sshUsername') %></label>
-                        <input type="text" id="sshUsername" name="ssh.username" value="<%= node?.ssh?.username || 'root' %>">
+                    <div class="form-group hysteria-only" id="portRangeGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                        <label for="portRange"><%= t('nodes.portRange') %></label>
+                        <input type="text" id="portRange" name="portRange" value="<%= node?.portRange || '20000-50000' %>"
+                               placeholder="20000-50000">
+                        <small><%= t('nodes.portRangeHint') %></small>
                     </div>
                 </div>
+
                 <div class="form-group">
-                    <label for="sshPassword"><%= t('nodes.sshPassword') %> <%= node?.ssh?.password ? t('nodes.sshPasswordSet') : '' %></label>
-                    <input type="password" id="sshPassword" name="ssh.password" 
-                           placeholder="<%= node?.ssh?.password ? t('nodes.sshPasswordKeep') : t('nodes.sshPasswordPlaceholder') %>">
-                    <small class="hint"><%= t('nodes.sshPasswordEncrypted') %></small>
+                    <label for="domain"><%= t('nodes.domain') %></label>
+                    <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>"
+                           placeholder="de.example.com">
+                    <small><%= t('nodes.domainHintBoth') %></small>
+                </div>
+
+                <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                    <label for="sni"><%= t('nodes.sni') || 'SNI (Server Name Indication)' %></label>
+                    <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>"
+                           placeholder="google.com">
+                    <small><%= t('nodes.sniHint') %></small>
                 </div>
             </div>
 
-            <%# ========== Xray Settings (shown only for xray type) ========== %>
-            <div class="form-section" id="xraySection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
-                <h3><img src="/img/xray.svg" alt="Xray" style="width:20px;height:20px;vertical-align:middle;margin-right:8px;"><%= t('nodes.xraySettings') %></h3>
+            <%# ========== 5. Hysteria: Stats API ========== %>
+            <div class="form-section hysteria-only" id="hysteriaStatsSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                <h3><%= t('nodes.statsPort') %> API</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="statsPort"><%= t('nodes.statsPort') %></label>
+                        <input type="number" id="statsPort" name="statsPort" value="<%= node?.statsPort || 9999 %>">
+                    </div>
+                    <div class="form-group">
+                        <label for="statsSecret"><%= t('nodes.statsSecret') %></label>
+                        <div class="input-with-button">
+                            <input type="text" id="statsSecret" name="statsSecret" value="<%= node?.statsSecret || '' %>"
+                                   placeholder="<%= node ? 'secret123' : 'Auto-generated if empty' %>">
+                            <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret"><i class="ti ti-dice"></i></button>
+                        </div>
+                        <% if (!node) { %><small>Leave empty — a secret will be generated automatically.</small><% } %>
+                    </div>
+                </div>
+            </div>
+
+            <%# ========== 6. Hysteria: Obfuscation ========== %>
+            <div class="form-section hysteria-only" id="hysteriaObfsSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                <h3>Obfuscation (obfs)</h3>
+                <small class="section-hint">Salamander hides QUIC traffic from DPI. Enable only if your operator blocks Hysteria without obfuscation — may perform worse on mobile networks.</small>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="obfsType">Obfuscation type</label>
+                        <select id="obfsType" name="obfs.type" onchange="toggleObfsPassword()">
+                            <option value="" <%= !node?.obfs?.type ? 'selected' : '' %>>Disabled</option>
+                            <option value="salamander" <%= node?.obfs?.type === 'salamander' ? 'selected' : '' %>>Salamander</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="obfsPasswordGroup" style="<%= node?.obfs?.type === 'salamander' ? '' : 'display:none' %>">
+                        <label for="obfsPassword">Obfs password</label>
+                        <div class="input-with-button">
+                            <input type="text" id="obfsPassword" name="obfs.password"
+                                   value="<%= node?.obfs?.password || '' %>"
+                                   placeholder="cry_me_a_r1ver">
+                            <button type="button" class="btn btn-sm" onclick="generateObfsPassword()" title="Generate password"><i class="ti ti-dice"></i></button>
+                        </div>
+                        <small>Same password must be set on both server and client.</small>
+                    </div>
+                </div>
+            </div>
+
+            <%# ========== 7. Xray VLESS Settings ========== %>
+            <div class="form-section" id="xraySection" style="<%= (node?.type || 'hysteria') !== 'xray' ? 'display:none' : '' %>">
+                <h3><img src="/img/xray.svg" alt="Xray" style="width:18px;height:18px;vertical-align:middle;margin-right:8px;"><%= t('nodes.xraySettings') %></h3>
 
                 <div class="form-row">
                     <div class="form-group">
@@ -181,16 +195,17 @@
                         </select>
                         <small><%= t('nodes.xrayFingerprintHint') %></small>
                     </div>
-                    <div class="form-group" id="alpnGroup" style="<%= node?.xray?.security === 'reality' || !node?.xray?.security ? 'display:none' : '' %>">
+                    <div class="form-group" id="alpnGroup" style="<%= node?.xray?.security === 'tls' ? '' : 'display:none' %>">
                         <label for="xrayAlpn"><%= t('nodes.xrayAlpn') %></label>
-                        <input type="text" id="xrayAlpn" name="xray.alpn" 
+                        <input type="text" id="xrayAlpn" name="xray.alpn"
                                value="<%= (node?.xray?.alpn || []).join(', ') %>"
                                placeholder="h2, http/1.1">
                         <small><%= t('nodes.xrayAlpnHint') %></small>
                     </div>
                 </div>
 
-                <div class="form-group">
+                <%# Flow — TCP only %>
+                <div class="form-group" id="xrayFlowGroup" style="<%= node?.xray?.transport && node.xray.transport !== 'tcp' ? 'display:none' : '' %>">
                     <label for="xrayFlow"><%= t('nodes.xrayFlow') %></label>
                     <input type="text" id="xrayFlow" name="xray.flow" value="<%= node?.xray?.flow || 'xtls-rprx-vision' %>" placeholder="xtls-rprx-vision">
                     <small><%= t('nodes.xrayFlowHint') %></small>
@@ -198,19 +213,21 @@
 
                 <%# Reality-specific fields %>
                 <div id="realityFields" style="<%= node?.xray?.security === 'tls' || node?.xray?.security === 'none' ? 'display:none' : '' %>">
-                    <div class="form-group">
-                        <label for="xrayRealityDest"><%= t('nodes.xrayRealityDest') %></label>
-                        <input type="text" id="xrayRealityDest" name="xray.realityDest" 
-                               value="<%= node?.xray?.realityDest || 'www.google.com:443' %>"
-                               placeholder="www.google.com:443">
-                        <small><%= t('nodes.xrayRealityDestHint') %></small>
-                    </div>
-                    <div class="form-group">
-                        <label for="xrayRealitySni"><%= t('nodes.xrayRealitySni') %></label>
-                        <input type="text" id="xrayRealitySni" name="xray.realitySni" 
-                               value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
-                               placeholder="www.google.com">
-                        <small><%= t('nodes.xrayRealitySniHint') %></small>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="xrayRealityDest"><%= t('nodes.xrayRealityDest') %></label>
+                            <input type="text" id="xrayRealityDest" name="xray.realityDest"
+                                   value="<%= node?.xray?.realityDest || 'www.google.com:443' %>"
+                                   placeholder="www.google.com:443">
+                            <small><%= t('nodes.xrayRealityDestHint') %></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="xrayRealitySni"><%= t('nodes.xrayRealitySni') %></label>
+                            <input type="text" id="xrayRealitySni" name="xray.realitySni"
+                                   value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
+                                   placeholder="www.google.com">
+                            <small><%= t('nodes.xrayRealitySniHint') %></small>
+                        </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -223,6 +240,7 @@
                                 <button type="button" class="btn btn-sm" onclick="generateXrayKeys()" title="<%= t('nodes.xrayGenerateKeys') %>"><i class="ti ti-refresh"></i></button>
                                 <% } %>
                             </div>
+                            <% if (!node) { %><small>Generated automatically during auto-setup.</small><% } %>
                         </div>
                         <div class="form-group">
                             <label for="xrayRealityPubKey"><%= t('nodes.xrayPublicKey') %></label>
@@ -245,7 +263,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="xrayWsPath"><%= t('nodes.xrayWsPath') %></label>
-                            <input type="text" id="xrayWsPath" name="xray.wsPath" 
+                            <input type="text" id="xrayWsPath" name="xray.wsPath"
                                    value="<%= node?.xray?.wsPath || '/' %>" placeholder="/">
                         </div>
                         <div class="form-group">
@@ -300,82 +318,81 @@
                 </div>
             </div>
 
-            <%# ========== Hysteria-specific sections (hidden for xray) ========== %>
-            <div id="hysteriaSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+            <%# ========== 8. SSH Access ========== %>
             <div class="form-section">
-                <h3><%= t('nodes.statsPort') %> API</h3>
+                <h3><%= t('nodes.sshSettings') %></h3>
+                <small class="section-hint"><%= t('nodes.sshSettingsHint') %></small>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="statsPort"><%= t('nodes.statsPort') %></label>
-                        <input type="number" id="statsPort" name="statsPort" value="<%= node?.statsPort || 9999 %>">
+                        <label for="sshPort"><%= t('nodes.sshPort') %></label>
+                        <input type="number" id="sshPort" name="ssh.port" value="<%= node?.ssh?.port || 22 %>">
                     </div>
                     <div class="form-group">
-                        <label for="statsSecret"><%= t('nodes.statsSecret') %></label>
-                        <div class="input-with-button">
-                            <input type="text" id="statsSecret" name="statsSecret" value="<%= node?.statsSecret || '' %>" 
-                                   placeholder="secret123">
-                            <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret"><i class="ti ti-dice"></i></button>
-                        </div>
+                        <label for="sshUsername"><%= t('nodes.sshUsername') %></label>
+                        <input type="text" id="sshUsername" name="ssh.username" value="<%= node?.ssh?.username || 'root' %>">
                     </div>
                 </div>
+                <div class="form-group">
+                    <label for="sshPassword"><%= t('nodes.sshPassword') %> <%= node?.ssh?.password ? t('nodes.sshPasswordSet') : '' %></label>
+                    <input type="password" id="sshPassword" name="ssh.password"
+                           placeholder="<%= node?.ssh?.password ? t('nodes.sshPasswordKeep') : t('nodes.sshPasswordPlaceholder') %>">
+                    <small class="hint"><%= t('nodes.sshPasswordEncrypted') %></small>
+                </div>
             </div>
-            
+
+            <%# ========== 9. Limits & Priority ========== %>
             <div class="form-section">
-                <h3>Obfuscation (obfs)</h3>
-                <small class="section-hint">Salamander скрывает QUIC-трафик от DPI. Включайте только если оператор блокирует Hysteria без обфускации — на мобильных сетях может работать хуже.</small>
-                <div class="form-row" style="margin-top:12px;">
-                    <div class="form-group">
-                        <label for="obfsType">Тип обфускации</label>
-                        <select id="obfsType" name="obfs.type" onchange="toggleObfsPassword()">
-                            <option value="" <%= !node?.obfs?.type ? 'selected' : '' %>>Отключено</option>
-                            <option value="salamander" <%= node?.obfs?.type === 'salamander' ? 'selected' : '' %>>Salamander</option>
-                        </select>
+                <h3>Limits &amp; Priority</h3>
+                <div class="form-row">
+                    <div class="form-group hysteria-only" id="maxOnlineGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                        <label for="maxOnlineUsers"><%= t('nodes.maxOnlineUsers') %></label>
+                        <input type="number" id="maxOnlineUsers" name="maxOnlineUsers"
+                               value="<%= node?.maxOnlineUsers || 0 %>" placeholder="0" min="0">
+                        <small><%= t('nodes.maxOnlineHint') %></small>
                     </div>
-                    <div class="form-group" id="obfsPasswordGroup" style="<%= node?.obfs?.type === 'salamander' ? '' : 'display:none' %>">
-                        <label for="obfsPassword">Пароль obfs</label>
-                        <div class="input-with-button">
-                            <input type="text" id="obfsPassword" name="obfs.password"
-                                   value="<%= node?.obfs?.password || '' %>"
-                                   placeholder="cry_me_a_r1ver">
-                            <button type="button" class="btn btn-sm" onclick="generateObfsPassword()" title="Сгенерировать пароль"><i class="ti ti-dice"></i></button>
-                        </div>
-                        <small>Одинаковый пароль должен быть на сервере и в клиенте</small>
+                    <div class="form-group">
+                        <label for="rankingCoefficient"><%= t('nodes.rankingCoefficient') %></label>
+                        <input type="number" id="rankingCoefficient" name="rankingCoefficient"
+                               value="<%= node?.rankingCoefficient || 1 %>" placeholder="1" min="0" step="0.1">
+                        <small><%= t('nodes.rankingHint') %></small>
                     </div>
                 </div>
             </div>
 
-            <div class="form-section">
+            <%# ========== 10. Hysteria: Custom Config ========== %>
+            <div class="form-section hysteria-only" id="hysteriaConfigSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                 <h3><%= t('nodes.hysteriaConfig') %></h3>
                 <div class="form-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" name="useCustomConfig" id="useCustomConfig" 
+                        <input type="checkbox" name="useCustomConfig" id="useCustomConfig"
                                <%= node?.useCustomConfig ? 'checked' : '' %>
                                onchange="toggleCustomConfig()">
                         <%= t('nodes.useCustomConfig') %>
                     </label>
                     <small><%= t('nodes.customConfigHint') %></small>
                 </div>
-                
                 <div id="customConfigSection" style="<%= node?.useCustomConfig ? '' : 'display:none' %>">
                     <div class="form-group">
                         <label for="customConfig"><%= t('nodes.customConfigLabel') %></label>
-                        <textarea id="customConfig" name="customConfig" rows="20" 
+                        <textarea id="customConfig" name="customConfig" rows="20"
                                   class="code-textarea" placeholder="listen: :443&#10;&#10;acme:&#10;  domains:&#10;    - example.com..."><%= node?.customConfig || '' %></textarea>
                         <small><%= t('nodes.customConfigFormat') %></small>
                     </div>
-                    <button type="button" class="btn btn-sm" onclick="generateConfig()"><i class="ti ti-wand"></i> <%= t('nodes.generateConfig') %></button>
-                    <button type="button" class="btn btn-sm" onclick="loadCurrentConfig()"><i class="ti ti-cloud-download"></i> <%= t('nodes.loadCurrentConfig') %></button>
+                    <div style="display:flex;gap:8px;margin-top:4px;">
+                        <button type="button" class="btn btn-sm" onclick="generateConfig()"><i class="ti ti-wand"></i> <%= t('nodes.generateConfig') %></button>
+                        <button type="button" class="btn btn-sm" onclick="loadCurrentConfig()"><i class="ti ti-cloud-download"></i> <%= t('nodes.loadCurrentConfig') %></button>
+                    </div>
                 </div>
             </div>
-            </div><%# end #hysteriaSection %>
-            
-            <div class="form-group">
+
+            <%# ========== Active + Submit ========== %>
+            <div class="form-group" style="margin-top:24px;">
                 <label class="checkbox-label">
                     <input type="checkbox" name="active" <%= node?.active !== false ? 'checked' : '' %>>
                     <%= t('nodes.nodeActive') %>
                 </label>
             </div>
-            
+
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">
                     <%= node ? t('nodes.saveNode') : t('nodes.createNode') %>
@@ -386,6 +403,7 @@
     </div>
 </div>
 
+<%# ========== Xray Node Info (edit only) ========== %>
 <% if (node && node.type === 'xray') { %>
 <div class="card mt-3" id="xrayNodeInfoCard">
     <div class="card-header">
@@ -432,6 +450,7 @@
 </div>
 <% } %>
 
+<%# ========== Management (edit only) ========== %>
 <% if (node) { %>
 <div class="card mt-3">
     <div class="card-header">
@@ -441,7 +460,7 @@
         <% if (!node.ssh?.password && !node.ssh?.privateKey) { %>
         <div class="ssh-warning" id="sshWarning">
             <span class="ssh-warning-icon"><i class="ti ti-alert-triangle"></i></span>
-            <span><%= t('nodes.sshNotConfigured') || 'SSH not configured. Auto-setup and terminal require SSH credentials.' %></span>
+            <span><%= t('nodes.sshNotConfigured') %></span>
         </div>
         <% } %>
         <div class="actions-grid">
@@ -449,11 +468,11 @@
                 <span class="action-icon"><i class="ti ti-settings"></i></span>
                 <span><%= t('nodes.autoSetup') %></span>
             </button>
-            <a href="/panel/nodes/<%= node._id %>/outbounds" class="action-btn" style="text-decoration:none; text-align:center;">
+            <a href="/panel/nodes/<%= node._id %>/outbounds" class="action-btn" style="text-decoration:none;text-align:center;">
                 <span class="action-icon"><i class="ti ti-arrow-up-right"></i></span>
                 <span>Outbounds</span>
                 <% if (node.outbounds && node.outbounds.length > 0) { %>
-                <span class="badge" style="font-size:10px; background: var(--accent); color:#fff; border-radius:10px; padding:1px 6px; margin-left:4px;"><%= node.outbounds.length %></span>
+                <span class="badge" style="font-size:10px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px;"><%= node.outbounds.length %></span>
                 <% } %>
             </a>
             <button class="action-btn" onclick="openTerminal()">
@@ -483,206 +502,11 @@
         </div>
     </div>
 </div>
-
-<style>
-.logs-output {
-    background: #1a1a2e;
-    color: #0f0;
-    padding: 15px;
-    border-radius: 8px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    max-height: 500px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    margin-top: 10px;
-}
-.logs-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.logs-output .error { color: #ff6b6b; }
-.logs-output .success { color: #51cf66; }
-.logs-output .warning { color: #ffd43b; }
-</style>
-
-<script>
-const nodeType = '<%= node?.type || "hysteria" %>';
-const i18n = {
-    autoSetupConfirm: <%- JSON.stringify(t("nodes.autoSetupConfirm")) %>,
-    autoSetupConfirmXray: <%- JSON.stringify(t("nodes.autoSetupConfirmXray")) %>,
-    setupRunning: <%- JSON.stringify(t("nodes.setupRunning")) %>,
-    loadingLogs: <%- JSON.stringify(t("nodes.loadingLogs")) %>,
-    checking: <%- JSON.stringify(t("nodes.checking")) %>,
-    resettingStatus: <%- JSON.stringify(t("nodes.resettingStatus")) %>,
-    statusReset: <%- JSON.stringify(t("nodes.statusReset")) %>,
-    autoSetup: <%- JSON.stringify(t("nodes.autoSetup")) %>,
-    error: <%- JSON.stringify(t("common.error")) %>
-};
-
-function showLogs(logs) {
-    const container = document.getElementById('logsContainer');
-    const output = document.getElementById('logsOutput');
-    container.style.display = 'block';
-    
-    let html = '';
-    if (Array.isArray(logs)) {
-        html = logs.map(line => {
-            if (line.includes('✓') || line.includes('success')) return '<span class="success">' + escapeHtml(line) + '</span>';
-            if (line.includes('❌') || line.includes('Error') || line.includes('[STDERR]')) return '<span class="error">' + escapeHtml(line) + '</span>';
-            if (line.includes('⚠')) return '<span class="warning">' + escapeHtml(line) + '</span>';
-            return escapeHtml(line);
-        }).join('\n');
-    } else {
-        html = escapeHtml(logs);
-    }
-    output.innerHTML = html;
-    output.scrollTop = output.scrollHeight;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function clearLogs() {
-    document.getElementById('logsContainer').style.display = 'none';
-    document.getElementById('logsOutput').innerHTML = '';
-}
-
-async function setupNode() {
-    const confirmMsg = nodeType === 'xray' ? i18n.autoSetupConfirmXray : i18n.autoSetupConfirm;
-    if (!confirm(confirmMsg)) return;
-    
-    const btn = document.getElementById('btnSetup');
-    btn.disabled = true;
-        btn.innerHTML = '<span class="action-icon"><i class="ti ti-loader-2"></i></span><span>...</span>';
-    
-    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.setupRunning + '</div>';
-    
-    try {
-        const res = await fetch('/panel/nodes/<%= node._id %>/setup', {
-            method: 'POST',
-        });
-        const data = await res.json();
-        
-        if (data.logs) {
-            showLogs(data.logs);
-        }
-        
-        if (data.success) {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success"><i class="ti ti-check"></i> ' + data.message + '</div>';
-        } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
-        }
-    } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
-    }
-}
-
-async function getNodeLogs() {
-    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.loadingLogs + '</div>';
-    
-    try {
-        const res = await fetch('/panel/nodes/<%= node._id %>/logs');
-        const data = await res.json();
-        
-        if (data.success) {
-            document.getElementById('setupResult').innerHTML = '';
-            showLogs(data.logs);
-        } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + data.error + '</div>';
-        }
-    } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
-    }
-}
-
-async function checkStatus() {
-    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.checking + '</div>';
-    
-    try {
-        const res = await fetch('/api/nodes/<%= node._id %>/status', {
-            credentials: 'include'
-        });
-        const data = await res.json();
-        
-        const statusColors = { online: 'alert-success', offline: 'alert-warning', error: 'alert-error' };
-        const statusIcons = { online: '<i class="ti ti-check"></i>', offline: '<i class="ti ti-alert-triangle"></i>', error: '<i class="ti ti-x"></i>' };
-        const color = statusColors[data.status] || '';
-        const icon = statusIcons[data.status] || '<i class="ti ti-help"></i>';
-        
-        document.getElementById('setupResult').innerHTML = '<div class="alert ' + color + '">' + icon + ' Status: ' + data.status + '</div>';
-    } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
-    }
-}
-
-function openTerminal() {
-    window.open('/panel/nodes/<%= node._id %>/terminal', '_blank', 'width=1000,height=600');
-}
-
-async function resetStatus() {
-    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.resettingStatus + '</div>';
-    
-    try {
-        const res = await fetch('/api/nodes/<%= node._id %>/reset-status', {
-            method: 'POST',
-            credentials: 'include'
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success">' + i18n.statusReset + '</div>';
-        } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
-        }
-    } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
-    }
-}
-
-<% if (node && node.type === 'xray') { %>
-async function refreshNodeInfo() {
-    const btn = document.getElementById('btnRefreshInfo');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'; }
-    const errEl = document.getElementById('nodeInfoError');
-    if (errEl) errEl.style.display = 'none';
-
-    try {
-        const res = await fetch('/api/nodes/<%= node._id %>/agent-info', { credentials: 'include' });
-        const data = await res.json();
-
-        if (data.xray_version) document.getElementById('infoXrayVersion').textContent = data.xray_version;
-        if (data.agent_version) document.getElementById('infoAgentVersion').textContent = data.agent_version;
-        if (data.users_count !== undefined) document.getElementById('infoUsersCount').textContent = data.users_count;
-
-        const statusEl = document.getElementById('infoAgentStatus');
-        if (statusEl) {
-            const online = res.ok && !data.error;
-            statusEl.innerHTML = `<span class="badge badge-${online ? 'success' : 'danger'}">${online ? 'online' : 'offline'}</span>`;
-        }
-
-        document.getElementById('infoLastSeen').textContent = new Date().toLocaleString();
-    } catch (e) {
-        if (errEl) {
-            errEl.innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + e.message + '</div>';
-            errEl.style.display = 'block';
-        }
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i>'; }
-    }
-}
 <% } %>
-</script>
 
-<div class="card mt-3 hysteria-only" id="configPreviewCard" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+<%# ========== Config Preview (Hysteria, edit only) ========== %>
+<% if (node && node.type !== 'xray') { %>
+<div class="card mt-3">
     <div class="card-header">
         <h2><%= t('nodes.nodeConfig') %></h2>
     </div>
@@ -723,7 +547,6 @@ acl:
 <% } %>
 
 <style>
-/* Protocol switcher */
 .proto-switcher {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -770,13 +593,9 @@ acl:
     gap: 8px;
     align-items: center;
 }
-.input-with-button input {
-    flex: 1;
-}
-.input-with-button .btn {
-    white-space: nowrap;
-    flex-shrink: 0;
-}
+.input-with-button input { flex: 1; }
+.input-with-button .btn { white-space: nowrap; flex-shrink: 0; }
+
 .ssh-warning {
     background: var(--warning-bg);
     border: 1px solid var(--warning);
@@ -788,9 +607,8 @@ acl:
     align-items: center;
     gap: 10px;
 }
-.ssh-warning-icon {
-    font-size: 20px;
-}
+.ssh-warning-icon { font-size: 20px; }
+
 .node-info-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -816,9 +634,46 @@ acl:
     font-weight: 600;
     color: var(--text-primary);
 }
+.logs-output {
+    background: #1a1a2e;
+    color: #0f0;
+    padding: 15px;
+    border-radius: 8px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 10px;
+}
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.logs-output .error { color: #ff6b6b; }
+.logs-output .success { color: #51cf66; }
+.logs-output .warning { color: #ffd43b; }
+
+@media (max-width: 640px) {
+    .form-row-3 { grid-template-columns: 1fr; }
+}
 </style>
 
 <script>
+const nodeType = '<%= node?.type || "hysteria" %>';
+const i18n = {
+    autoSetupConfirm: <%- JSON.stringify(t("nodes.autoSetupConfirm")) %>,
+    autoSetupConfirmXray: <%- JSON.stringify(t("nodes.autoSetupConfirmXray")) %>,
+    setupRunning: <%- JSON.stringify(t("nodes.setupRunning")) %>,
+    loadingLogs: <%- JSON.stringify(t("nodes.loadingLogs")) %>,
+    checking: <%- JSON.stringify(t("nodes.checking")) %>,
+    resettingStatus: <%- JSON.stringify(t("nodes.resettingStatus")) %>,
+    statusReset: <%- JSON.stringify(t("nodes.statusReset")) %>,
+    autoSetup: <%- JSON.stringify(t("nodes.autoSetup")) %>,
+    error: <%- JSON.stringify(t("common.error")) %>
+};
 const i18nConfig = {
     copied: <%- JSON.stringify(t("common.copied")) %>,
     loadConfigConfirm: <%- JSON.stringify(t("nodes.loadConfigConfirm")) %>,
@@ -828,33 +683,49 @@ const i18nConfig = {
     baseUrl: <%- JSON.stringify(baseUrl) %>
 };
 
-function copyConfig() {
-    const code = document.querySelector('.code-block code').textContent;
-    navigator.clipboard.writeText(code);
-    alert(i18nConfig.copied);
+// ==================== Protocol switcher ====================
+
+function switchProto(proto) {
+    const xraySection = document.getElementById('xraySection');
+    const labelHysteria = document.getElementById('protoHysteriaLabel');
+    const labelXray = document.getElementById('protoXrayLabel');
+    const hysteriaOnlyEls = document.querySelectorAll('.hysteria-only');
+
+    if (proto === 'xray') {
+        xraySection.style.display = '';
+        labelXray.classList.add('active');
+        labelHysteria.classList.remove('active');
+        hysteriaOnlyEls.forEach(el => el.style.display = 'none');
+    } else {
+        xraySection.style.display = 'none';
+        labelHysteria.classList.add('active');
+        labelXray.classList.remove('active');
+        hysteriaOnlyEls.forEach(el => el.style.display = '');
+    }
 }
 
-function generateSecret() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let secret = '';
-    for (let i = 0; i < 32; i++) {
-        secret += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    document.getElementById('statsSecret').value = secret;
+// ==================== Xray UI ====================
+
+function updateXrayTransportUI() {
+    const transport = document.getElementById('xrayTransport').value;
+    document.getElementById('wsFields').style.display = transport === 'ws' ? '' : 'none';
+    document.getElementById('grpcFields').style.display = transport === 'grpc' ? '' : 'none';
+    document.getElementById('xhttpFields').style.display = transport === 'xhttp' ? '' : 'none';
+    const flowGroup = document.getElementById('xrayFlowGroup');
+    if (flowGroup) flowGroup.style.display = transport === 'tcp' ? '' : 'none';
 }
+
+function updateXraySecurityUI() {
+    const security = document.getElementById('xraySecurity').value;
+    document.getElementById('realityFields').style.display = security === 'reality' ? '' : 'none';
+    document.getElementById('alpnGroup').style.display = security === 'tls' ? '' : 'none';
+}
+
+// ==================== Hysteria helpers ====================
 
 function toggleObfsPassword() {
     const type = document.getElementById('obfsType').value;
     document.getElementById('obfsPasswordGroup').style.display = type === 'salamander' ? '' : 'none';
-}
-
-function generateObfsPassword() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    let pwd = '';
-    for (let i = 0; i < 24; i++) {
-        pwd += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    document.getElementById('obfsPassword').value = pwd;
 }
 
 function toggleCustomConfig() {
@@ -862,28 +733,34 @@ function toggleCustomConfig() {
     document.getElementById('customConfigSection').style.display = checked ? 'block' : 'none';
 }
 
+function generateSecret() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let secret = '';
+    for (let i = 0; i < 32; i++) secret += chars.charAt(Math.floor(Math.random() * chars.length));
+    document.getElementById('statsSecret').value = secret;
+}
+
+function generateObfsPassword() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    let pwd = '';
+    for (let i = 0; i < 24; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    document.getElementById('obfsPassword').value = pwd;
+}
+
 function generateConfig() {
     const name = document.getElementById('name').value || 'Node';
     const domain = document.getElementById('domain').value;
     const port = document.getElementById('port').value || 443;
-    const statsPort = document.getElementById('statsPort').value || 9999;
-    const statsSecret = document.getElementById('statsSecret').value || 'secret';
-    const portRange = document.getElementById('portRange').value || '20000-50000';
-    
+    const statsPort = document.getElementById('statsPort')?.value || 9999;
+    const statsSecret = document.getElementById('statsSecret')?.value || 'secret';
+
     let tlsSection;
     if (domain) {
-        tlsSection = `acme:
-  domains:
-    - ${domain}
-  email: admin@${domain}
-  dir: /etc/hysteria/acme
-  listenHost: 0.0.0.0`;
+        tlsSection = `acme:\n  domains:\n    - ${domain}\n  email: admin@${domain}\n  dir: /etc/hysteria/acme\n  listenHost: 0.0.0.0`;
     } else {
-        tlsSection = `tls:
-  cert: /etc/hysteria/cert.pem
-  key: /etc/hysteria/key.pem`;
+        tlsSection = `tls:\n  cert: /etc/hysteria/cert.pem\n  key: /etc/hysteria/key.pem`;
     }
-    
+
     const config = `# Hysteria 2 Config - ${name}
 # Generated: ${new Date().toISOString()}
 
@@ -912,11 +789,6 @@ auth:
     url: ${i18nConfig.baseUrl}/api/auth
     insecure: false
 
-# bandwidth:
-#   up: 100 mbps
-#   down: 100 mbps
-# ignoreClientBandwidth: true
-
 masquerade:
   type: string
   string:
@@ -934,18 +806,15 @@ trafficStats:
   listen: :${statsPort}
   secret: ${statsSecret}
 `;
-    
     document.getElementById('customConfig').value = config;
 }
 
 async function loadCurrentConfig() {
     <% if (node) { %>
     if (!confirm(i18nConfig.loadConfigConfirm)) return;
-    
     try {
         const res = await fetch('/panel/nodes/<%= node._id %>/get-config');
         const data = await res.json();
-        
         if (data.success) {
             document.getElementById('customConfig').value = data.config;
             alert(i18nConfig.configLoaded);
@@ -960,62 +829,161 @@ async function loadCurrentConfig() {
     <% } %>
 }
 
-// ==================== XRAY UI ====================
+function copyConfig() {
+    const code = document.querySelector('.code-block code').textContent;
+    navigator.clipboard.writeText(code);
+    alert(i18nConfig.copied);
+}
 
-function switchProto(proto) {
-    const xraySection = document.getElementById('xraySection');
-    const hysteriaSection = document.getElementById('hysteriaSection');
-    const labelHysteria = document.getElementById('protoHysteriaLabel');
-    const labelXray = document.getElementById('protoXrayLabel');
-    const hysteriaOnlyFields = document.querySelectorAll('.hysteria-only');
+// ==================== Management actions ====================
 
-    if (proto === 'xray') {
-        xraySection.style.display = '';
-        hysteriaSection.style.display = 'none';
-        labelXray.classList.add('active');
-        labelHysteria.classList.remove('active');
-        hysteriaOnlyFields.forEach(el => el.style.display = 'none');
+<% if (node) { %>
+function showLogs(logs) {
+    const container = document.getElementById('logsContainer');
+    const output = document.getElementById('logsOutput');
+    container.style.display = 'block';
+    let html = '';
+    if (Array.isArray(logs)) {
+        html = logs.map(line => {
+            if (line.includes('✓') || line.includes('success')) return '<span class="success">' + escapeHtml(line) + '</span>';
+            if (line.includes('❌') || line.includes('Error') || line.includes('[STDERR]')) return '<span class="error">' + escapeHtml(line) + '</span>';
+            if (line.includes('⚠')) return '<span class="warning">' + escapeHtml(line) + '</span>';
+            return escapeHtml(line);
+        }).join('\n');
     } else {
-        xraySection.style.display = 'none';
-        hysteriaSection.style.display = '';
-        labelHysteria.classList.add('active');
-        labelXray.classList.remove('active');
-        hysteriaOnlyFields.forEach(el => el.style.display = '');
+        html = escapeHtml(String(logs));
+    }
+    output.innerHTML = html;
+    output.scrollTop = output.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function clearLogs() {
+    document.getElementById('logsContainer').style.display = 'none';
+    document.getElementById('logsOutput').innerHTML = '';
+}
+
+async function setupNode() {
+    const confirmMsg = nodeType === 'xray' ? i18n.autoSetupConfirmXray : i18n.autoSetupConfirm;
+    if (!confirm(confirmMsg)) return;
+    const btn = document.getElementById('btnSetup');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="action-icon"><i class="ti ti-loader-2"></i></span><span>...</span>';
+    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.setupRunning + '</div>';
+    try {
+        const res = await fetch('/panel/nodes/<%= node._id %>/setup', { method: 'POST' });
+        const data = await res.json();
+        if (data.logs) showLogs(data.logs);
+        if (data.success) {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success"><i class="ti ti-check"></i> ' + data.message + '</div>';
+        } else {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
     }
 }
 
-function updateXrayTransportUI() {
-    const transport = document.getElementById('xrayTransport').value;
-    document.getElementById('wsFields').style.display = transport === 'ws' ? '' : 'none';
-    document.getElementById('grpcFields').style.display = transport === 'grpc' ? '' : 'none';
-    document.getElementById('xhttpFields').style.display = transport === 'xhttp' ? '' : 'none';
-    // Flow only makes sense for TCP
-    const flowGroup = document.getElementById('xrayFlow').closest('.form-group');
-    if (flowGroup) flowGroup.style.display = transport === 'tcp' ? '' : 'none';
+async function getNodeLogs() {
+    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.loadingLogs + '</div>';
+    try {
+        const res = await fetch('/panel/nodes/<%= node._id %>/logs');
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('setupResult').innerHTML = '';
+            showLogs(data.logs);
+        } else {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + data.error + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
+    }
 }
 
-function updateXraySecurityUI() {
-    const security = document.getElementById('xraySecurity').value;
-    document.getElementById('realityFields').style.display = security === 'reality' ? '' : 'none';
-    // ALPN only for TLS (not Reality)
-    document.getElementById('alpnGroup').style.display = security === 'tls' ? '' : 'none';
+async function checkStatus() {
+    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.checking + '</div>';
+    try {
+        const res = await fetch('/api/nodes/<%= node._id %>/status', { credentials: 'include' });
+        const data = await res.json();
+        const statusColors = { online: 'alert-success', offline: 'alert-warning', error: 'alert-error' };
+        const statusIcons = { online: '<i class="ti ti-check"></i>', offline: '<i class="ti ti-alert-triangle"></i>', error: '<i class="ti ti-x"></i>' };
+        const color = statusColors[data.status] || '';
+        const icon = statusIcons[data.status] || '<i class="ti ti-help"></i>';
+        document.getElementById('setupResult').innerHTML = '<div class="alert ' + color + '">' + icon + ' Status: ' + data.status + '</div>';
+    } catch (err) {
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
+    }
 }
+
+function openTerminal() {
+    window.open('/panel/nodes/<%= node._id %>/terminal', '_blank', 'width=1000,height=600');
+}
+
+async function resetStatus() {
+    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.resettingStatus + '</div>';
+    try {
+        const res = await fetch('/api/nodes/<%= node._id %>/reset-status', { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success">' + i18n.statusReset + '</div>';
+        } else {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
+    }
+}
+<% } %>
+
+<% if (node && node.type === 'xray') { %>
+async function refreshNodeInfo() {
+    const btn = document.getElementById('btnRefreshInfo');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'; }
+    const errEl = document.getElementById('nodeInfoError');
+    if (errEl) errEl.style.display = 'none';
+    try {
+        const res = await fetch('/api/nodes/<%= node._id %>/agent-info', { credentials: 'include' });
+        const data = await res.json();
+        if (data.xray_version) document.getElementById('infoXrayVersion').textContent = data.xray_version;
+        if (data.agent_version) document.getElementById('infoAgentVersion').textContent = data.agent_version;
+        if (data.users_count !== undefined) document.getElementById('infoUsersCount').textContent = data.users_count;
+        const statusEl = document.getElementById('infoAgentStatus');
+        if (statusEl) {
+            const online = res.ok && !data.error;
+            statusEl.innerHTML = `<span class="badge badge-${online ? 'success' : 'danger'}">${online ? 'online' : 'offline'}</span>`;
+        }
+        document.getElementById('infoLastSeen').textContent = new Date().toLocaleString();
+    } catch (e) {
+        if (errEl) {
+            errEl.innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + e.message + '</div>';
+            errEl.style.display = 'block';
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i>'; }
+    }
+}
+<% } %>
 
 <% if (node && node.type === 'xray') { %>
 async function generateXrayKeys() {
     if (!confirm('Generate new x25519 Reality keys via SSH? This will overwrite existing keys.')) return;
-
     const btn = event.target;
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader-2"></i>';
-
     try {
         const res = await fetch('/api/nodes/<%= node._id %>/generate-xray-keys', {
             method: 'POST',
             credentials: 'include',
         });
         const data = await res.json();
-
         if (data.success) {
             document.getElementById('xrayRealityPrivKey').value = data.privateKey;
             document.getElementById('xrayRealityPubKey').value = data.publicKey;
@@ -1032,17 +1000,7 @@ async function generateXrayKeys() {
 }
 <% } %>
 
-// Preprocess comma-separated Xray array fields on form submit
-document.querySelector('form').addEventListener('submit', function(e) {
-    const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
-    if (proto !== 'xray') return;
-
-    // Convert comma-separated SNI string to JSON array via hidden input trick:
-    // We set the value back as comma-separated; server will split it.
-    // (The panel form handler needs to handle this - done in nodes panel route)
-});
-
-// Init UI state on page load
+// Init UI on page load
 (function() {
     const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
     switchProto(proto);

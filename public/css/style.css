@@ -1291,6 +1291,12 @@ html {
     gap: 16px;
 }
 
+.form-row-3 {
+    display: grid;
+    grid-template-columns: 2fr 2fr 1fr;
+    gap: 16px;
+}
+
 .form-section {
     margin-top: 32px;
     padding-top: 32px;
@@ -1300,8 +1306,16 @@ html {
 .form-section h3 {
     font-size: 15px;
     font-weight: 600;
-    margin-bottom: 20px;
+    margin-bottom: 8px;
     color: var(--text-secondary);
+}
+
+.section-hint {
+    display: block;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 20px;
+    line-height: 1.5;
 }
 
 .form-actions {
@@ -1933,6 +1947,7 @@ html {
     
     /* Forms */
     .form-row,
+    .form-row-3,
     .detail-grid {
         grid-template-columns: 1fr;
     }

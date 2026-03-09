@@ -420,35 +420,52 @@ router.get('/nodes', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/add - Форма добавления ноды
+// GET /panel/nodes/add - Node creation form
 router.get('/nodes/add', requireAuth, async (req, res) => {
     const groups = await getActiveGroups();
     render(res, 'node-form', {
-        title: 'Новая нода',
+        title: 'New Node',
         page: 'nodes',
         node: null,
         groups,
+        error: req.query.error || null,
     });
 });
 
-// POST /panel/nodes - Создание ноды
+// POST /panel/nodes - Create node
 router.post('/nodes', requireAuth, async (req, res) => {
     try {
-        // Шифруем SSH пароль
+        const { name, ip } = req.body;
+
+        // Server-side validation
+        if (!name || !ip) {
+            return res.redirect(`/panel/nodes/add?error=${encodeURIComponent('Name and IP address are required')}`);
+        }
+
+        // Check IP uniqueness
+        const existing = await HyNode.findOne({ ip });
+        if (existing) {
+            return res.redirect(`/panel/nodes/add?error=${encodeURIComponent('A node with this IP already exists')}`);
+        }
+
+        // Encrypt SSH password
         const sshPassword = req.body['ssh.password'] || '';
         const encryptedPassword = sshPassword ? cryptoService.encrypt(sshPassword) : '';
-        
-        // Группы (массив ID)
+
+        // Groups (array of IDs)
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
-        
+
         const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
 
+        // Auto-generate statsSecret if not provided (required for Hysteria stats API)
+        const statsSecret = req.body.statsSecret || cryptoService.generateNodeSecret();
+
         const nodeData = {
-            name: req.body.name,
-            ip: req.body.ip,
+            name,
+            ip,
             type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
@@ -456,7 +473,7 @@ router.post('/nodes', requireAuth, async (req, res) => {
             port: parseInt(req.body.port) || 443,
             portRange: req.body.portRange || '20000-50000',
             statsPort: parseInt(req.body.statsPort) || 9999,
-            statsSecret: req.body.statsSecret || '',
+            statsSecret,
             groups,
             maxOnlineUsers: parseInt(req.body.maxOnlineUsers) || 0,
             rankingCoefficient: parseFloat(req.body.rankingCoefficient) || 1,
@@ -479,56 +496,65 @@ router.post('/nodes', requireAuth, async (req, res) => {
         }
 
         const newNode = await HyNode.create(nodeData);
+        logger.info(`[Panel] Created ${nodeType} node ${name} (${ip})`);
         res.redirect(`/panel/nodes/${newNode._id}`);
     } catch (error) {
-        res.status(500).send('Error: ' + error.message);
+        logger.error(`[Panel] Create node error: ${error.message}`);
+        res.redirect(`/panel/nodes/add?error=${encodeURIComponent(error.message)}`);
     }
 });
 
-// GET /panel/nodes/:id - Редактирование ноды
+// GET /panel/nodes/:id - Edit node form
 router.get('/nodes/:id', requireAuth, async (req, res) => {
     try {
         const [node, groups] = await Promise.all([
             HyNode.findById(req.params.id).populate('groups', 'name color'),
             getActiveGroups(),
         ]);
-        
+
         if (!node) {
             return res.redirect('/panel/nodes');
         }
-        
+
         render(res, 'node-form', {
-            title: `Редактирование: ${node.name}`,
+            title: `Edit: ${node.name}`,
             page: 'nodes',
             node,
             groups,
+            error: req.query.error || null,
         });
     } catch (error) {
         res.status(500).send('Error: ' + error.message);
     }
 });
 
-// POST /panel/nodes/:id - Обновление ноды
+// POST /panel/nodes/:id - Update node
 router.post('/nodes/:id', requireAuth, async (req, res) => {
+    const nodeId = req.params.id;
     try {
-        // Группы (массив ID)
+        const { name, ip } = req.body;
+
+        if (!name || !ip) {
+            return res.redirect(`/panel/nodes/${nodeId}?error=${encodeURIComponent('Name and IP address are required')}`);
+        }
+
+        // Groups (array of IDs)
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
-        
+
         const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
 
         const updates = {
-            name: req.body.name,
-            ip: req.body.ip,
+            name,
+            ip,
             type: nodeType,
             domain: req.body.domain || '',
             sni: req.body.sni || '',
             port: parseInt(req.body.port) || 443,
             portRange: req.body.portRange || '20000-50000',
             statsPort: parseInt(req.body.statsPort) || 9999,
-            statsSecret: req.body.statsSecret || '',
             groups,
             maxOnlineUsers: parseInt(req.body.maxOnlineUsers) || 0,
             rankingCoefficient: parseFloat(req.body.rankingCoefficient) || 1,
@@ -542,19 +568,25 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             'ssh.username': req.body['ssh.username'] || 'root',
         };
 
+        // Only update statsSecret if provided (preserve existing if empty)
+        if (req.body.statsSecret) {
+            updates.statsSecret = req.body.statsSecret;
+        }
+
         if (nodeType === 'xray') {
             updates.xray = parseXrayFormFields(req.body);
         }
-        
-        // Обновляем пароль только если указан (шифруем)
+
+        // Only update password if provided (encrypt it)
         if (req.body['ssh.password']) {
             updates['ssh.password'] = cryptoService.encrypt(req.body['ssh.password']);
         }
-        
-        await HyNode.findByIdAndUpdate(req.params.id, { $set: updates });
+
+        await HyNode.findByIdAndUpdate(nodeId, { $set: updates });
         res.redirect('/panel/nodes');
     } catch (error) {
-        res.status(500).send('Error: ' + error.message);
+        logger.error(`[Panel] Update node error: ${error.message}`);
+        res.redirect(`/panel/nodes/${nodeId}?error=${encodeURIComponent(error.message)}`);
     }
 });
 
