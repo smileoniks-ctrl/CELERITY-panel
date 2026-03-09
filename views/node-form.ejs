@@ -493,6 +493,10 @@
             </button>
         </div>
         <div id="setupResult" class="mt-2"></div>
+        <div id="setupProgress" style="display:none;margin-top:12px;">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text" id="progressText"></div>
+        </div>
         <div id="logsContainer" class="mt-2" style="display:none;">
             <div class="logs-header">
                 <strong><%= t('nodes.executionLogs') %></strong>
@@ -655,6 +659,24 @@ acl:
 .logs-output .error { color: #ff6b6b; }
 .logs-output .success { color: #51cf66; }
 .logs-output .warning { color: #ffd43b; }
+
+.progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.4s ease;
+    width: 0;
+}
+.progress-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
 
 @media (max-width: 640px) {
     .form-row-3 { grid-template-columns: 1fr; }
@@ -866,30 +888,108 @@ function escapeHtml(text) {
 function clearLogs() {
     document.getElementById('logsContainer').style.display = 'none';
     document.getElementById('logsOutput').innerHTML = '';
+    document.getElementById('setupProgress').style.display = 'none';
+    document.getElementById('progressFill').style.width = '0';
+    document.getElementById('progressText').textContent = '';
 }
 
-async function setupNode() {
+function appendLogLine(msg) {
+    const output = document.getElementById('logsOutput');
+    const line = escapeHtml(msg);
+    const colored = line.includes('✓') ? '<span class="success">' + line + '</span>'
+                  : (line.includes('❌') || line.toLowerCase().includes('error') || line.includes('[STDERR]'))
+                    ? '<span class="error">' + line + '</span>'
+                  : line.includes('⚠') ? '<span class="warning">' + line + '</span>'
+                  : line;
+    output.innerHTML += colored + '\n';
+    output.scrollTop = output.scrollHeight;
+}
+
+function updateProgress(step, total) {
+    const pct = total > 0 ? Math.min(Math.round(step / total * 100), 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent = 'Step ' + step + ' / ' + total + ' (' + pct + '%)';
+}
+
+function setupNodeFallback(btn) {
+    // Fallback to regular fetch if SSE is unavailable
+    fetch('/panel/nodes/<%= node._id %>/setup', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.logs) showLogs(data.logs);
+            const cls = data.success ? 'alert-success' : 'alert-error';
+            const icon = data.success ? '<i class="ti ti-check"></i>' : '<i class="ti ti-x"></i>';
+            const msg = data.success ? data.message : (data.error || i18n.error);
+            document.getElementById('setupResult').innerHTML = '<div class="alert ' + cls + '">' + icon + ' ' + msg + '</div>';
+        })
+        .catch(err => {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
+        });
+}
+
+function setupNode() {
     const confirmMsg = nodeType === 'xray' ? i18n.autoSetupConfirmXray : i18n.autoSetupConfirm;
     if (!confirm(confirmMsg)) return;
+
     const btn = document.getElementById('btnSetup');
     btn.disabled = true;
     btn.innerHTML = '<span class="action-icon"><i class="ti ti-loader-2"></i></span><span>...</span>';
-    document.getElementById('setupResult').innerHTML = '<div class="alert">' + i18n.setupRunning + '</div>';
-    try {
-        const res = await fetch('/panel/nodes/<%= node._id %>/setup', { method: 'POST' });
-        const data = await res.json();
-        if (data.logs) showLogs(data.logs);
-        if (data.success) {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success"><i class="ti ti-check"></i> ' + data.message + '</div>';
-        } else {
-            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
-        }
-    } catch (err) {
-        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + err.message + '</div>';
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
+
+    document.getElementById('setupResult').innerHTML = '';
+    document.getElementById('setupProgress').style.display = 'block';
+    document.getElementById('progressFill').style.width = '0';
+    document.getElementById('progressText').textContent = 'Connecting...';
+    document.getElementById('logsContainer').style.display = 'block';
+    document.getElementById('logsOutput').innerHTML = '';
+
+    // Use SSE for real-time streaming
+    if (!window.EventSource) {
+        setupNodeFallback(btn);
+        return;
     }
+
+    const es = new EventSource('/panel/nodes/<%= node._id %>/setup-stream');
+    let settled = false;
+
+    es.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); } catch { return; }
+
+        if (data.type === 'log') {
+            appendLogLine(data.message);
+            if (data.step !== undefined && data.total) {
+                updateProgress(data.step, data.total);
+            }
+        } else if (data.type === 'done') {
+            settled = true;
+            es.close();
+            updateProgress(data.total || 100, data.total || 100); // fill to 100%
+            document.getElementById('setupResult').innerHTML =
+                '<div class="alert alert-success"><i class="ti ti-check"></i> ' + data.message + '</div>';
+            btn.disabled = false;
+            btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
+        } else if (data.type === 'error') {
+            settled = true;
+            es.close();
+            document.getElementById('setupResult').innerHTML =
+                '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
+            btn.disabled = false;
+            btn.innerHTML = '<span class="action-icon"><i class="ti ti-settings"></i></span><span>' + i18n.autoSetup + '</span>';
+        }
+    };
+
+    es.onerror = () => {
+        if (!settled) {
+            settled = true;
+            es.close();
+            // SSE failed — fall back to regular fetch
+            setupNodeFallback(btn);
+        }
+    };
 }
 
 async function getNodeLogs() {

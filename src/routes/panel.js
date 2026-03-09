@@ -590,6 +590,84 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
     }
 });
 
+// GET /panel/nodes/:id/setup-stream - Real-time SSE setup log stream
+router.get('/nodes/:id/setup-stream', requireAuth, async (req, res) => {
+    const node = await HyNode.findById(req.params.id);
+
+    if (!node) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'Node not found' })}\n\n`);
+        return res.end();
+    }
+
+    if (!node.ssh?.password && !node.ssh?.privateKey) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'SSH credentials not configured' })}\n\n`);
+        return res.end();
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx/Caddy buffering
+    res.flushHeaders();
+
+    const send = (data) => {
+        if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Keep-alive ping every 15s to prevent proxy timeouts
+    const keepAlive = setInterval(() => {
+        if (!res.writableEnded) res.write(': ping\n\n');
+    }, 15000);
+
+    const onLog = ({ message, step, total, raw }) => {
+        if (raw) {
+            // Stream raw shell output line by line
+            String(message).split('\n').forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed) send({ type: 'log', message: trimmed, step, total });
+            });
+        } else {
+            send({ type: 'log', message, step, total });
+        }
+    };
+
+    try {
+        logger.info(`[Panel] SSE setup stream started for node ${node.name}`);
+
+        let result;
+        if (node.type === 'xray') {
+            result = await nodeSetup.setupXrayNodeWithAgent(node, { restartService: true, onLog });
+        } else {
+            result = await nodeSetup.setupNode(node, {
+                installHysteria: true,
+                setupPortHopping: true,
+                restartService: true,
+                onLog,
+            });
+        }
+
+        if (result.success) {
+            const updateFields = { status: 'online', lastSync: new Date(), lastError: '' };
+            if (node.type !== 'xray') updateFields.useTlsFiles = result.useTlsFiles;
+            await HyNode.findByIdAndUpdate(req.params.id, { $set: updateFields });
+            send({ type: 'done', message: 'Node configured successfully' });
+        } else {
+            await HyNode.findByIdAndUpdate(req.params.id, {
+                $set: { status: 'error', lastError: result.error },
+            });
+            send({ type: 'error', error: result.error });
+        }
+    } catch (error) {
+        logger.error(`[Panel] SSE setup stream error: ${error.message}`);
+        send({ type: 'error', error: error.message });
+    } finally {
+        clearInterval(keepAlive);
+        res.end();
+    }
+});
+
 // POST /panel/nodes/:id/setup - Автонастройка ноды через SSH
 router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
     try {

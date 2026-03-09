@@ -275,72 +275,81 @@ function uploadFile(conn, content, remotePath) {
     });
 }
 
+// Total steps for Hysteria setup (used for progress reporting)
+const HYSTERIA_TOTAL_STEPS = 6;
+
 async function setupNode(node, options = {}) {
-    const { installHysteria = true, setupPortHopping = true, restartService = true } = options;
-    
+    const { installHysteria = true, setupPortHopping = true, restartService = true, onLog = null } = options;
+
     const logs = [];
-    const log = (msg) => {
+    let currentStep = 0;
+
+    const log = (msg, stepOverride = null) => {
         const line = `[${new Date().toISOString()}] ${msg}`;
         logs.push(line);
         logger.info(`[NodeSetup] ${msg}`);
+        if (onLog) onLog({ message: msg, step: stepOverride ?? currentStep, total: HYSTERIA_TOTAL_STEPS });
     };
-    
-    log(`Starting setup for ${node.name} (${node.ip})`);
-    
+
+    const step = (msg) => {
+        currentStep++;
+        log(msg, currentStep);
+    };
+
+    log(`Starting setup for ${node.name} (${node.ip})`, 0);
+
     // Get settings for auth insecure option
     const settings = await Settings.get();
     const authInsecure = settings?.nodeAuth?.insecure ?? true;
-    
+
     const authUrl = `${config.BASE_URL}/api/auth`;
-    log(`Auth URL: ${authUrl} (insecure: ${authInsecure})`);
-    
+    log(`Auth URL: ${authUrl} (insecure: ${authInsecure})`, 0);
+
     let conn;
-    
+
     try {
-        log('Connecting via SSH...');
+        step('Connecting via SSH...');
         conn = await connectSSH(node);
         log('SSH connected');
-        
+
         if (installHysteria) {
-            log('Installing Hysteria...');
+            step('Installing Hysteria...');
             const installResult = await execSSH(conn, INSTALL_SCRIPT);
             logs.push(installResult.output);
-            
+            if (onLog) onLog({ message: installResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+
             if (!installResult.success) {
                 throw new Error(`Hysteria installation failed: ${installResult.error}`);
             }
-            log('Hysteria installed');
+            log('✓ Hysteria installed');
         }
-        
+
         // Determine TLS mode: same-VPS (copy panel certs), ACME, or self-signed
         const isSameVpsSetup = node.domain && node.domain === config.PANEL_DOMAIN;
         let useTlsFiles = false;
-        
+
         if (!node.domain) {
             // No domain - use self-signed certificate
-            log('No domain specified, generating self-signed certificate...');
+            step('Generating self-signed certificate...');
             const certResult = await execSSH(conn, SELF_SIGNED_CERT_SCRIPT);
             logs.push(certResult.output);
-            
+            if (onLog) onLog({ message: certResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+
             if (!certResult.success) {
                 throw new Error(`Certificate generation failed: ${certResult.error}`);
             }
-            log('Certificate ready (self-signed)');
+            log('✓ Certificate ready (self-signed)');
             useTlsFiles = true;
-            
+
         } else if (isSameVpsSetup) {
-            // Same domain as panel - copy panel's certificates to node
-            log(`Same-VPS setup detected (domain: ${node.domain})`);
-            log('Copying panel certificates to node...');
-            
+            step(`Copying panel certificates (same-VPS, domain: ${node.domain})...`);
+
             const panelCerts = getPanelCertificates(config.PANEL_DOMAIN);
-            
+
             if (panelCerts) {
-                // Upload certificates to node
                 await uploadFile(conn, panelCerts.cert, '/etc/hysteria/cert.pem');
                 await uploadFile(conn, panelCerts.key, '/etc/hysteria/key.pem');
-                
-                // Set correct permissions
+
                 await execSSH(conn, `
 chmod 644 /etc/hysteria/cert.pem
 chmod 600 /etc/hysteria/key.pem
@@ -350,24 +359,22 @@ fi
 echo "Done: Panel certificates copied to node"
 ls -la /etc/hysteria/*.pem
                 `);
-                
-                log('Panel certificates copied successfully');
+
+                log('✓ Panel certificates copied successfully');
                 useTlsFiles = true;
             } else {
                 log('Warning: Could not read panel certificates, falling back to self-signed');
                 const certResult = await execSSH(conn, SELF_SIGNED_CERT_SCRIPT);
                 logs.push(certResult.output);
+                if (onLog) onLog({ message: certResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
                 useTlsFiles = true;
             }
-            
+
         } else {
-            // Different domain - use ACME (but warn about potential port 80 conflict)
-            log(`Domain detected (${node.domain}), ACME will be used`);
+            step(`Setting up ACME for domain ${node.domain}...`);
             log('⚠️  WARNING: If this node is on the same VPS as the panel, ACME may fail!');
             log('⚠️  Port 80 is used by the panel for its own ACME challenges.');
-            log('⚠️  Consider using the panel domain or no domain (self-signed) for same-VPS setup.');
-            log('Opening port 80 for ACME HTTP-01 challenge...');
-            
+
             const acmeSetup = await execSSH(conn, `
 echo "=== Setting up for ACME ==="
 
@@ -402,37 +409,40 @@ echo "Done: ACME preparation complete"
 echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
             `);
             logs.push(acmeSetup.output);
-            log('ACME preparation done');
+            if (onLog) onLog({ message: acmeSetup.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+            log('✓ ACME preparation done');
         }
-        
-        log('Uploading config...');
+
+        step('Uploading config...');
         const hysteriaConfig = configGenerator.generateNodeConfig(node, authUrl, { authInsecure, useTlsFiles });
         await uploadFile(conn, hysteriaConfig, '/etc/hysteria/config.yaml');
-        log('Config uploaded to /etc/hysteria/config.yaml');
+        log('✓ Config uploaded to /etc/hysteria/config.yaml');
         logs.push('--- Config content ---');
         logs.push(hysteriaConfig);
         logs.push('--- End config ---');
-        
+
+        step('Configuring firewall & port hopping...');
         if (setupPortHopping && node.portRange) {
             log(`Setting up port hopping (${node.portRange})...`);
             const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
             if (portHoppingScript) {
                 const hopResult = await execSSH(conn, portHoppingScript);
                 logs.push(hopResult.output);
-                
+                if (onLog) onLog({ message: hopResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+
                 if (!hopResult.success) {
-                    log(`Port hopping setup warning: ${hopResult.error}`);
+                    log(`Port hopping warning: ${hopResult.error}`);
                 } else {
-                    log('Port hopping configured');
+                    log('✓ Port hopping configured');
                 }
             }
         }
-        
+
         const statsPort = node.statsPort || 9999;
         const mainPort = node.port || 443;
         log(`Opening firewall ports (${mainPort}, ${statsPort})...`);
         const firewallResult = await execSSH(conn, `
-echo "=== [5/6] Opening firewall ports ==="
+echo "=== Opening firewall ports ==="
 
 if command -v iptables &> /dev/null; then
     iptables -I INPUT -p tcp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
@@ -451,12 +461,13 @@ fi
 echo "Done: Firewall configured"
         `);
         logs.push(firewallResult.output);
-        log('Firewall ports opened');
-        
+        if (onLog) onLog({ message: firewallResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+        log('✓ Firewall configured');
+
         if (restartService) {
-            log('Restarting Hysteria service...');
+            step('Restarting Hysteria service...');
             const restartResult = await execSSH(conn, `
-echo "=== [6/6] Restarting Hysteria service ==="
+echo "=== Restarting Hysteria service ==="
 systemctl enable hysteria-server 2>/dev/null || true
 systemctl restart hysteria-server
 sleep 3
@@ -467,21 +478,22 @@ echo "Journal logs (last 20 lines):"
 journalctl -u hysteria-server -n 20 --no-pager || true
             `);
             logs.push(restartResult.output);
-            
+            if (onLog) onLog({ message: restartResult.output, step: currentStep, total: HYSTERIA_TOTAL_STEPS, raw: true });
+
             if (!restartResult.success) {
                 log(`Service restart warning: ${restartResult.error}`);
             } else {
-                log('Service restarted');
+                log('✓ Service restarted');
             }
         }
-        
-        log('Setup completed successfully!');
+
+        log('✓ Setup completed successfully!');
         return { success: true, logs, useTlsFiles };
-        
+
     } catch (error) {
-        log(`Error: ${error.message}`);
+        log(`❌ Error: ${error.message}`);
         return { success: false, error: error.message, logs, useTlsFiles: false };
-        
+
     } finally {
         if (conn) {
             conn.end();
@@ -601,73 +613,85 @@ async function generateX25519Keys(conn) {
  * @param {Object} options - { restartService }
  * @returns {{ success, logs, realityKeys? }}
  */
+// Total steps for Xray setup (used for progress reporting)
+const XRAY_TOTAL_STEPS = 6;
+
 async function setupXrayNode(node, options = {}) {
-    const { restartService = true } = options;
+    const { restartService = true, onLog = null } = options;
 
     const logs = [];
-    const log = (msg) => {
+    let currentStep = 0;
+
+    const log = (msg, stepOverride = null) => {
         const line = `[${new Date().toISOString()}] ${msg}`;
         logs.push(line);
         logger.info(`[XraySetup] ${msg}`);
+        if (onLog) onLog({ message: msg, step: stepOverride ?? currentStep, total: XRAY_TOTAL_STEPS });
     };
 
-    log(`Starting Xray setup for ${node.name} (${node.ip})`);
+    const step = (msg) => {
+        currentStep++;
+        log(msg, currentStep);
+    };
+
+    log(`Starting Xray setup for ${node.name} (${node.ip})`, 0);
 
     let conn;
     let generatedKeys = null;
 
     try {
-        log('Connecting via SSH...');
+        step('Connecting via SSH...');
         conn = await connectSSH(node);
         log('SSH connected');
 
-        // Install Xray
-        log('Installing Xray-core...');
+        step('Installing Xray-core...');
         const installResult = await execSSH(conn, XRAY_INSTALL_SCRIPT);
         logs.push(installResult.output);
+        if (onLog) onLog({ message: installResult.output, step: currentStep, total: XRAY_TOTAL_STEPS, raw: true });
         if (!installResult.success) {
             throw new Error(`Xray installation failed: ${installResult.error}`);
         }
-        log('Xray-core installed');
+        log('✓ Xray-core installed');
 
         // Generate Reality keys and shortId if needed
+        step('Configuring Reality keys...');
         const xrayCfg = node.xray || {};
         if (xrayCfg.security === 'reality') {
             const updates = {};
             let needsUpdate = false;
 
-            // Generate x25519 keys if not set
             if (!xrayCfg.realityPrivateKey) {
                 log('Generating x25519 Reality keys...');
                 generatedKeys = await generateX25519Keys(conn);
-                log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
+                log(`✓ Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
                 updates['xray.realityPrivateKey'] = generatedKeys.privateKey;
                 updates['xray.realityPublicKey'] = generatedKeys.publicKey;
                 node.xray = { ...node.xray, realityPrivateKey: generatedKeys.privateKey, realityPublicKey: generatedKeys.publicKey };
                 needsUpdate = true;
+            } else {
+                log('Reality keys already set, skipping generation');
             }
 
-            // Generate shortId if not set or only contains empty string
             const currentShortIds = xrayCfg.realityShortIds || [''];
             const hasRealShortId = currentShortIds.some(id => id && id.length > 0);
             if (!hasRealShortId) {
-                const shortId = require('crypto').randomBytes(8).toString('hex'); // 16 hex chars
+                const shortId = require('crypto').randomBytes(8).toString('hex');
                 log(`Generated shortId: ${shortId}`);
-                updates['xray.realityShortIds'] = ['', shortId]; // empty + random
+                updates['xray.realityShortIds'] = ['', shortId];
                 node.xray = { ...node.xray, realityShortIds: ['', shortId] };
                 needsUpdate = true;
             }
 
-            // Save to DB
             if (needsUpdate) {
                 const HyNode = require('../models/hyNodeModel');
                 await HyNode.updateOne({ _id: node._id }, { $set: updates });
-                log('Reality settings saved to database');
+                log('✓ Reality settings saved to database');
             }
+        } else {
+            log(`Security mode: ${xrayCfg.security || 'none'}, skipping Reality key generation`);
         }
 
-        // Generate and upload config
-        log('Generating Xray config...');
+        step('Uploading Xray config...');
         const configGenerator = require('./configGenerator');
         const syncService = require('./syncService');
         const users = await syncService._getUsersForNode(node);
@@ -675,12 +699,12 @@ async function setupXrayNode(node, options = {}) {
         const configPath = '/usr/local/etc/xray/config.json';
 
         await uploadFile(conn, configContent, configPath);
-        log(`Config uploaded to ${configPath} (${users.length} users)`);
+        log(`✓ Config uploaded to ${configPath} (${users.length} users)`);
         logs.push('--- Config preview ---');
         logs.push(configContent.substring(0, 500) + (configContent.length > 500 ? '\n...' : ''));
         logs.push('--- End config preview ---');
 
-        // Open firewall ports
+        step('Configuring firewall...');
         const mainPort = node.port || 443;
         const apiPort = (node.xray || {}).apiPort || 61000;
         log(`Opening firewall ports (${mainPort}, api:${apiPort})...`);
@@ -699,10 +723,11 @@ fi
 echo "Done: Firewall configured"
         `);
         logs.push(firewallResult.output);
-        log('Firewall configured');
+        if (onLog) onLog({ message: firewallResult.output, step: currentStep, total: XRAY_TOTAL_STEPS, raw: true });
+        log('✓ Firewall configured');
 
         if (restartService) {
-            log('Installing systemd service and starting Xray...');
+            step('Starting Xray service...');
             const serviceContent = configGenerator.generateXraySystemdService();
             await uploadFile(conn, serviceContent, '/etc/systemd/system/xray.service');
             const restartResult = await execSSH(conn, `
@@ -718,18 +743,19 @@ echo "Journal (last 15 lines):"
 journalctl -u xray -n 15 --no-pager || true
             `);
             logs.push(restartResult.output);
+            if (onLog) onLog({ message: restartResult.output, step: currentStep, total: XRAY_TOTAL_STEPS, raw: true });
             if (!restartResult.success) {
                 log(`Service restart warning: ${restartResult.error}`);
             } else {
-                log('Xray service started');
+                log('✓ Xray service started');
             }
         }
 
-        log('Xray setup completed successfully!');
+        log('✓ Xray setup completed successfully!');
         return { success: true, logs, realityKeys: generatedKeys };
 
     } catch (error) {
-        log(`Error: ${error.message}`);
+        log(`❌ Error: ${error.message}`);
         return { success: false, error: error.message, logs, realityKeys: generatedKeys };
 
     } finally {
@@ -914,59 +940,77 @@ echo "Done: cc-agent installed"
     return { success: result.success, agentVersion, output: result.output };
 }
 
+// Total steps for Xray + Agent setup
+const XRAY_AGENT_TOTAL_STEPS = 8;
+
 /**
  * Setup Xray node + CC Agent via SSH.
  * Extends setupXrayNode to also install the agent.
+ * Overrides total step count to include agent steps.
  */
 async function setupXrayNodeWithAgent(node, options = {}) {
-    const result = await setupXrayNode(node, options);
+    const { onLog = null } = options;
+
+    // Wrap onLog to remap total from XRAY_TOTAL_STEPS to XRAY_AGENT_TOTAL_STEPS
+    const wrappedOnLog = onLog ? (evt) => {
+        onLog({ ...evt, total: XRAY_AGENT_TOTAL_STEPS });
+    } : null;
+
+    const result = await setupXrayNode(node, { ...options, onLog: wrappedOnLog });
 
     if (!result.success) {
         return result;
     }
 
+    // Steps 7 and 8 belong to agent installation
+    let agentStep = XRAY_TOTAL_STEPS;
+
     const log = (msg) => {
         const line = `[${new Date().toISOString()}] ${msg}`;
         result.logs.push(line);
         logger.info(`[AgentSetup] ${msg}`);
+        if (onLog) onLog({ message: msg, step: agentStep, total: XRAY_AGENT_TOTAL_STEPS });
+    };
+
+    const step = (msg) => {
+        agentStep++;
+        log(msg);
     };
 
     let conn;
     try {
-        log('Connecting via SSH for agent installation...');
+        step('Connecting for CC Agent installation...');
         conn = await connectSSH(node);
 
-        // Generate agent token if not set
         let agentToken = (node.xray || {}).agentToken;
         if (!agentToken) {
             agentToken = generateAgentToken();
             log(`Generated agent token: ${agentToken.substring(0, 8)}...`);
         }
 
-        // Determine panel IP from config (the IP the node can reach the panel from)
         const panelIpRaw = config.BASE_URL || '';
         const panelIp = panelIpRaw.replace(/^https?:\/\//, '').split(':')[0].split('/')[0] || '0.0.0.0';
         log(`Panel IP for firewall: ${panelIp}`);
 
-        log('Installing CC Agent...');
+        step('Installing CC Agent...');
         const agentResult = await installCCAgent(conn, node, agentToken, panelIp, log);
         result.logs.push(agentResult.output);
+        if (onLog) onLog({ message: agentResult.output, step: agentStep, total: XRAY_AGENT_TOTAL_STEPS, raw: true });
 
         if (!agentResult.success) {
-            log(`Agent install warning: may have failed, check logs above`);
+            log('Agent install warning: may have failed, check logs above');
         } else {
-            log(`Agent installed: ${agentResult.agentVersion}`);
+            log(`✓ Agent installed: ${agentResult.agentVersion}`);
         }
 
-        // Persist agent token and version to DB
         const HyNode = require('../models/hyNodeModel');
         const updates = {
             'xray.agentToken': agentToken,
             agentVersion: agentResult.agentVersion,
-            agentStatus: 'unknown', // will be updated on first health check
+            agentStatus: 'unknown',
         };
         await HyNode.updateOne({ _id: node._id }, { $set: updates });
-        log('Agent token saved to database');
+        log('✓ Agent token saved to database');
 
         result.agentToken = agentToken;
 
@@ -974,6 +1018,7 @@ async function setupXrayNodeWithAgent(node, options = {}) {
         const line = `[${new Date().toISOString()}] Agent install error: ${error.message}`;
         result.logs.push(line);
         logger.error(`[AgentSetup] ${error.message}`);
+        if (onLog) onLog({ message: `❌ Agent install error: ${error.message}`, step: agentStep, total: XRAY_AGENT_TOTAL_STEPS });
         // Don't fail the whole setup if agent install fails
     } finally {
         if (conn) conn.end();
