@@ -9,8 +9,9 @@
 [![Docker Image Size](https://img.shields.io/docker/image-size/clickdevtech/hysteria-panel/latest)](https://hub.docker.com/r/clickdevtech/hysteria-panel)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](package.json)
 [![Hysteria](https://img.shields.io/badge/Hysteria-2.x-9B59B6)](https://v2.hysteria.network/)
+[![Xray](https://img.shields.io/badge/Xray-VLESS-00ADD8)](https://xtls.github.io/)
 
-**C³ CELERITY** by Click Connect — modern web panel for managing [Hysteria 2](https://v2.hysteria.network/) proxy servers with centralized HTTP authentication, one-click node setup, and flexible user-to-server group mapping.
+**C³ CELERITY** by Click Connect — modern web panel for managing [Hysteria 2](https://v2.hysteria.network/) and [Xray VLESS](https://xtls.github.io/) proxy servers with centralized authentication, one-click node setup, and flexible user-to-server group mapping.
 
 **Built for performance:** Lightweight architecture designed for speed at any scale.
 
@@ -71,14 +72,14 @@ MONGO_PASSWORD=yourmongopassword   # openssl rand -hex 16
 ## ✨ Features
 
 - 🖥 **Web Panel** — Full UI for managing nodes and users
-- 🔐 **HTTP Auth** — Centralized client verification via API
-- 🚀 **Auto Node Setup** — Install Hysteria, certs, port hopping in one click
+- 🔐 **Dual Protocol** — Hysteria 2 and Xray VLESS on one panel
+- 🚀 **Auto Node Setup** — Install Hysteria/Xray, certs, port hopping in one click
 - 👥 **Server Groups** — Flexible user-to-node mapping
 - ⚖️ **Load Balancing** — Distribute users by server load
 - 🚫 **Traffic Filtering (ACL)** — Block ads, domains, IPs; route through custom proxies
 - 📊 **Statistics** — Online users, traffic, server status
-- 📱 **Subscriptions** — Auto-format for Clash, Sing-box, Shadowrocket
-- 🔄 **Backup/Restore** — Automatic database backups
+- 📱 **Subscriptions** — Auto-format for Clash, Sing-box, Shadowrocket, Hiddify
+- 🔄 **Backup/Restore** — Automatic backups with S3 support
 - 💻 **SSH Terminal** — Direct node access from browser
 - 🔑 **API Keys** — Secure external access with scopes, IP allowlist, rate limiting
 - 🪝 **Webhooks** — Real-time event notifications with HMAC-SHA256 signing
@@ -94,17 +95,16 @@ MONGO_PASSWORD=yourmongopassword   # openssl rand -hex 16
                               │   Shadowrocket  │
                               └────────┬────────┘
                                        │
-                          hysteria2://user:pass@host
+                     hysteria2:// or vless://
                                        │
               ┌────────────────────────┼────────────────────────┐
               ▼                        ▼                        ▼
      ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-     │   Node          │      │      Node CH    │      │      Node DE    │
-     │   Hysteria 2    │      │   Hysteria 2    │      │   Hysteria 2    │
-     │   :443 + hop    │      │   :443 + hop    │      │   :443 + hop    │
+     │  Hysteria Node  │      │   Xray Node     │      │  Hysteria Node  │
+     │   :443 + hop    │      │  VLESS Reality  │      │   :443 + hop    │
      └────────┬────────┘      └────────┬────────┘      └────────┬────────┘
               │                        │                        │
-              │    POST /api/auth      │                        │
+              │    POST /api/auth      │   CC Agent API         │
               │    GET /online         │                        │
               └────────────────────────┼────────────────────────┘
                                        ▼
@@ -126,10 +126,15 @@ MONGO_PASSWORD=yourmongopassword   # openssl rand -hex 16
 
 ### How Authentication Works
 
-1. Client connects to Hysteria node with `userId:password`
-2. Node sends `POST /api/auth` to the panel
-3. Panel checks: user exists, enabled, device/traffic limits
-4. Returns `{ "ok": true, "id": "userId" }` or `{ "ok": false }`
+**Hysteria:**
+1. Client connects to node with `userId:password`
+2. Node sends `POST /api/auth` to panel
+3. Panel validates user and returns `{ "ok": true/false }`
+
+**Xray:**
+1. Client connects with UUID (xrayUuid)
+2. CC Agent on node manages user list via API
+3. Panel syncs users to node without restarting Xray
 
 ### Server Groups
 
@@ -141,11 +146,156 @@ Instead of rigid "plans", use flexible groups:
 
 ---
 
+## 🔧 Node Types
+
+### Hysteria 2
+
+Fast UDP protocol based on QUIC with port hopping and obfuscation support.
+
+**Advantages:**
+- High speed on unstable networks
+- Port hopping to bypass blocks
+- Salamander obfuscation
+
+**Settings:**
+- Port, port range for hopping
+- ACME or self-signed certificates
+- Obfs (Salamander) with password
+
+### Xray VLESS
+
+Modern protocol with Reality support and various transports.
+
+**Advantages:**
+- Reality — disguise as legitimate HTTPS traffic
+- Multiple transports (TCP, WebSocket, gRPC, XHTTP)
+- No domain required for Reality
+
+**Transports:**
+
+| Transport | Description | Client Support |
+|-----------|-------------|----------------|
+| TCP | Direct connection, max speed | All clients |
+| WebSocket | Works through CDN and proxies | All clients |
+| gRPC | Multiplexing, good for CDN | All clients |
+| XHTTP | New splithttp transport | Limited* |
+
+*XHTTP is not supported by all clients (Clash/Sing-box don't support it yet)
+
+**Security:**
+
+| Mode | Description |
+|------|-------------|
+| Reality | Disguise as popular site, no domain needed |
+| TLS | Classic TLS with certificate |
+| None | No encryption (not recommended) |
+
+---
+
+## 🚀 Xray Node Setup
+
+### Automatic Setup (Recommended)
+
+1. Add node in panel:
+   - Type: **Xray**
+   - IP, SSH credentials
+   - Security: Reality (recommended)
+   - Transport: TCP (recommended for Reality)
+
+2. Click "⚙️ Auto Setup"
+
+3. Panel will automatically:
+   - Install Xray-core
+   - Generate Reality keys (x25519)
+   - Upload config
+   - Install CC Agent for user management
+   - Open firewall ports
+   - Start services
+
+### Reality Settings
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Dest | Disguise destination (domain:port) | `www.google.com:443` |
+| SNI | Server Name Indication | `www.google.com` |
+| Private Key | x25519 private key | Auto-generated |
+| Public Key | Public key (for clients) | Auto-generated |
+| Short IDs | Session identifiers | Auto-generated |
+
+### CC Agent
+
+CC Agent is a lightweight HTTP service on the node for managing Xray users without restart.
+
+**Features:**
+- Add/remove users on the fly
+- Traffic stats collection
+- Health check
+
+Agent is installed automatically during Xray node auto-setup.
+
+---
+
+## 🔧 Hysteria Node Setup
+
+### Understanding Node Configuration
+
+#### Ports
+- **Main port (443)** — Port Hysteria listens on
+- **Port hopping range (20000-50000)** — UDP ports for hopping
+- **Stats port (9999)** — Internal port for stats collection
+
+#### Domain vs SNI
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| **Domain** | For ACME/Let's Encrypt certificates | `de1.example.com` → `1.2.3.4` |
+| **SNI** | For masquerading (domain fronting) | `www.google.com` |
+
+**Scenarios:**
+1. **Simple setup**: Set domain, leave SNI empty
+2. **Domain fronting**: Set domain for certs, SNI as popular domain
+3. **No domain**: Leave empty — self-signed certificate will be used
+
+### Automatic Setup (Recommended)
+
+1. Add node in panel (IP, SSH credentials)
+2. Click "⚙️ Auto Setup"
+3. Panel will automatically:
+   - Install Hysteria 2
+   - Configure ACME or self-signed certificates
+   - Set up port hopping
+   - Open firewall ports
+   - Start service
+
+### Obfuscation (Salamander)
+
+Hysteria supports obfuscation to disguise traffic:
+
+1. Enable **Obfs** in node settings
+2. Set **obfuscation password**
+3. Save and update config
+
+Clients will automatically receive obfs params in subscription.
+
+### Single VPS Setup (Panel + Node)
+
+You can run panel and node on the same VPS (panel TCP, node UDP on 443).
+
+**Option 1: Use panel domain (recommended)**
+- Set node domain same as panel domain
+- Panel certificates will be copied automatically
+
+**Option 2: No domain (self-signed)**
+- Leave domain field empty
+- Self-signed certificate will be generated
+
+---
+
 ## 📖 API Reference
 
 ### API Key Authentication
 
-All `/api/*` endpoints (except `/api/auth` and `/api/files`) require authentication via either an API key or an admin session cookie.
+All `/api/*` endpoints (except `/api/auth` and `/api/files`) require authentication.
 
 **Create a key:** Settings → Security → API Keys → Create Key
 
@@ -174,21 +324,13 @@ Authorization: Bearer ck_your_key_here
 Each key has a configurable rate limit (default: 60 req/min).  
 Exceeded requests return `429` with `X-RateLimit-Limit` / `X-RateLimit-Remaining` headers.
 
-#### Error Responses
-
-| Code | Reason |
-|------|--------|
-| `401` | Invalid, expired, or missing key |
-| `403` | Key valid but missing required scope / IP not in allowlist |
-| `429` | Rate limit exceeded |
-
 ---
 
 ### Authentication (for nodes)
 
 #### POST `/api/auth`
 
-Validates user on node connection.
+Validates user on Hysteria node connection.
 
 ```json
 // Request
@@ -211,11 +353,15 @@ Universal subscription endpoint. Auto-detects format by User-Agent.
 |------------|--------|
 | `shadowrocket` | Base64 URI list |
 | `clash`, `stash`, `surge` | Clash YAML |
-| `hiddify`, `sing-box` | Sing-box JSON |
-| Browser | HTML page |
+| `hiddify`, `sing-box`, `karing` | Sing-box JSON |
+| Browser | HTML page with QR code |
 | Other | Plain URI list |
 
 **Query params:** `?format=clash`, `?format=singbox`, `?format=uri`
+
+#### GET `/api/files/info/:token`
+
+Subscription info (status, traffic, expiry).
 
 ### Users
 
@@ -232,6 +378,7 @@ Required scope: `users:read` (GET) / `users:write` (POST, PUT, DELETE)
 | POST | `/api/users/:userId/disable` | Disable user |
 | POST | `/api/users/:userId/groups` | Add user to groups |
 | DELETE | `/api/users/:userId/groups/:groupId` | Remove user from group |
+| POST | `/api/users/sync-from-main` | Sync from external DB |
 
 ### Nodes
 
@@ -244,14 +391,20 @@ Required scope: `nodes:read` (GET) / `nodes:write` (POST, PUT, DELETE)
 | POST | `/api/nodes` | Create node |
 | PUT | `/api/nodes/:id` | Update node |
 | DELETE | `/api/nodes/:id` | Delete node |
-| GET | `/api/nodes/:id/config` | Get node config (YAML) |
+| GET | `/api/nodes/:id/config` | Get node config (YAML/JSON) |
+| GET | `/api/nodes/:id/status` | Get node status |
+| POST | `/api/nodes/:id/reset-status` | Reset status to online |
+| GET | `/api/nodes/:id/users` | Get users on node |
 | POST | `/api/nodes/:id/sync` | Sync specific node |
 | POST | `/api/nodes/:id/update-config` | Push config via SSH |
-| POST | `/api/nodes/:id/setup` | **Auto-setup** node via SSH (long-running, ~1–2 min) |
+| POST | `/api/nodes/:id/setup` | Auto-setup node via SSH |
+| POST | `/api/nodes/:id/setup-port-hopping` | Setup port hopping |
+| POST | `/api/nodes/:id/groups` | Add node to groups |
+| DELETE | `/api/nodes/:id/groups/:groupId` | Remove from group |
+| GET | `/api/nodes/:id/agent-info` | Get CC Agent info (Xray) |
+| POST | `/api/nodes/:id/generate-xray-keys` | Generate Reality keys |
 
 ### Stats & Sync
-
-Required scope: `stats:read` / `sync:write`
 
 | Method | Endpoint | Scope | Description |
 |--------|----------|-------|-------------|
@@ -309,115 +462,8 @@ const expected = 'sha256=' + crypto
 | `user.expired` | User subscription expired |
 | `node.online` | Node came online |
 | `node.offline` | Node went offline |
-| `node.error` | Node sync/config error |
-| `sync.completed` | Full sync cycle finished |
-
-Leave the events list empty to receive **all** events.
-
----
-
-## 🔧 Node Setup
-
-### Understanding Node Configuration
-
-Before adding a node, understand these key concepts:
-
-#### Ports
-- **Main port (443)** — The port Hysteria listens on. Use 443 for best compatibility (often allowed through firewalls)
-- **Port hopping range (20000-50000)** — Additional UDP ports that redirect to the main port. Helps bypass QoS/throttling
-- **Stats port (9999)** — Internal port for collecting traffic statistics from the node
-
-#### Domain vs SNI
-
-| Field | Purpose | Example |
-|-------|---------|---------|
-| **Domain** | Used for ACME/Let's Encrypt certificates. Must point to the node's IP | `de1.example.com` → `1.2.3.4` |
-| **SNI** | What clients show during TLS handshake (for domain fronting). Can be any domain | `www.google.com` or `bing.com` |
-
-**Common scenarios:**
-1. **Simple setup**: Set `domain` to a subdomain pointing to your node (e.g., `node1.example.com`). Leave `SNI` empty.
-2. **Domain fronting**: Set `domain` for certificates, set `SNI` to a popular domain (e.g., `www.bing.com`) to disguise traffic.
-3. **Same VPS for panel and node**: Use different subdomains (e.g., `panel.example.com` for panel, `node.example.com` for node).
-
-> **Note:** The panel domain and node domain(s) should be different subdomains, but can point to the same IP if running on the same VPS.
-
-### Automatic Setup (Recommended)
-
-1. Add node in panel (IP, SSH credentials)
-2. Click "⚙️ Auto Setup"
-3. Panel will automatically:
-   - Install Hysteria 2
-   - Configure ACME certificates
-   - Set up port hopping
-   - Open firewall ports
-   - Start service
-
-### Manual Setup
-
-```bash
-# Install Hysteria
-bash <(curl -fsSL https://get.hy2.sh/)
-
-# Create config /etc/hysteria/config.yaml
-listen: :443
-
-acme:
-  domains: [node1.example.com]
-  email: admin@example.com
-
-auth:
-  type: http
-  http:
-    url: https://panel.example.com/api/auth
-    insecure: false
-
-trafficStats:
-  listen: :9999
-  secret: your_secret
-
-masquerade:
-  type: proxy
-  proxy:
-    url: https://www.google.com
-    rewriteHost: true
-```
-
-```bash
-# Start
-systemctl enable --now hysteria-server
-
-# Port hopping (redirect 20000-50000 to 443)
-iptables -t nat -A PREROUTING -p udp --dport 20000:50000 -j REDIRECT --to-port 443
-```
-
-### Single VPS Setup (Panel + Node)
-
-You can run both the panel and a Hysteria node on the same VPS. Panel uses TCP, node uses UDP on port 443 — they don't conflict.
-
-**Option 1: Use panel domain (recommended)**
-
-Set the node's domain to the same as the panel domain. Auto-setup will automatically copy the panel's SSL certificates to the node.
-
-1. DNS: `panel.example.com` → Your VPS IP
-2. Add node with:
-   - IP: Your VPS IP
-   - Domain: `panel.example.com` (same as panel!)
-   - Port: 443
-3. Click "Auto Setup" — certificates will be copied automatically
-
-**Option 2: No domain (self-signed)**
-
-Leave the domain field empty. A self-signed certificate will be generated.
-
-1. Add node with:
-   - IP: Your VPS IP
-   - Domain: *(leave empty)*
-   - Port: 443
-2. Click "Auto Setup"
-
-**Why not use a different domain?**
-
-If you use a different domain (e.g., `node.example.com`), ACME/Let's Encrypt will fail because port 80 is already used by the panel for its own certificate renewal. The auto-setup will warn you about this.
+| `node.error` | Node error |
+| `sync.completed` | Sync cycle finished |
 
 ---
 
@@ -427,10 +473,14 @@ If you use a different domain (e.g., `node.example.com`), ACME/Let's Encrypt wil
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `userId` | String | Unique ID (e.g., Telegram ID) |
+| `userId` | String | Unique ID |
+| `username` | String | Display name |
 | `subscriptionToken` | String | URL token for subscription |
+| `xrayUuid` | String | UUID for Xray VLESS (auto-generated) |
 | `enabled` | Boolean | User active status |
 | `groups` | [ObjectId] | Server groups |
+| `nodes` | [ObjectId] | Direct node assignments |
+| `traffic` | Object | `{ tx, rx, lastUpdate }` — used traffic |
 | `trafficLimit` | Number | Traffic limit in bytes (0 = unlimited) |
 | `maxDevices` | Number | Device limit (0 = group limit, -1 = unlimited) |
 | `expireAt` | Date | Expiration date |
@@ -439,28 +489,69 @@ If you use a different domain (e.g., `node.example.com`), ACME/Let's Encrypt wil
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `type` | String | `hysteria` or `xray` |
 | `name` | String | Display name |
+| `flag` | String | Country flag (emoji) |
 | `ip` | String | IP address |
 | `domain` | String | Domain for SNI/ACME |
+| `sni` | String | Custom SNI for masquerading |
 | `port` | Number | Main port (443) |
 | `portRange` | String | Port hopping range |
+| `portConfigs` | Array | Multi-port: `[{ name, port, portRange, enabled }]` |
+| `obfs` | Object | Obfuscation: `{ type: 'salamander', password }` |
+| `statsPort` | Number | Hysteria stats port (9999) |
+| `statsSecret` | String | Stats API secret |
 | `groups` | [ObjectId] | Server groups |
+| `outbounds` | Array | Proxies for ACL: `[{ name, type, addr }]` |
+| `aclRules` | [String] | ACL rules |
 | `maxOnlineUsers` | Number | Max online for load balancing |
-| `status` | String | online/offline/error |
+| `rankingCoefficient` | Number | Sorting coefficient (1.0) |
+| `status` | String | online/offline/error/syncing |
+| `traffic` | Object | `{ tx, rx, lastUpdate }` — node traffic |
+| `xray` | Object | Xray settings (see below) |
+
+#### Xray Settings (node.xray)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `transport` | String | tcp, ws, grpc, xhttp |
+| `security` | String | reality, tls, none |
+| `flow` | String | xtls-rprx-vision (for tcp) |
+| `fingerprint` | String | chrome, firefox, safari, etc. |
+| `alpn` | [String] | ALPN protocols (h3, h2, http/1.1) |
+| `realityDest` | String | Disguise destination |
+| `realitySni` | [String] | Server names |
+| `realityPrivateKey` | String | x25519 private key |
+| `realityPublicKey` | String | Public key |
+| `realityShortIds` | [String] | Short IDs |
+| `realitySpiderX` | String | Spider X path (default: /) |
+| `wsPath` | String | WebSocket path |
+| `wsHost` | String | WebSocket host header |
+| `grpcServiceName` | String | gRPC service name |
+| `xhttpPath` | String | XHTTP path |
+| `xhttpHost` | String | XHTTP host header |
+| `xhttpMode` | String | auto, packet-up, stream-up |
+| `apiPort` | Number | Xray gRPC API port (61000) |
+| `inboundTag` | String | Inbound tag (vless-in) |
+| `agentPort` | Number | CC Agent port (62080) |
+| `agentToken` | String | Agent token |
+| `agentTls` | Boolean | TLS for CC Agent |
 
 ### ServerGroup
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | String | Group name |
+| `description` | String | Description |
 | `color` | String | UI color (#hex) |
 | `maxDevices` | Number | Device limit for group |
+| `subscriptionTitle` | String | Title in subscription profile |
 
 ---
 
 ## 🚫 Traffic Filtering (ACL)
 
-Control how traffic is routed on each node. Access via **Panel → Node → Traffic Filtering**.
+Control traffic routing on each Hysteria node. Access: **Panel → Node → Traffic Filtering**.
 
 ### Built-in Actions
 
@@ -479,26 +570,16 @@ reject(geoip:private)              # Block private IPs
 direct(all)                        # Allow everything else
 ```
 
-### Presets
-
-One-click presets available:
-- **Block Ads** — doubleclick, googlesyndication, etc.
-- **Block CN/Private** — Chinese and private IP ranges
-- **RU Direct** — Russian sites go through server directly
-- **All Direct** — No restrictions
-
 ### Custom Proxy Routing
 
-Route specific traffic through your own SOCKS5/HTTP proxy:
-
-1. Add proxy in "Proxy Servers" section (e.g., `my-proxy`, SOCKS5, `1.2.3.4:1080`)
-2. Use in rules: `my-proxy(geoip:ru)` or `my-proxy(suffix:example.com)`
+1. Add proxy (e.g., `my-proxy`, SOCKS5, `1.2.3.4:1080`)
+2. Use in rules: `my-proxy(geoip:ru)`
 
 ---
 
 ## ⚖️ Load Balancing
 
-Configure in Settings:
+Configure in **Settings**:
 
 - **Enable balancing** — Sort nodes by current load
 - **Hide overloaded** — Exclude nodes at capacity
@@ -513,25 +594,83 @@ Algorithm:
 
 ## 🔒 Device Limits
 
-Limit simultaneous connections per user.
-
 **Priority:**
 1. User's personal limit (`maxDevices > 0`)
 2. Minimum limit from user's groups
 3. `-1` = unlimited
 
-On each `POST /api/auth`:
-1. Query `/online` from all nodes
-2. Count sessions for userId
-3. Reject if `>= maxDevices`
+**Device Grace Period** — delay (in seconds) before counting a disconnected device, to avoid false triggers during reconnections.
+
+---
+
+## 📱 Subscription Page Customization
+
+Customize the HTML subscription page in **Settings → Subscription**:
+
+| Field | Description |
+|-------|-------------|
+| `Logo URL` | Logo URL for page header |
+| `Page Title` | Page title |
+| `Support URL` | Support link (button at bottom) |
+| `Web Page URL` | Profile URL (`profile-web-page-url` header) |
+
+The subscription page automatically shows:
+- QR code for app import
+- Traffic stats and expiration
+- Location list with copy buttons
 
 ---
 
 ## 💾 Backups
 
-- **Auto backups** — Configure in Settings
-- **Manual backup** — Dashboard button, auto-downloads
-- **Restore** — Upload `.tar.gz` archive
+### Auto Backups
+
+Configure in **Settings → Backups**:
+- Interval (in hours)
+- Number of local copies to keep
+
+### Manual Backup
+
+Dashboard button — file auto-downloads.
+
+### Restore
+
+Upload `.tar.gz` archive via interface.
+
+### S3-Compatible Storage
+
+Backups can be automatically uploaded to S3-compatible storage (AWS S3, MinIO, Backblaze B2, Cloudflare R2, etc.).
+
+**Configure:** Settings → Backups → S3
+
+| Field | Description |
+|-------|-------------|
+| `Endpoint` | Storage URL (for MinIO, etc.). Leave empty for AWS S3 |
+| `Region` | Region (e.g., `us-east-1`) |
+| `Bucket` | Bucket name |
+| `Prefix` | Prefix/folder for backups |
+| `Access Key ID` | Access key |
+| `Secret Access Key` | Secret key |
+| `Keep Last` | How many backups to keep in S3 |
+
+**Configuration examples:**
+
+```env
+# AWS S3
+Endpoint: (empty)
+Region: eu-central-1
+Bucket: my-backups
+
+# MinIO
+Endpoint: https://minio.example.com
+Region: us-east-1
+Bucket: backups
+
+# Cloudflare R2
+Endpoint: https://<account-id>.r2.cloudflarestorage.com
+Region: auto
+Bucket: my-backups
+```
 
 ---
 
@@ -551,7 +690,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
 
   backend:
-    image: clickdevtech/hysteria-panel:latest  # or build: . for development
+    image: clickdevtech/hysteria-panel:latest
     restart: always
     depends_on:
       - mongo
@@ -579,11 +718,14 @@ volumes:
 | `ACME_EMAIL` | ✅ | Let's Encrypt email |
 | `ENCRYPTION_KEY` | ✅ | SSH encryption key (32 chars) |
 | `SESSION_SECRET` | ✅ | Session secret |
-| `MONGO_PASSWORD` | ✅ | MongoDB password |
+| `MONGO_PASSWORD` | ✅ | MongoDB password (for Docker) |
 | `MONGO_USER` | ❌ | MongoDB user (default: hysteria) |
+| `MONGO_URI` | ❌ | MongoDB connection URI (for non-Docker) |
+| `REDIS_URL` | ❌ | Redis URL for cache (default: in-memory) |
 | `PANEL_IP_WHITELIST` | ❌ | IP whitelist for panel |
 | `SYNC_INTERVAL` | ❌ | Sync interval in minutes (default: 2) |
-| `API_DOCS_ENABLED` | ❌ | Enable interactive API docs at `/api/docs` (default: false) |
+| `API_DOCS_ENABLED` | ❌ | Enable interactive API docs at `/api/docs` |
+| `LOG_LEVEL` | ❌ | Logging level (default: info) |
 
 ---
 
