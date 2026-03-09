@@ -16,7 +16,7 @@
 **Built for performance:** Lightweight architecture designed for speed at any scale.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/bc04b654-aad1-4dc7-96fb-3f35df114eaf" alt="C³ CELERITY Dashboard" width="800">
+  <img src="docs/dashboard.png" alt="C³ CELERITY Dashboard" width="800">
   <br>
   <em>Dashboard — real-time server monitoring and statistics</em>
 </p>

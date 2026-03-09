@@ -16,7 +16,7 @@
 **Создана для скорости:** Лёгкая архитектура, оптимизированная для быстрой работы на любом масштабе.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/bc04b654-aad1-4dc7-96fb-3f35df114eaf" alt="C³ CELERITY Dashboard" width="800">
+  <img src="docs/dashboard.png" alt="C³ CELERITY Dashboard" width="800">
   <br>
   <em>Дашборд — мониторинг серверов и статистика в реальном времени</em>
 </p>
