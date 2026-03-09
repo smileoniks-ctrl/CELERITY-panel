@@ -36,7 +36,7 @@
 
             <%# ========== 2. Protocol ========== %>
             <div class="form-section">
-                <h3>Protocol</h3>
+                <h3><%= t('nodes.sectionProtocol') %></h3>
                 <div class="proto-switcher">
                     <label class="proto-option <% if ((node?.type || 'hysteria') === 'hysteria') { %>active<% } %>" id="protoHysteriaLabel">
                         <input type="radio" name="type" value="hysteria" id="protoHysteria"
@@ -80,7 +80,7 @@
 
             <%# ========== 4. Network ========== %>
             <div class="form-section">
-                <h3>Network</h3>
+                <h3><%= t('nodes.sectionNetwork') %></h3>
 
                 <div class="form-row">
                     <div class="form-group">
@@ -96,18 +96,18 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group hysteria-only" id="domainGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                     <label for="domain"><%= t('nodes.domain') %></label>
                     <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>"
                            placeholder="de.example.com">
-                    <small><%= t('nodes.domainHintBoth') %></small>
+                    <small><%= t('nodes.domainHintHysteria') %></small>
                 </div>
 
                 <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                    <label for="sni"><%= t('nodes.sni') || 'SNI (Server Name Indication)' %></label>
+                    <label for="sni">SNI</label>
                     <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>"
-                           placeholder="google.com">
-                    <small><%= t('nodes.sniHint') %></small>
+                           placeholder="bing.com">
+                    <small><%= t('nodes.sniHintHysteria') %></small>
                 </div>
             </div>
 
@@ -133,8 +133,8 @@
 
             <%# ========== 6. Hysteria: Obfuscation ========== %>
             <div class="form-section hysteria-only" id="hysteriaObfsSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                <h3>Obfuscation (obfs)</h3>
-                <small class="section-hint">Salamander hides QUIC traffic from DPI. Enable only if your operator blocks Hysteria without obfuscation — may perform worse on mobile networks.</small>
+                <h3><%= t('nodes.sectionObfuscation') %></h3>
+                <small class="section-hint"><%= t('nodes.sectionObfuscationHint') %></small>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="obfsType">Obfuscation type</label>
@@ -342,7 +342,7 @@
 
             <%# ========== 9. Limits & Priority ========== %>
             <div class="form-section">
-                <h3>Limits &amp; Priority</h3>
+                <h3><%= t('nodes.sectionLimits') %></h3>
                 <div class="form-row">
                     <div class="form-group hysteria-only" id="maxOnlineGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
                         <label for="maxOnlineUsers"><%= t('nodes.maxOnlineUsers') %></label>
