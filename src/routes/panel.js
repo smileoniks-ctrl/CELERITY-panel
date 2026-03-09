@@ -410,7 +410,7 @@ router.get('/nodes', requireAuth, async (req, res) => {
         ]);
         
         render(res, 'nodes', {
-            title: 'Ноды',
+            title: res.locals.locales.nodes.title,
             page: 'nodes',
             nodes,
             groups,
@@ -814,7 +814,7 @@ router.get('/users', requireAuth, async (req, res) => {
         ]);
         
         render(res, 'users', {
-            title: 'Пользователи',
+            title: res.locals.locales.users.title,
             page: 'users',
             users,
             groups,
@@ -835,7 +835,7 @@ router.get('/users', requireAuth, async (req, res) => {
 router.get('/users/add', requireAuth, async (req, res) => {
     const groups = await getActiveGroups();
     render(res, 'user-form', {
-        title: 'Новый пользователь',
+        title: res.locals.locales.users.newUser,
         page: 'users',
         groups,
         isEdit: false,
@@ -1104,7 +1104,7 @@ router.get('/groups', requireAuth, async (req, res) => {
         }));
         
         render(res, 'groups', {
-            title: 'Группы серверов',
+            title: res.locals.locales.groups.title,
             page: 'groups',
             groups: groupsWithCounts,
         });
@@ -1203,7 +1203,7 @@ router.get('/settings', requireAuth, async (req, res) => {
     ]);
     
     render(res, 'settings', {
-        title: 'Настройки',
+        title: res.locals.locales.settings.title,
         page: 'settings',
         ssl,
         admin,
@@ -1865,7 +1865,7 @@ router.get('/stats', requireAuth, async (req, res) => {
         const summary = await statsService.getSummary();
         
         render(res, 'stats', {
-            title: 'Статистика',
+            title: res.locals.locales.stats.title,
             page: 'stats',
             summary,
         });
