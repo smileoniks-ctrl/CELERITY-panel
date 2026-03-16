@@ -38,35 +38,60 @@
             <div class="form-section xray-only" id="cascadeRoleSection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
                 <h3><i class="ti ti-topology-star-3"></i> <%= t('nodes.cascadeRole') %></h3>
                 <small class="section-hint"><%= t('nodes.cascadeRoleHint') %></small>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="cascadeRole"><%= t('nodes.cascadeRole') %></label>
-                        <select id="cascadeRole" name="cascadeRole" onchange="onCascadeRoleChange()">
-                            <option value="standalone" <%= (node?.cascadeRole || 'standalone') === 'standalone' ? 'selected' : '' %>>
-                                Standalone — <%= t('nodes.roleStandalone') %>
-                            </option>
-                            <option value="entry" <%= node?.cascadeRole === 'entry' ? 'selected' : '' %>>
-                                Entry (Portal) — <%= t('nodes.roleEntry') %>
-                            </option>
-                            <option value="exit" <%= node?.cascadeRole === 'exit' ? 'selected' : '' %>>
-                                Exit (Bridge) — <%= t('nodes.roleExit') %>
-                            </option>
-                            <option value="relay" <%= node?.cascadeRole === 'relay' ? 'selected' : '' %>>
-                                Relay — <%= t('nodes.roleRelay') %>
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="country"><%= t('nodes.country') %></label>
-                        <input type="text" id="country" name="country"
-                               value="<%= node?.country || '' %>"
-                               placeholder="RU, DE, NL...">
-                        <small><%= t('nodes.countryHint') %></small>
-                    </div>
+
+                <%# Hidden input carries the actual value %>
+                <input type="hidden" id="cascadeRole" name="cascadeRole" value="<%= node?.cascadeRole || 'standalone' %>">
+
+                <div class="cascade-role-picker">
+                    <label class="role-card <%= (node?.cascadeRole || 'standalone') === 'standalone' ? 'active' : '' %>"
+                           onclick="selectCascadeRole('standalone', this)">
+                        <span class="role-card-icon role-standalone"><i class="ti ti-server"></i></span>
+                        <span class="role-card-body">
+                            <span class="role-card-name">Standalone</span>
+                            <span class="role-card-desc"><%= t('nodes.roleStandalone') %></span>
+                        </span>
+                    </label>
+                    <label class="role-card <%= node?.cascadeRole === 'entry' ? 'active' : '' %>"
+                           onclick="selectCascadeRole('entry', this)">
+                        <span class="role-card-icon role-entry"><i class="ti ti-door-enter"></i></span>
+                        <span class="role-card-body">
+                            <span class="role-card-name">Entry <small>(Portal)</small></span>
+                            <span class="role-card-desc"><%= t('nodes.roleEntry') %></span>
+                        </span>
+                    </label>
+                    <label class="role-card <%= node?.cascadeRole === 'exit' ? 'active' : '' %>"
+                           onclick="selectCascadeRole('exit', this)">
+                        <span class="role-card-icon role-exit"><i class="ti ti-door-exit"></i></span>
+                        <span class="role-card-body">
+                            <span class="role-card-name">Exit <small>(Bridge)</small></span>
+                            <span class="role-card-desc"><%= t('nodes.roleExit') %></span>
+                        </span>
+                    </label>
+                    <label class="role-card <%= node?.cascadeRole === 'relay' ? 'active' : '' %>"
+                           onclick="selectCascadeRole('relay', this)">
+                        <span class="role-card-icon role-relay"><i class="ti ti-arrows-exchange"></i></span>
+                        <span class="role-card-body">
+                            <span class="role-card-name">Relay</span>
+                            <span class="role-card-desc"><%= t('nodes.roleRelay') %></span>
+                        </span>
+                    </label>
                 </div>
+
+                <div class="form-group" style="margin-top:12px; max-width:200px">
+                    <label for="country"><%= t('nodes.country') %></label>
+                    <input type="text" id="country" name="country"
+                           value="<%= node?.country || '' %>"
+                           placeholder="RU, DE, NL...">
+                    <small><%= t('nodes.countryHint') %></small>
+                </div>
+
                 <div class="alert alert-info" id="cascadeExitHint" style="<%= node?.cascadeRole === 'exit' ? '' : 'display:none' %>">
                     <i class="ti ti-info-circle"></i>
                     <%= t('nodes.exitNodeHint') %>
+                </div>
+                <div class="alert alert-info" id="cascadeEntryHint" style="<%= node?.cascadeRole === 'entry' ? '' : 'display:none' %>">
+                    <i class="ti ti-info-circle"></i>
+                    <%= t('nodes.entryNodeHint') %>
                 </div>
             </div>
 
@@ -115,7 +140,7 @@
             </div>
 
             <%# ========== 4. Network ========== %>
-            <div class="form-section">
+            <div class="form-section" id="networkSection">
                 <h3><%= t('nodes.sectionNetwork') %></h3>
 
                 <div class="form-row">
@@ -134,9 +159,8 @@
 
                 <div id="xrayPortConflictWarn" class="alert alert-error" style="display:none;">
                     <i class="ti ti-alert-triangle"></i>
-                    <strong>Port conflict:</strong>
-                    Port 443/80 is used by the panel (Caddy). Xray on the same server must use a different port (e.g. <strong>8443</strong>).
-                    Otherwise Xray will break the panel after a server reboot.
+                    <strong><%= t('nodes.portConflictTitle') %>:</strong>
+                    <%= t('nodes.portConflictDesc') %>
                 </div>
 
                 <div class="form-group hysteria-only" id="domainGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
@@ -169,7 +193,7 @@
                                    placeholder="<%= node ? 'secret123' : 'Auto-generated if empty' %>">
                             <button type="button" class="btn btn-sm" onclick="generateSecret()" title="Generate random secret"><i class="ti ti-dice"></i></button>
                         </div>
-                        <% if (!node) { %><small>Leave empty — a secret will be generated automatically.</small><% } %>
+                        <% if (!node) { %><small><%= t('nodes.statsSecretAutoHint') %></small><% } %>
                     </div>
                 </div>
             </div>
@@ -180,21 +204,21 @@
                 <small class="section-hint"><%= t('nodes.sectionObfuscationHint') %></small>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="obfsType">Obfuscation type</label>
+                        <label for="obfsType"><%= t('nodes.obfsType') %></label>
                         <select id="obfsType" name="obfs.type" onchange="toggleObfsPassword()">
-                            <option value="" <%= !node?.obfs?.type ? 'selected' : '' %>>Disabled</option>
+                            <option value="" <%= !node?.obfs?.type ? 'selected' : '' %>><%= t('nodes.off') %></option>
                             <option value="salamander" <%= node?.obfs?.type === 'salamander' ? 'selected' : '' %>>Salamander</option>
                         </select>
                     </div>
                     <div class="form-group" id="obfsPasswordGroup" style="<%= node?.obfs?.type === 'salamander' ? '' : 'display:none' %>">
-                        <label for="obfsPassword">Obfs password</label>
+                        <label for="obfsPassword"><%= t('nodes.obfsPassword') %></label>
                         <div class="input-with-button">
                             <input type="text" id="obfsPassword" name="obfs.password"
                                    value="<%= node?.obfs?.password || '' %>"
                                    placeholder="cry_me_a_r1ver">
                             <button type="button" class="btn btn-sm" onclick="generateObfsPassword()" title="Generate password"><i class="ti ti-dice"></i></button>
                         </div>
-                        <small>Same password must be set on both server and client.</small>
+                        <small><%= t('nodes.obfsPasswordHint') %></small>
                     </div>
                 </div>
             </div>
@@ -283,7 +307,7 @@
                                 <button type="button" class="btn btn-sm" onclick="generateXrayKeys()" title="<%= t('nodes.xrayGenerateKeys') %>"><i class="ti ti-refresh"></i></button>
                                 <% } %>
                             </div>
-                            <% if (!node) { %><small>Generated automatically during auto-setup.</small><% } %>
+                            <% if (!node) { %><small><%= t('nodes.xrayAutoGeneratedSetupHint') %></small><% } %>
                         </div>
                         <div class="form-group">
                             <label for="xrayRealityPubKey"><%= t('nodes.xrayPublicKey') %></label>
@@ -419,7 +443,7 @@
             </div>
 
             <%# ========== 9. Limits & Priority ========== %>
-            <div class="form-section">
+            <div class="form-section" id="limitsSection">
                 <h3><%= t('nodes.sectionLimits') %></h3>
                 <div class="form-row">
                     <div class="form-group hysteria-only" id="maxOnlineGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
@@ -529,20 +553,26 @@
 <% } %>
 
 <%# ========== Cascade Links (edit only, xray) ========== %>
-<% if (node && node.type === 'xray' && cascadeLinks && cascadeLinks.length > 0) { %>
+<% if (node && node.type === 'xray') { %>
 <div class="card mt-3">
     <div class="card-header">
-        <h2><i class="ti ti-topology-star-3" style="margin-right:6px"></i> <%= t('nodes.cascadeRole') %></h2>
+        <h2><i class="ti ti-topology-star-3" style="margin-right:6px"></i> <%= t('nodes.cascadeLinks') %></h2>
+        <% if (cascadeLinks && cascadeLinks.length > 0) { %>
         <span class="badge badge-secondary"><%= cascadeLinks.length %></span>
+        <% } %>
+        <a href="/panel/nodes" onclick="switchNodesViewNetwork(); return false;" class="btn btn-sm" style="margin-left:auto">
+            <i class="ti ti-map-2"></i> <%= t('nodes.goToNetworkMap') %>
+        </a>
     </div>
+    <% if (cascadeLinks && cascadeLinks.length > 0) { %>
     <div class="card-body no-padding">
-        <table class="table">
+        <table class="table cascade-links-table">
             <thead>
                 <tr>
                     <th><%= t('common.name') %></th>
-                    <th>Portal</th>
-                    <th>Bridge</th>
-                    <th>Port</th>
+                    <th><%= t('nodes.portalColumn') %></th>
+                    <th><%= t('nodes.bridgeColumn') %></th>
+                    <th><%= t('network.tunnelPort') %></th>
                     <th><%= t('common.status') %></th>
                     <th><%= t('common.actions') %></th>
                 </tr>
@@ -550,46 +580,56 @@
             <tbody>
                 <% cascadeLinks.forEach(link => {
                     const isPortal = link.portalNode && link.portalNode._id.toString() === node._id.toString();
+                    const statusClass = link.status === 'online' ? 'success' : (link.status === 'error' ? 'danger' : (link.status === 'deployed' ? 'info' : 'warning'));
                 %>
                 <tr>
                     <td><strong><%= link.name %></strong></td>
                     <td>
                         <% if (link.portalNode) { %>
-                            <%= link.portalNode.flag || '' %> <%= link.portalNode.name %>
-                            <% if (isPortal) { %><span class="badge badge-info" style="font-size:9px">THIS</span><% } %>
-                        <% } else { %>—<% } %>
+                            <span class="cascade-node-cell">
+                                <%= link.portalNode.flag || '' %> <%= link.portalNode.name %>
+                                <% if (isPortal) { %><span class="badge-this"><%= t('nodes.thisNode') %></span><% } %>
+                            </span>
+                        <% } else { %><span class="text-muted">—</span><% } %>
                     </td>
                     <td>
                         <% if (link.bridgeNode) { %>
-                            <%= link.bridgeNode.flag || '' %> <%= link.bridgeNode.name %>
-                            <% if (!isPortal) { %><span class="badge badge-info" style="font-size:9px">THIS</span><% } %>
-                        <% } else { %>—<% } %>
+                            <span class="cascade-node-cell">
+                                <%= link.bridgeNode.flag || '' %> <%= link.bridgeNode.name %>
+                                <% if (!isPortal) { %><span class="badge-this"><%= t('nodes.thisNode') %></span><% } %>
+                            </span>
+                        <% } else { %><span class="text-muted">—</span><% } %>
                     </td>
                     <td><code><%= link.tunnelPort %></code></td>
                     <td>
-                        <span class="badge badge-<%= link.status === 'online' ? 'success' : (link.status === 'error' ? 'danger' : (link.status === 'deployed' ? 'info' : 'warning')) %>">
-                            <%= link.status %>
-                        </span>
+                        <span class="badge badge-<%= statusClass %>"><%= link.status %></span>
                     </td>
-                    <td style="white-space:nowrap">
+                    <td>
+                        <div class="cascade-link-actions">
                         <% if (['pending', 'offline', 'error'].includes(link.status)) { %>
-                        <button class="btn btn-sm" onclick="cascadeAction('<%= link._id %>', 'deploy')" title="Deploy">
-                            <i class="ti ti-upload"></i>
+                        <button class="btn btn-sm btn-success" onclick="cascadeAction('<%= link._id %>', 'deploy', this)">
+                            <i class="ti ti-upload"></i> <%= t('network.deploy') %>
                         </button>
                         <% } else { %>
-                        <button class="btn btn-sm" onclick="cascadeAction('<%= link._id %>', 'undeploy')" title="Undeploy">
-                            <i class="ti ti-upload-off"></i>
+                        <button class="btn btn-sm btn-outline" onclick="cascadeAction('<%= link._id %>', 'undeploy', this)">
+                            <i class="ti ti-upload-off"></i> <%= t('network.undeploy') %>
                         </button>
                         <% } %>
-                        <button class="btn btn-sm btn-icon-danger" onclick="cascadeDelete('<%= link._id %>', '<%= link.name %>')" title="Delete">
+                        <button class="btn btn-sm btn-danger btn-icon" onclick="cascadeDelete('<%= link._id %>', '<%= link.name.replace(/'/g, "\\'") %>')" title="<%= t('common.delete') %>">
                             <i class="ti ti-trash"></i>
                         </button>
+                        </div>
                     </td>
                 </tr>
                 <% }); %>
             </tbody>
         </table>
     </div>
+    <% } else { %>
+    <div class="card-body">
+        <p class="hint" style="margin:0"><%= t('nodes.addCascadeLink') %> — <a href="/panel/nodes" onclick="switchNodesViewNetwork(); return false;"><%= t('nodes.goToNetworkMap') %></a></p>
+    </div>
+    <% } %>
 </div>
 <% } %>
 
@@ -815,7 +855,12 @@ const i18n = {
     resettingStatus: <%- JSON.stringify(t("nodes.resettingStatus")) %>,
     statusReset: <%- JSON.stringify(t("nodes.statusReset")) %>,
     autoSetup: <%- JSON.stringify(t("nodes.autoSetup")) %>,
-    error: <%- JSON.stringify(t("common.error")) %>
+    error: <%- JSON.stringify(t("common.error")) %>,
+    confirmDeployCascade: <%- JSON.stringify(t("nodes.confirmDeployCascade")) %>,
+    confirmUndeployCascade: <%- JSON.stringify(t("nodes.confirmUndeployCascade")) %>,
+    confirmDeleteCascade: <%- JSON.stringify(t("nodes.confirmDeleteCascade")) %>,
+    xrayGenerateKeysConfirm: <%- JSON.stringify(t("nodes.xrayGenerateKeysConfirm")) %>,
+    xrayKeysSuccess: <%- JSON.stringify(t("nodes.xrayKeysSuccess")) %>
 };
 const i18nConfig = {
     copied: <%- JSON.stringify(t("common.copied")) %>,
@@ -855,6 +900,7 @@ function switchProto(proto) {
         labelXray.classList.add('active');
         labelHysteria.classList.remove('active');
         hysteriaOnlyEls.forEach(el => el.style.display = 'none');
+        onCascadeRoleChange();
     } else {
         xraySection.style.display = 'none';
         if (cascadeSection) cascadeSection.style.display = 'none';
@@ -865,11 +911,29 @@ function switchProto(proto) {
     checkXrayPortConflict();
 }
 
+function selectCascadeRole(role, cardEl) {
+    document.getElementById('cascadeRole').value = role;
+    document.querySelectorAll('.role-card').forEach(function(c) { c.classList.remove('active'); });
+    if (cardEl) cardEl.classList.add('active');
+    onCascadeRoleChange();
+}
+
 function onCascadeRoleChange() {
-    const hint = document.getElementById('cascadeExitHint');
-    if (hint) {
-        hint.style.display = document.getElementById('cascadeRole').value === 'exit' ? '' : 'none';
-    }
+    const role = document.getElementById('cascadeRole').value;
+    const isExit = role === 'exit';
+    const isEntry = role === 'entry';
+
+    var exitHint = document.getElementById('cascadeExitHint');
+    var entryHint = document.getElementById('cascadeEntryHint');
+    if (exitHint) exitHint.style.display = isExit ? '' : 'none';
+    if (entryHint) entryHint.style.display = isEntry ? '' : 'none';
+
+    // Exit (Bridge) nodes: hide all client-facing settings.
+    // They only need name, IP, SSH, and cascade role.
+    ['xraySection', 'networkSection', 'limitsSection'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = isExit ? 'none' : '';
+    });
 }
 
 // ==================== Xray UI ====================
@@ -1142,7 +1206,7 @@ async function refreshNodeInfo() {
 
 <% if (node && node.type === 'xray') { %>
 async function generateXrayKeys() {
-    if (!confirm('Generate new x25519 Reality keys via SSH? This will overwrite existing keys.')) return;
+    if (!confirm(i18n.xrayGenerateKeysConfirm)) return;
     const btn = event.target;
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader-2"></i>';
@@ -1155,12 +1219,12 @@ async function generateXrayKeys() {
         if (data.success) {
             document.getElementById('xrayRealityPrivKey').value = data.privateKey;
             document.getElementById('xrayRealityPubKey').value = data.publicKey;
-            alert('Keys generated successfully! Public key: ' + data.publicKey);
+            alert(i18n.xrayKeysSuccess.replace('{key}', data.publicKey));
         } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
+            alert(i18n.error + ': ' + (data.error || 'Unknown error'));
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        alert(i18n.error + ': ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="ti ti-refresh"></i>';
@@ -1259,33 +1323,43 @@ document.getElementById('generateSshKeyBtn')?.addEventListener('click', async fu
 
 // ==================== Cascade link actions ====================
 
-async function cascadeAction(linkId, action) {
-    if (!confirm(action === 'deploy' ? 'Deploy this cascade link?' : 'Undeploy this cascade link?')) return;
+async function cascadeAction(linkId, action, btn) {
+    const confirmMsg = action === 'deploy' ? i18n.confirmDeployCascade : i18n.confirmUndeployCascade;
+    if (!confirm(confirmMsg)) return;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin 0.7s linear infinite;display:inline-block"></i>'; }
     try {
         const res = await fetch('/api/cascade/links/' + linkId + '/' + action, { method: 'POST' });
         if (res.ok) {
             location.reload();
         } else {
             const data = await res.json().catch(() => ({}));
-            alert('Error: ' + (data.error || 'Unknown error'));
+            alert(i18n.error + ': ' + (data.error || 'Unknown error'));
+            if (btn) { btn.disabled = false; btn.innerHTML = action === 'deploy' ? '<i class="ti ti-upload"></i>' : '<i class="ti ti-upload-off"></i>'; }
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        alert(i18n.error + ': ' + err.message);
+        if (btn) { btn.disabled = false; }
     }
 }
 
 async function cascadeDelete(linkId, name) {
-    if (!confirm('Delete cascade link "' + name + '"? This will also undeploy it.')) return;
+    const confirmMsg = i18n.confirmDeleteCascade.replace('{name}', name);
+    if (!confirm(confirmMsg)) return;
     try {
         const res = await fetch('/api/cascade/links/' + linkId, { method: 'DELETE' });
         if (res.ok) {
             location.reload();
         } else {
             const data = await res.json().catch(() => ({}));
-            alert('Error: ' + (data.error || 'Unknown error'));
+            alert(i18n.error + ': ' + (data.error || 'Unknown error'));
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        alert(i18n.error + ': ' + err.message);
     }
+}
+
+function switchNodesViewNetwork() {
+    window.location.href = '/panel/nodes';
+    sessionStorage.setItem('nodesView', 'network');
 }
 </script>

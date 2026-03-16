@@ -210,9 +210,32 @@
 <!-- Network Map View (hidden by default, loaded on demand) -->
 <div id="viewNetwork" style="display:none">
     <link rel="stylesheet" href="/css/network.css">
-    <div class="network-page" style="height: calc(100vh - 160px);">
+    <div class="network-page">
         <div class="network-container">
             <div id="cy" class="cytoscape-canvas"></div>
+
+            <!-- Empty state -->
+            <div class="network-empty" id="networkEmpty" style="display:none">
+                <i class="ti ti-topology-star-3"></i>
+                <p><%= t('network.noNodesOrLinks') %></p>
+            </div>
+
+            <!-- Legend -->
+            <div class="network-legend" id="networkLegend">
+                <div class="legend-title"><%= t('network.legendTitle') %></div>
+                <div class="legend-section">
+                    <div class="legend-item"><span class="legend-dot" style="background:#22c55e"></span><%= t('network.legendOnline') %></div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#ef4444"></span><%= t('network.legendOffline') %></div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span><%= t('network.legendDeployed') %></div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#64748b"></span><%= t('network.legendPending') %></div>
+                </div>
+                <div class="legend-divider"></div>
+                <div class="legend-section">
+                    <div class="legend-item"><span class="legend-role legend-portal"></span><%= t('network.legendPortal') %></div>
+                    <div class="legend-item"><span class="legend-role legend-bridge"></span><%= t('network.legendBridge') %></div>
+                    <div class="legend-item"><span class="legend-role legend-relay"></span><%= t('network.legendRelay') %></div>
+                </div>
+            </div>
         </div>
 
         <!-- Node/Edge detail drawer -->
@@ -235,7 +258,7 @@
             <form id="addLinkForm" class="modal-body">
                 <div class="form-group">
                     <label><%= t('network.linkName') %></label>
-                    <input type="text" name="name" class="form-input" required placeholder="e.g. YandexCloud → France">
+                    <input type="text" name="name" class="form-input" required placeholder="YandexCloud → France">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -500,6 +523,10 @@ function showToast(message, type = 'success') {
 
 // ==================== View Tabs ====================
 
+// Auto-restore network tab if navigated from node-form (set by node-form.ejs)
+const _restoreNetworkView = sessionStorage.getItem('nodesView') === 'network';
+if (_restoreNetworkView) sessionStorage.removeItem('nodesView');
+
 let networkLoaded = false;
 
 function switchNodesView(view) {
@@ -540,6 +567,43 @@ function switchNodesView(view) {
     }
 }
 
+window._networkI18n = {
+    selectPortal: <%- JSON.stringify(t('network.selectPortal')) %>,
+    selectBridge: <%- JSON.stringify(t('network.selectBridge')) %>,
+    errorLoadingNodes: <%- JSON.stringify(t('network.errorLoadingNodes')) %>,
+    fillRequired: <%- JSON.stringify(t('network.fillRequired')) %>,
+    loadingTopology: <%- JSON.stringify(t('network.loadingTopology')) %>,
+    noNodesOrLinks: <%- JSON.stringify(t('network.noNodesOrLinks')) %>,
+    drawerStatus: <%- JSON.stringify(t('network.drawerStatus')) %>,
+    drawerIP: <%- JSON.stringify(t('network.drawerIP')) %>,
+    drawerType: <%- JSON.stringify(t('network.drawerType')) %>,
+    drawerRole: <%- JSON.stringify(t('network.drawerRole')) %>,
+    drawerOnline: <%- JSON.stringify(t('network.drawerOnline')) %>,
+    drawerPort: <%- JSON.stringify(t('network.drawerPort')) %>,
+    openNode: <%- JSON.stringify(t('network.openNode')) %>,
+    drawerTunnelPort: <%- JSON.stringify(t('network.drawerTunnelPort')) %>,
+    drawerProtocolTransport: <%- JSON.stringify(t('network.drawerProtocolTransport')) %>,
+    drawerLatency: <%- JSON.stringify(t('network.drawerLatency')) %>,
+    confirmDeploy: <%- JSON.stringify(t('network.confirmDeploy')) %>,
+    confirmUndeploy: <%- JSON.stringify(t('network.confirmUndeploy')) %>,
+    confirmDeleteLink: <%- JSON.stringify(t('network.confirmDeleteLink')) %>,
+    deploying: <%- JSON.stringify(t('network.deploying')) %>,
+    undeploying: <%- JSON.stringify(t('network.undeploying')) %>,
+    deleting: <%- JSON.stringify(t('network.deleting')) %>,
+    deploySuccess: <%- JSON.stringify(t('network.deploySuccess')) %>,
+    undeploySuccess: <%- JSON.stringify(t('network.undeploySuccess')) %>,
+    deleteSuccess: <%- JSON.stringify(t('network.deleteSuccess')) %>,
+    deployFailed: <%- JSON.stringify(t('network.deployFailed')) %>,
+    networkError: <%- JSON.stringify(t('network.networkError')) %>,
+    deploy: <%- JSON.stringify(t('network.deploy')) %>,
+    undeploy: <%- JSON.stringify(t('network.undeploy')) %>,
+    delete: <%- JSON.stringify(t('common.delete')) %>,
+    rolePortal: <%- JSON.stringify(t('network.rolePortal')) %>,
+    roleBridge: <%- JSON.stringify(t('network.roleBridge')) %>,
+    roleRelay: <%- JSON.stringify(t('network.roleRelay')) %>,
+    createLink: <%- JSON.stringify(t('network.createLink')) %>
+};
+
 function loadNetworkScripts() {
     const scripts = [
         'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js',
@@ -558,5 +622,10 @@ function loadNetworkScripts() {
         document.body.appendChild(s);
     }
     next();
+}
+
+// Restore network view after page load
+if (_restoreNetworkView) {
+    switchNodesView('network');
 }
 </script>

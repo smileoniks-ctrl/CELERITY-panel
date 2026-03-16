@@ -2362,3 +2362,117 @@ html {
         animation: none;
     }
 }
+
+/* ==================== CASCADE ROLE PICKER ==================== */
+
+.cascade-role-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.role-card {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.18s;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.02));
+    user-select: none;
+}
+
+.role-card:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.role-card.active {
+    border-color: var(--accent, #6366f1);
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.role-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+}
+
+.role-card-icon.role-standalone { background: rgba(71, 85, 105, 0.3); color: #94a3b8; }
+.role-card-icon.role-entry      { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+.role-card-icon.role-exit       { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.role-card-icon.role-relay      { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; }
+
+.role-card.active .role-card-icon.role-standalone { background: rgba(71, 85, 105, 0.5); }
+.role-card.active .role-card-icon.role-entry      { background: rgba(99, 102, 241, 0.3); }
+.role-card.active .role-card-icon.role-exit       { background: rgba(245, 158, 11, 0.3); }
+.role-card.active .role-card-icon.role-relay      { background: rgba(139, 92, 246, 0.3); }
+
+.role-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.role-card-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+    white-space: nowrap;
+}
+
+.role-card-name small {
+    font-weight: 400;
+    color: var(--text-muted, #64748b);
+    font-size: 10px;
+}
+
+.role-card-desc {
+    font-size: 10px;
+    color: var(--text-muted, #64748b);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* ==================== CASCADE LINKS TABLE ==================== */
+
+.cascade-links-table td { vertical-align: middle; }
+
+.cascade-node-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.badge-this {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    background: rgba(99, 102, 241, 0.18);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    text-transform: uppercase;
+}
+
+.cascade-link-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}

@@ -7,25 +7,41 @@
 
     if (typeof cytoscape === 'undefined') return;
 
-    // Register dagre layout plugin
     if (typeof cytoscapeDagre !== 'undefined') {
         cytoscape.use(cytoscapeDagre);
     }
 
+    const i18n = window._networkI18n || {};
+
     const STATUS_COLORS = {
         online: '#22c55e',
-        offline: '#ef4444',
+        offline: '#64748b',
         error: '#ef4444',
         syncing: '#eab308',
         deployed: '#3b82f6',
-        pending: '#64748b',
+        pending: '#475569',
+    };
+
+    // Node background colors by cascade role
+    const ROLE_BG = {
+        standalone: '#1e293b',
+        entry:      '#1e1b4b',
+        exit:       '#1c1400',
+        relay:      '#1a0d2e',
+    };
+
+    const ROLE_BORDER_ACCENT = {
+        standalone: '#334155',
+        entry:      '#6366f1',
+        exit:       '#f59e0b',
+        relay:      '#8b5cf6',
     };
 
     const ROLE_LABELS = {
-        standalone: '',
-        entry: 'PORTAL',
-        relay: 'RELAY',
-        exit: 'BRIDGE',
+        standalone: i18n.roleStandalone || '',
+        entry:      i18n.rolePortal     || 'PORTAL',
+        relay:      i18n.roleRelay      || 'RELAY',
+        exit:       i18n.roleBridge     || 'BRIDGE',
     };
 
     let cy = null;
@@ -38,7 +54,7 @@
             container: document.getElementById('cy'),
             style: getCytoscapeStyle(),
             layout: { name: 'preset' },
-            minZoom: 0.3,
+            minZoom: 0.2,
             maxZoom: 3,
             wheelSensitivity: 0.3,
             boxSelectionEnabled: false,
@@ -62,12 +78,26 @@
 
         loadTopology();
         refreshTimer = setInterval(refreshStatuses, 30000);
+
+        // Resize observer to fix cytoscape canvas on container resize
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(function () {
+                if (cy) cy.resize();
+            });
+            const container = document.getElementById('cy');
+            if (container) ro.observe(container);
+        }
+
+        window._networkResize = function () {
+            if (cy) { cy.resize(); cy.fit(50); }
+        };
     }
 
     // ==================== DATA LOADING ====================
 
     async function loadTopology() {
         showLoading(true);
+        setEmptyState(false);
         try {
             const res = await fetch('/api/cascade/topology');
             if (!res.ok) throw new Error('Failed to load topology');
@@ -106,17 +136,32 @@
     function renderGraph(data) {
         cy.elements().remove();
 
+        const isEmpty = (!data.nodes || data.nodes.length === 0) &&
+                        (!data.edges || data.edges.length === 0);
+
+        if (isEmpty) {
+            setEmptyState(true);
+            return;
+        }
+        setEmptyState(false);
+
         const elements = [];
 
         for (const n of data.nodes) {
-            const role = ROLE_LABELS[n.data.cascadeRole] || '';
+            const role = n.data.cascadeRole || 'standalone';
+            const roleLabel = ROLE_LABELS[role] || '';
+            const displayLabel = (n.data.flag ? n.data.flag + ' ' : '') + (n.data.label || n.data.ip || '');
+            const subtitle = n.data.ip + (n.data.onlineUsers ? ' · ' + n.data.onlineUsers : '');
+
             elements.push({
                 group: 'nodes',
                 data: {
                     ...n.data,
-                    roleLabel: role,
-                    displayLabel: `${n.data.flag || ''} ${n.data.label}`.trim(),
-                    subtitle: n.data.ip + (n.data.onlineUsers ? ` (${n.data.onlineUsers})` : ''),
+                    roleLabel,
+                    displayLabel,
+                    subtitle,
+                    roleBg: ROLE_BG[role] || ROLE_BG.standalone,
+                    roleAccent: ROLE_BORDER_ACCENT[role] || ROLE_BORDER_ACCENT.standalone,
                 },
                 position: n.position || undefined,
             });
@@ -144,6 +189,7 @@
 
     function buildEdgeLabel(data) {
         const parts = [];
+        if (data.tunnelProtocol) parts.push(data.tunnelProtocol.toUpperCase());
         if (data.tunnelPort) parts.push(':' + data.tunnelPort);
         if (data.latencyMs != null) parts.push(data.latencyMs + 'ms');
         return parts.join(' ') || '';
@@ -158,46 +204,68 @@
                 style: {
                     'shape': 'round-rectangle',
                     'width': 160,
-                    'height': 64,
-                    'background-color': '#1e1e2e',
+                    'height': 52,
+                    'background-color': function (ele) {
+                        return ele.data('roleBg') || ROLE_BG.standalone;
+                    },
                     'border-width': 2,
                     'border-color': function (ele) {
-                        return STATUS_COLORS[ele.data('status')] || '#64748b';
+                        const status = ele.data('status');
+                        if (status === 'online') return STATUS_COLORS.online;
+                        if (status === 'error') return STATUS_COLORS.error;
+                        if (status === 'offline') return ele.data('roleAccent') || ROLE_BORDER_ACCENT.standalone;
+                        return ele.data('roleAccent') || ROLE_BORDER_ACCENT.standalone;
                     },
                     'label': function (ele) {
-                        return ele.data('displayLabel') || ele.data('label');
+                        return ele.data('displayLabel') || ele.data('label') || ele.data('ip') || '';
                     },
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'color': '#e2e8f0',
                     'font-size': '12px',
-                    'font-family': 'Inter, sans-serif',
-                    'font-weight': 500,
-                    'text-wrap': 'wrap',
+                    'font-family': 'Inter, system-ui, sans-serif',
+                    'font-weight': 600,
+                    'text-wrap': 'ellipsis',
                     'text-max-width': '140px',
-                    'text-margin-y': -4,
                     'overlay-opacity': 0,
                 },
             },
             {
                 selector: 'node[subtitle]',
                 style: {
+                    'height': 60,
                     'label': function (ele) {
-                        const main = ele.data('displayLabel') || ele.data('label');
+                        const main = ele.data('displayLabel') || ele.data('label') || '';
                         const sub = ele.data('subtitle') || '';
                         return main + '\n' + sub;
                     },
+                    'font-size': '12px',
+                    'text-wrap': 'wrap',
+                    'text-max-width': '145px',
+                    'line-height': 1.5,
                 },
             },
             {
                 selector: 'node[roleLabel]',
                 style: {
+                    'height': 70,
                     'label': function (ele) {
                         const role = ele.data('roleLabel');
-                        const main = ele.data('displayLabel') || ele.data('label');
+                        const main = ele.data('displayLabel') || ele.data('label') || '';
                         const sub = ele.data('subtitle') || '';
-                        const prefix = role ? `[${role}] ` : '';
+                        const prefix = role ? '[' + role + '] ' : '';
                         return prefix + main + '\n' + sub;
+                    },
+                    'font-size': '11px',
+                    'text-wrap': 'wrap',
+                    'text-max-width': '145px',
+                    'line-height': 1.5,
+                    'color': function (ele) {
+                        const role = ele.data('cascadeRole') || 'standalone';
+                        if (role === 'entry') return '#a5b4fc';
+                        if (role === 'exit') return '#fcd34d';
+                        if (role === 'relay') return '#c4b5fd';
+                        return '#e2e8f0';
                     },
                 },
             },
@@ -206,34 +274,38 @@
                 style: {
                     'border-width': 3,
                     'border-color': '#6366f1',
-                    'background-color': 'rgba(99, 102, 241, 0.08)',
+                    'background-color': function (ele) {
+                        const role = ele.data('cascadeRole') || 'standalone';
+                        const base = ROLE_BG[role] || ROLE_BG.standalone;
+                        return base;
+                    },
+                    'overlay-opacity': 0.06,
+                    'overlay-color': '#6366f1',
                 },
             },
             {
                 selector: 'node:active',
-                style: {
-                    'overlay-opacity': 0,
-                },
+                style: { 'overlay-opacity': 0 },
             },
             {
                 selector: 'edge',
                 style: {
-                    'width': 2,
+                    'width': 1.5,
                     'line-color': function (ele) {
-                        return STATUS_COLORS[ele.data('status')] || '#64748b';
+                        return STATUS_COLORS[ele.data('status')] || STATUS_COLORS.pending;
                     },
                     'target-arrow-color': function (ele) {
-                        return STATUS_COLORS[ele.data('status')] || '#64748b';
+                        return STATUS_COLORS[ele.data('status')] || STATUS_COLORS.pending;
                     },
                     'target-arrow-shape': 'triangle',
                     'curve-style': 'bezier',
-                    'arrow-scale': 1.2,
+                    'arrow-scale': 1.1,
                     'label': function (ele) { return ele.data('edgeLabel') || ''; },
                     'font-size': '10px',
                     'font-family': 'JetBrains Mono, monospace',
                     'color': '#94a3b8',
-                    'text-background-color': '#0f0f1a',
-                    'text-background-opacity': 0.8,
+                    'text-background-color': '#0f172a',
+                    'text-background-opacity': 0.85,
                     'text-background-padding': '3px',
                     'text-rotation': 'autorotate',
                     'overlay-opacity': 0,
@@ -242,10 +314,24 @@
             {
                 selector: 'edge[status = "online"]',
                 style: {
-                    'line-style': 'solid',
                     'width': 2.5,
-                    'line-dash-pattern': [6, 3],
-                    'line-dash-offset': 0,
+                    'line-style': 'dashed',
+                    'line-dash-pattern': [8, 4],
+                },
+            },
+            {
+                selector: 'edge[status = "deployed"]',
+                style: {
+                    'width': 2,
+                    'line-style': 'solid',
+                },
+            },
+            {
+                selector: 'edge[status = "syncing"]',
+                style: {
+                    'width': 2,
+                    'line-style': 'dashed',
+                    'line-dash-pattern': [4, 4],
                 },
             },
             {
@@ -265,13 +351,13 @@
         const layout = cy.layout({
             name: 'dagre',
             rankDir: 'LR',
-            nodeSep: 80,
-            rankSep: 150,
-            edgeSep: 40,
+            nodeSep: 70,
+            rankSep: 140,
+            edgeSep: 30,
             animate: true,
-            animationDuration: 400,
+            animationDuration: 350,
             fit: true,
-            padding: 50,
+            padding: 60,
         });
         layout.run();
     }
@@ -282,38 +368,39 @@
         const node = evt.target;
         const d = node.data();
         const statusClass = d.status || 'offline';
+        const roleLabel = d.roleLabel ? `<span class="drawer-role-badge role-${d.cascadeRole}">${d.roleLabel}</span>` : '';
 
         const html = `
             <div class="drawer-field">
-                <div class="drawer-label">Status</div>
-                <div class="drawer-status ${statusClass}">● ${d.status || 'unknown'}</div>
+                <div class="drawer-label"><i class="ti ti-activity"></i> ${i18n.drawerStatus || 'Status'}</div>
+                <div class="drawer-status ${statusClass}">&#9679; ${d.status || 'unknown'}${roleLabel}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">IP</div>
+                <div class="drawer-label"><i class="ti ti-network"></i> ${i18n.drawerIP || 'IP'}</div>
                 <div class="drawer-value">${d.ip || '—'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Type</div>
+                <div class="drawer-label"><i class="ti ti-cpu"></i> ${i18n.drawerType || 'Type'}</div>
                 <div class="drawer-value">${d.type || '—'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Role</div>
+                <div class="drawer-label"><i class="ti ti-topology-star-3"></i> ${i18n.drawerRole || 'Role'}</div>
                 <div class="drawer-value">${d.cascadeRole || 'standalone'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Online Users</div>
+                <div class="drawer-label"><i class="ti ti-users"></i> ${i18n.drawerOnline || 'Online Users'}</div>
                 <div class="drawer-value">${d.onlineUsers || 0}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Port</div>
+                <div class="drawer-label"><i class="ti ti-plug"></i> ${i18n.drawerPort || 'Port'}</div>
                 <div class="drawer-value">${d.port || '—'}</div>
             </div>
             <div class="drawer-actions">
-                <a href="/panel/nodes/${d.id}" class="btn btn-sm btn-outline"><i class="ti ti-external-link"></i> Open Node</a>
+                <a href="/panel/nodes/${d.id}" class="btn btn-sm btn-outline"><i class="ti ti-external-link"></i> ${i18n.openNode || 'Open Node'}</a>
             </div>
         `;
 
-        document.getElementById('drawerTitle').textContent = (d.flag || '') + ' ' + (d.label || '');
+        document.getElementById('drawerTitle').innerHTML = (d.flag ? d.flag + ' ' : '') + (d.label || '');
         document.getElementById('drawerBody').innerHTML = html;
         document.getElementById('nodeDrawer').classList.add('open');
     }
@@ -322,33 +409,34 @@
         const edge = evt.target;
         const d = edge.data();
         const statusClass = d.status || 'pending';
+        const linkId = d.linkId;
 
         const html = `
             <div class="drawer-field">
-                <div class="drawer-label">Status</div>
-                <div class="drawer-status ${statusClass}">● ${d.status || 'pending'}</div>
+                <div class="drawer-label"><i class="ti ti-activity"></i> ${i18n.drawerStatus || 'Status'}</div>
+                <div class="drawer-status ${statusClass}">&#9679; ${d.status || 'pending'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Tunnel Port</div>
+                <div class="drawer-label"><i class="ti ti-plug"></i> ${i18n.drawerTunnelPort || 'Tunnel Port'}</div>
                 <div class="drawer-value">${d.tunnelPort || '—'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Protocol / Transport</div>
-                <div class="drawer-value">${d.tunnelProtocol || 'vless'} / ${d.tunnelTransport || 'tcp'}</div>
+                <div class="drawer-label"><i class="ti ti-arrows-exchange"></i> ${i18n.drawerProtocolTransport || 'Protocol / Transport'}</div>
+                <div class="drawer-value">${(d.tunnelProtocol || 'vless').toUpperCase()} / ${d.tunnelTransport || 'tcp'}</div>
             </div>
             <div class="drawer-field">
-                <div class="drawer-label">Latency</div>
+                <div class="drawer-label"><i class="ti ti-clock"></i> ${i18n.drawerLatency || 'Latency'}</div>
                 <div class="drawer-value">${d.latencyMs != null ? d.latencyMs + ' ms' : '—'}</div>
             </div>
             <div class="drawer-actions">
-                <button class="btn btn-sm btn-success" onclick="window._cascadeDeploy('${d.linkId}')">
-                    <i class="ti ti-upload"></i> Deploy
+                <button class="btn btn-sm btn-success" id="btnDeploy" onclick="window._cascadeDeploy('${linkId}')">
+                    <i class="ti ti-upload"></i> ${i18n.deploy || 'Deploy'}
                 </button>
-                <button class="btn btn-sm btn-outline" onclick="window._cascadeUndeploy('${d.linkId}')">
-                    <i class="ti ti-upload-off"></i> Undeploy
+                <button class="btn btn-sm btn-outline" id="btnUndeploy" onclick="window._cascadeUndeploy('${linkId}')">
+                    <i class="ti ti-upload-off"></i> ${i18n.undeploy || 'Undeploy'}
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="window._cascadeDelete('${d.linkId}')">
-                    <i class="ti ti-trash"></i> Delete
+                <button class="btn btn-sm btn-danger" id="btnDelete" onclick="window._cascadeDelete('${linkId}')">
+                    <i class="ti ti-trash"></i> ${i18n.delete || 'Delete'}
                 </button>
             </div>
         `;
@@ -364,7 +452,7 @@
     }
 
     let positionSaveTimer = null;
-    function onNodeDragEnd(evt) {
+    function onNodeDragEnd() {
         clearTimeout(positionSaveTimer);
         positionSaveTimer = setTimeout(saveAllPositions, 500);
     }
@@ -400,11 +488,12 @@
                 return '<option value="' + n._id + '">' + (n.flag || '') + ' ' + n.name + ' (' + n.ip + ')</option>';
             }).join('');
 
-            portalSelect.innerHTML = '<option value="">— Select Portal —</option>' + options;
-            bridgeSelect.innerHTML = '<option value="">— Select Bridge —</option>' + options;
+            portalSelect.innerHTML = '<option value="">' + (i18n.selectPortal || '— Select Portal —') + '</option>' + options;
+            bridgeSelect.innerHTML = '<option value="">' + (i18n.selectBridge || '— Select Bridge —') + '</option>' + options;
         } catch (err) {
-            portalSelect.innerHTML = '<option value="">Error loading nodes</option>';
-            bridgeSelect.innerHTML = '<option value="">Error loading nodes</option>';
+            const errMsg = '<option value="">' + (i18n.errorLoadingNodes || 'Error loading nodes') + '</option>';
+            portalSelect.innerHTML = errMsg;
+            bridgeSelect.innerHTML = errMsg;
         }
 
         modal.classList.add('active');
@@ -418,6 +507,7 @@
     async function onAddLinkSubmit(e) {
         e.preventDefault();
         const form = e.target;
+        const submitBtn = form.querySelector('[type="submit"]');
         const data = {
             name: form.name.value,
             portalNodeId: form.portalNodeId.value,
@@ -429,9 +519,12 @@
         };
 
         if (!data.name || !data.portalNodeId || !data.bridgeNodeId) {
-            alert('Please fill in all required fields');
+            alert(i18n.fillRequired || 'Please fill in all required fields');
             return;
         }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ti ti-loader-2 spin"></i>';
 
         try {
             const res = await fetch('/api/cascade/links', {
@@ -442,54 +535,106 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                alert('Error: ' + (err.error || 'Unknown error'));
+                showToast(i18n.networkError + ': ' + (err.error || 'Unknown error'), 'error');
                 return;
             }
 
             closeModal();
             loadTopology();
         } catch (err) {
-            alert('Network error: ' + err.message);
+            showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="ti ti-plus"></i> ' + (window._networkI18n?.createLink || 'Create');
         }
     }
 
     // ==================== CASCADE ACTIONS ====================
 
+    function setActionButtonsLoading(msg) {
+        ['btnDeploy', 'btnUndeploy', 'btnDelete'].forEach(function (id) {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = true;
+        });
+        const drawerBody = document.getElementById('drawerBody');
+        const existingLoader = drawerBody && drawerBody.querySelector('.drawer-loading');
+        if (!existingLoader && drawerBody) {
+            const loader = document.createElement('div');
+            loader.className = 'drawer-loading';
+            loader.innerHTML = '<i class="ti ti-loader-2 spin"></i> ' + msg;
+            drawerBody.appendChild(loader);
+        }
+    }
+
+    function resetActionButtons() {
+        ['btnDeploy', 'btnUndeploy', 'btnDelete'].forEach(function (id) {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = false;
+        });
+        const loader = document.querySelector('.drawer-loading');
+        if (loader) loader.remove();
+    }
+
     window._cascadeDeploy = async function (linkId) {
-        if (!confirm('Deploy this cascade link?')) return;
+        if (!confirm(i18n.confirmDeploy || 'Deploy this cascade link?')) return;
+        setActionButtonsLoading(i18n.deploying || 'Deploying...');
+
+        // Optimistic: mark edge as syncing
+        const edge = cy.edges().filter(function (e) { return e.data('linkId') === linkId; });
+        const prevStatus = edge.length ? edge.data('status') : null;
+        if (edge.length) edge.data('status', 'syncing');
+
         try {
             const res = await fetch('/api/cascade/links/' + linkId + '/deploy', { method: 'POST' });
             const data = await res.json();
             if (data.success) {
+                showToast(i18n.deploySuccess || 'Deployed');
                 loadTopology();
                 closeDrawer();
             } else {
-                alert('Deploy failed: ' + (data.error || 'Unknown error'));
+                if (edge.length && prevStatus) edge.data('status', prevStatus);
+                showToast((i18n.deployFailed || 'Deploy failed') + ': ' + (data.error || ''), 'error');
             }
         } catch (err) {
-            alert('Error: ' + err.message);
+            if (edge.length && prevStatus) edge.data('status', prevStatus);
+            showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
+        } finally {
+            resetActionButtons();
         }
     };
 
     window._cascadeUndeploy = async function (linkId) {
-        if (!confirm('Undeploy this cascade link?')) return;
+        if (!confirm(i18n.confirmUndeploy || 'Undeploy this cascade link?')) return;
+        setActionButtonsLoading(i18n.undeploying || 'Undeploying...');
+
+        const edge = cy.edges().filter(function (e) { return e.data('linkId') === linkId; });
+        if (edge.length) edge.data('status', 'syncing');
+
         try {
             await fetch('/api/cascade/links/' + linkId + '/undeploy', { method: 'POST' });
+            showToast(i18n.undeploySuccess || 'Undeployed');
             loadTopology();
             closeDrawer();
         } catch (err) {
-            alert('Error: ' + err.message);
+            showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
+        } finally {
+            resetActionButtons();
         }
     };
 
     window._cascadeDelete = async function (linkId) {
-        if (!confirm('Delete this cascade link? This will also undeploy it.')) return;
+        if (!confirm(i18n.confirmDeleteLink || 'Delete this cascade link?')) return;
+        setActionButtonsLoading(i18n.deleting || 'Deleting...');
+
         try {
             await fetch('/api/cascade/links/' + linkId, { method: 'DELETE' });
+            showToast(i18n.deleteSuccess || 'Deleted');
             loadTopology();
             closeDrawer();
         } catch (err) {
-            alert('Error: ' + err.message);
+            showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
+        } finally {
+            resetActionButtons();
         }
     };
 
@@ -500,11 +645,38 @@
         if (show && !el) {
             el = document.createElement('div');
             el.className = 'network-loading';
-            el.innerHTML = '<div class="spinner"></div> Loading topology...';
-            document.querySelector('.network-container').appendChild(el);
+            el.innerHTML = '<div class="spinner"></div> ' + (i18n.loadingTopology || 'Loading...');
+            const container = document.querySelector('.network-container');
+            if (container) container.appendChild(el);
         } else if (!show && el) {
             el.remove();
         }
+    }
+
+    function setEmptyState(show) {
+        const el = document.getElementById('networkEmpty');
+        const legend = document.getElementById('networkLegend');
+        if (el) el.style.display = show ? 'flex' : 'none';
+        if (legend) legend.style.display = show ? 'none' : '';
+    }
+
+    function showToast(message, type) {
+        // Use the shared toast from nodes.ejs if available
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type || 'success');
+            return;
+        }
+        // Fallback: find or create toast element
+        let toast = document.getElementById('toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'toast';
+            toast.className = 'toast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.className = 'toast show ' + (type || 'success');
+        setTimeout(function () { toast.className = 'toast'; }, 3500);
     }
 
     // ==================== START ====================

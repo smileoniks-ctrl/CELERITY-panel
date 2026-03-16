@@ -650,7 +650,7 @@ async function generateX25519Keys(conn) {
  * @returns {{ success, logs, realityKeys? }}
  */
 async function setupXrayNode(node, options = {}) {
-    const { restartService = true } = options;
+    const { restartService = true, exitOnly = false } = options;
 
     const logs = [];
     const log = (msg) => {
@@ -659,21 +659,23 @@ async function setupXrayNode(node, options = {}) {
         logger.info(`[XraySetup] ${msg}`);
     };
 
-    log(`Starting Xray setup for ${node.name} (${node.ip})`);
+    log(`Starting Xray setup for ${node.name} (${node.ip})${exitOnly ? ' [exit/bridge mode]' : ''}`);
 
-    // Detect port conflict: Xray on the same VPS as the panel (Caddy) using port 443/80
-    const sameVps = isSameVpsAsPanel(node);
-    const nodePort = node.port || 443;
-    if (sameVps && (nodePort === 443 || nodePort === 80)) {
-        const msg = `Port conflict detected: Xray port ${nodePort} is already used by the panel (Caddy) on this server. ` +
-            `Use a different port (e.g. 8443) for the Xray node. ` +
-            `After changing the port, save the node and run Auto Setup again.`;
-        log(`ERROR: ${msg}`);
-        return { success: false, error: msg, logs, realityKeys: null };
-    }
+    if (!exitOnly) {
+        // Detect port conflict: Xray on the same VPS as the panel (Caddy) using port 443/80
+        const sameVps = isSameVpsAsPanel(node);
+        const nodePort = node.port || 443;
+        if (sameVps && (nodePort === 443 || nodePort === 80)) {
+            const msg = `Port conflict detected: Xray port ${nodePort} is already used by the panel (Caddy) on this server. ` +
+                `Use a different port (e.g. 8443) for the Xray node. ` +
+                `After changing the port, save the node and run Auto Setup again.`;
+            log(`ERROR: ${msg}`);
+            return { success: false, error: msg, logs, realityKeys: null };
+        }
 
-    if (sameVps) {
-        log(`Same-VPS setup detected (node port: ${nodePort}, panel domain: ${config.PANEL_DOMAIN})`);
+        if (sameVps) {
+            log(`Same-VPS setup detected (node port: ${nodePort}, panel domain: ${config.PANEL_DOMAIN})`);
+        }
     }
 
     let conn;
@@ -692,6 +694,14 @@ async function setupXrayNode(node, options = {}) {
             throw new Error(`Xray installation failed: ${installResult.error}`);
         }
         log('Xray-core installed');
+
+        // Exit (Bridge) nodes: skip config, Reality keys, firewall, and service start.
+        // Their actual config is deployed via cascade links.
+        if (exitOnly) {
+            log('Exit node setup completed (Xray binary only). Deploy a cascade link to configure.');
+            if (conn) conn.end();
+            return { success: true, logs, realityKeys: null };
+        }
 
         // Generate Reality keys and shortId if needed
         const xrayCfg = node.xray || {};
