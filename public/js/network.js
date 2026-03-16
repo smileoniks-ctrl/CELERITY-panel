@@ -79,7 +79,11 @@
         document.getElementById('modalCancel').addEventListener('click', closeModal);
         document.getElementById('addLinkForm').addEventListener('submit', onAddLinkSubmit);
 
-        loadTopology();
+        // Force resize after a tick — container may have been hidden (display:none) at script load time
+        setTimeout(function () {
+            cy.resize();
+            loadTopology();
+        }, 30);
         refreshTimer = setInterval(refreshStatuses, 30000);
 
         // Resize observer to fix cytoscape canvas on container resize

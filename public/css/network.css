@@ -8,13 +8,14 @@
 
 /* Cytoscape container */
 .network-container {
-    position: relative;
-    flex: 1;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
-    min-width: 0;
 }
 
 .cytoscape-canvas {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     background: var(--bg-primary, #0f0f1a);

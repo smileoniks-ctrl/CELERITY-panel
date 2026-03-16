@@ -556,7 +556,8 @@ function switchNodesView(view) {
             loadNetworkScripts();
             networkLoaded = true;
         } else if (window._networkResize) {
-            window._networkResize();
+            // Small delay to let the display:'' take effect before resize
+            setTimeout(window._networkResize, 50);
         }
     } else {
         viewList.style.display = '';
