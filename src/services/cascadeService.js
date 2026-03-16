@@ -444,7 +444,8 @@ class CascadeService {
         const ssh = new NodeSSH(node);
         try {
             await ssh.connect();
-            const result = await ssh.exec(`ss -tn state established '( sport = :${port} )' | grep -c ESTAB || echo 0`);
+            // ss -tnH: -t=tcp, -n=numeric, -H=no header; count lines = count of ESTABLISHED connections
+            const result = await ssh.exec(`ss -tnH state established '( sport = :${port} )' | wc -l`);
             const count = parseInt((result.stdout || '0').trim(), 10);
             return count > 0;
         } catch {
