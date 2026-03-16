@@ -330,9 +330,12 @@ class CascadeService {
             const ssh = new NodeSSH(portalNode);
             try {
                 await ssh.connect();
-                const configPath = portalNode.paths?.config || '/usr/local/etc/xray/config.json';
+                // Xray nodes use different config path than Hysteria
+                const configPath = portalNode.type === 'xray'
+                    ? '/usr/local/etc/xray/config.json'
+                    : (portalNode.paths?.config || '/etc/hysteria/config.yaml');
                 await ssh.uploadContent(finalConfig, configPath);
-                logger.info(`[Cascade] Portal config uploaded to ${portalNode.name}`);
+                logger.info(`[Cascade] Portal config uploaded to ${portalNode.name} at ${configPath}`);
             } finally {
                 ssh.disconnect();
             }

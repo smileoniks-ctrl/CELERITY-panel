@@ -271,8 +271,10 @@ class SyncService {
                     logger.warn(`[Xray Sync] Node ${node.name}: cascade apply skipped: ${cascadeErr.message}`);
                 }
 
-                await ssh.uploadContent(configContent, node.paths?.config || '/usr/local/etc/xray/config.json');
-                logger.info(`[Xray Sync] Node ${node.name}: config uploaded`);
+                // Xray config always goes to /usr/local/etc/xray/config.json
+                const xrayConfigPath = '/usr/local/etc/xray/config.json';
+                await ssh.uploadContent(configContent, xrayConfigPath);
+                logger.info(`[Xray Sync] Node ${node.name}: config uploaded to ${xrayConfigPath}`);
             } catch (error) {
                 logger.warn(`[Xray Sync] Node ${node.name}: config upload failed (SSH): ${error.message}`);
             } finally {
