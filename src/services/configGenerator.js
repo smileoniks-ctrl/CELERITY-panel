@@ -451,8 +451,8 @@ WantedBy=multi-user.target
 
 /**
  * Apply reverse-portal configuration to an existing Xray config object.
- * Adds portal entries, bridge-connector inbounds, and routing rules for
- * every active CascadeLink where this node is the Portal (entry).
+ * Adds portal entries, bridge-connector inbounds, routing rules, and optional
+ * balancer for multiple portals with geo-routing support.
  *
  * @param {Object} config - Parsed Xray config object (mutated in place)
  * @param {Array} portalLinks - CascadeLink documents where this node is portalNode
@@ -463,11 +463,20 @@ function applyReversePortal(config, portalLinks, clientInboundTag) {
 
     config.reverse = config.reverse || {};
     config.reverse.portals = config.reverse.portals || [];
+    config.routing = config.routing || { rules: [] };
+    config.routing.rules = config.routing.rules || [];
+    config.inbounds = config.inbounds || [];
+
+    const portalTags = [];
+    const geoRoutedLinks = [];
+    const defaultLinks = [];
 
     for (const link of portalLinks) {
         const linkIdShort = String(link._id).slice(-8);
         const portalTag = `portal-${linkIdShort}`;
         const connectorTag = `bridge-conn-${linkIdShort}`;
+
+        portalTags.push(portalTag);
 
         config.reverse.portals.push({
             tag: portalTag,
@@ -484,14 +493,9 @@ function applyReversePortal(config, portalLinks, clientInboundTag) {
                 clients: [{ id: link.tunnelUuid }],
                 decryption: 'none',
             },
-            streamSettings: buildCascadeTunnelStreamSettings(link),
+            streamSettings: buildCascadeTunnelStreamSettings(link, false),
         };
-
-        config.inbounds = config.inbounds || [];
         config.inbounds.push(inbound);
-
-        config.routing = config.routing || { rules: [] };
-        config.routing.rules = config.routing.rules || [];
 
         // Rule to link connector inbound with portal (required for reverse tunnel handshake)
         config.routing.rules.push({
@@ -501,12 +505,72 @@ function applyReversePortal(config, portalLinks, clientInboundTag) {
             outboundTag: portalTag,
         });
 
-        // Rule to route all client traffic through the portal to Bridge
-        if (clientInboundTag) {
+        // Separate geo-routed links from default ones
+        if (link.geoRouting?.enabled && (link.geoRouting.domains?.length || link.geoRouting.geoip?.length)) {
+            geoRoutedLinks.push({ link, portalTag });
+        } else {
+            defaultLinks.push({ link, portalTag });
+        }
+    }
+
+    // Add geo-routing rules (specific rules must come before default)
+    for (const { link, portalTag } of geoRoutedLinks) {
+        const gr = link.geoRouting;
+        
+        // Domain-based routing rule
+        if (gr.domains?.length && clientInboundTag) {
             config.routing.rules.push({
                 type: 'field',
                 inboundTag: [clientInboundTag],
+                domain: gr.domains,
                 outboundTag: portalTag,
+            });
+        }
+        
+        // GeoIP-based routing rule
+        if (gr.geoip?.length && clientInboundTag) {
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                ip: gr.geoip,
+                outboundTag: portalTag,
+            });
+        }
+    }
+
+    // Handle default (non-geo-routed) traffic
+    if (clientInboundTag) {
+        if (defaultLinks.length === 0 && geoRoutedLinks.length > 0) {
+            // All links are geo-routed, no default route needed
+        } else if (defaultLinks.length === 1) {
+            // Single default portal - direct routing
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                outboundTag: defaultLinks[0].portalTag,
+            });
+        } else if (defaultLinks.length > 1) {
+            // Multiple default portals - use balancer with fallback
+            const balancerTag = 'portal-balancer';
+            const fallbackTag = defaultLinks[0].link.fallbackTag || 'direct';
+            config.routing.balancers = config.routing.balancers || [];
+            config.routing.balancers.push({
+                tag: balancerTag,
+                selector: defaultLinks.map(d => d.portalTag),
+                strategy: { type: 'leastPing' },
+                fallbackTag: fallbackTag,
+            });
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                balancerTag: balancerTag,
+            });
+        } else if (portalTags.length === 1) {
+            // Single portal total (could be geo-routed) - use as default fallback
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                outboundTag: portalTags[0],
             });
         }
     }
@@ -526,6 +590,28 @@ function generateBridgeConfig(link, portalNode) {
     const protocol = link.tunnelProtocol || 'vless';
     const linkIdShort = String(link._id).slice(-8);
 
+    const tunnelOutbound = {
+        tag: 'tunnel',
+        protocol,
+        settings: {
+            vnext: [{
+                address: portalNode.ip,
+                port: link.tunnelPort || 10086,
+                users: [{
+                    id: link.tunnelUuid,
+                    encryption: 'none',
+                }],
+            }],
+        },
+        streamSettings: buildCascadeTunnelStreamSettings(link, true),
+    };
+
+    // Add MUX if enabled
+    const muxConfig = buildMuxConfig(link);
+    if (muxConfig) {
+        tunnelOutbound.mux = muxConfig;
+    }
+
     const config = {
         log: {
             loglevel: 'warning',
@@ -537,21 +623,7 @@ function generateBridgeConfig(link, portalNode) {
             }],
         },
         outbounds: [
-            {
-                tag: 'tunnel',
-                protocol,
-                settings: {
-                    vnext: [{
-                        address: portalNode.ip,
-                        port: link.tunnelPort || 10086,
-                        users: [{
-                            id: link.tunnelUuid,
-                            encryption: 'none',
-                        }],
-                    }],
-                },
-                streamSettings: buildCascadeTunnelStreamSettings(link),
-            },
+            tunnelOutbound,
             {
                 tag: 'freedom',
                 protocol: 'freedom',
@@ -602,6 +674,28 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
     const upProtocol = upstreamLink.tunnelProtocol || 'vless';
     const upLinkId = String(upstreamLink._id).slice(-8);
 
+    const tunnelUpOutbound = {
+        tag: 'tunnel-up',
+        protocol: upProtocol,
+        settings: {
+            vnext: [{
+                address: upstreamPortal.ip,
+                port: upstreamLink.tunnelPort || 10086,
+                users: [{
+                    id: upstreamLink.tunnelUuid,
+                    encryption: 'none',
+                }],
+            }],
+        },
+        streamSettings: buildCascadeTunnelStreamSettings(upstreamLink, true),
+    };
+
+    // Add MUX if enabled
+    const muxConfig = buildMuxConfig(upstreamLink);
+    if (muxConfig) {
+        tunnelUpOutbound.mux = muxConfig;
+    }
+
     const config = {
         log: { loglevel: 'warning' },
         reverse: {
@@ -613,20 +707,11 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
         },
         inbounds: [],
         outbounds: [
+            tunnelUpOutbound,
             {
-                tag: 'tunnel-up',
-                protocol: upProtocol,
-                settings: {
-                    vnext: [{
-                        address: upstreamPortal.ip,
-                        port: upstreamLink.tunnelPort || 10086,
-                        users: [{
-                            id: upstreamLink.tunnelUuid,
-                            encryption: 'none',
-                        }],
-                    }],
-                },
-                streamSettings: buildCascadeTunnelStreamSettings(upstreamLink),
+                tag: 'freedom',
+                protocol: 'freedom',
+                settings: { domainStrategy: 'UseIPv4' },
             },
             {
                 tag: 'blackhole',
@@ -635,11 +720,11 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
         ],
         routing: {
             domainStrategy: 'IPIfNonMatch',
-            rules: [], // Rules will be added in correct order below
+            rules: [],
         },
     };
 
-    // FIRST: Add connector rules for each downstream link (must be checked BEFORE tunnel-up rule)
+    // FIRST: Add connector rules for each downstream link
     for (const downLink of downstreamLinks) {
         const downLinkId = String(downLink._id).slice(-8);
         const downDomain = downLink.tunnelDomain || 'reverse.tunnel.internal';
@@ -661,10 +746,9 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
                 clients: [{ id: downLink.tunnelUuid }],
                 decryption: 'none',
             },
-            streamSettings: buildCascadeTunnelStreamSettings(downLink),
+            streamSettings: buildCascadeTunnelStreamSettings(downLink, false),
         });
 
-        // Rule: connector + domain → portal (handshake)
         config.routing.rules.push({
             type: 'field',
             inboundTag: [connectorTag],
@@ -673,7 +757,7 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
         });
     }
 
-    // SECOND: Add tunnel-up rule for upstream bridge handshake (after connector rules)
+    // SECOND: Add tunnel-up rule
     config.routing.rules.push({
         type: 'field',
         domain: [`full:${upDomain}`],
@@ -681,13 +765,27 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
     });
 
     // THIRD: Route traffic from upstream bridge to downstream portal(s)
-    // If multiple downstream portals, Xray's built-in mux balancing handles it
-    if (downstreamLinks.length > 0) {
-        const firstPortalTag = `portal-down-${String(downstreamLinks[0]._id).slice(-8)}`;
+    if (downstreamLinks.length === 1) {
+        const portalTag = `portal-down-${String(downstreamLinks[0]._id).slice(-8)}`;
         config.routing.rules.push({
             type: 'field',
             inboundTag: ['bridge-up'],
-            outboundTag: firstPortalTag,
+            outboundTag: portalTag,
+        });
+    } else if (downstreamLinks.length > 1) {
+        const downstreamTags = downstreamLinks.map(l => `portal-down-${String(l._id).slice(-8)}`);
+        const fallbackTag = downstreamLinks[0].fallbackTag || 'freedom';
+        config.routing.balancers = config.routing.balancers || [];
+        config.routing.balancers.push({
+            tag: 'downstream-balancer',
+            selector: downstreamTags,
+            strategy: { type: 'leastPing' },
+            fallbackTag: fallbackTag,
+        });
+        config.routing.rules.push({
+            type: 'field',
+            inboundTag: ['bridge-up'],
+            balancerTag: 'downstream-balancer',
         });
     }
 
@@ -703,24 +801,50 @@ function generateRelayConfig(upstreamLink, upstreamPortal, downstreamLinks) {
 
 /**
  * Build streamSettings for the cascade tunnel connection between Portal and Bridge.
- * Supports tcp/ws/grpc transports and none/tls security.
+ * Supports tcp/ws/grpc/xhttp transports and none/tls/reality security.
  *
  * @param {Object} link - CascadeLink document
+ * @param {boolean} [isClient=false] - True for client/outbound side, false for server/inbound
  * @returns {Object} streamSettings
  */
-function buildCascadeTunnelStreamSettings(link) {
+function buildCascadeTunnelStreamSettings(link, isClient = false) {
     const transport = link.tunnelTransport || 'tcp';
     const security = link.tunnelSecurity || 'none';
 
     const stream = {
-        network: transport,
+        network: transport === 'xhttp' ? 'splithttp' : transport,
         security,
     };
 
+    // Security layer
     if (security === 'tls') {
-        stream.tlsSettings = { allowInsecure: true };
+        stream.tlsSettings = isClient
+            ? { allowInsecure: true }
+            : {
+                certificates: [{
+                    certificateFile: '/usr/local/etc/xray/cert.pem',
+                    keyFile: '/usr/local/etc/xray/key.pem',
+                }],
+            };
+    } else if (security === 'reality') {
+        if (isClient) {
+            stream.realitySettings = {
+                fingerprint: link.realityFingerprint || 'chrome',
+                serverName: link.realitySni?.[0] || 'www.google.com',
+                publicKey: link.realityPublicKey || '',
+                shortId: link.realityShortIds?.[0] || '',
+            };
+        } else {
+            stream.realitySettings = {
+                dest: link.realityDest || 'www.google.com:443',
+                serverNames: link.realitySni?.length > 0 ? link.realitySni : ['www.google.com'],
+                privateKey: link.realityPrivateKey || '',
+                shortIds: link.realityShortIds?.length > 0 ? link.realityShortIds : [''],
+            };
+        }
     }
 
+    // Transport-specific settings
     if (transport === 'tcp') {
         stream.sockopt = {
             tcpFastOpen: link.tcpFastOpen !== false,
@@ -737,7 +861,7 @@ function buildCascadeTunnelStreamSettings(link) {
             serviceName: link.grpcServiceName || 'cascade',
         };
     } else if (transport === 'xhttp') {
-        stream.xhttpSettings = {
+        stream.splithttpSettings = {
             path: link.xhttpPath || '/cascade',
             host: link.xhttpHost || '',
             mode: link.xhttpMode || 'auto',
@@ -745,6 +869,22 @@ function buildCascadeTunnelStreamSettings(link) {
     }
 
     return stream;
+}
+
+/**
+ * Build MUX configuration for tunnel outbound
+ * @param {Object} link - CascadeLink document
+ * @returns {Object|null} mux config or null if disabled
+ */
+function buildMuxConfig(link) {
+    if (!link.muxEnabled) return null;
+    
+    return {
+        enabled: true,
+        concurrency: link.muxConcurrency || 8,
+        xudpConcurrency: link.muxXudpConcurrency || 16,
+        xudpProxyUDP443: link.muxXudpProxyUDP443 || 'reject',
+    };
 }
 
 /**
@@ -772,6 +912,251 @@ WantedBy=multi-user.target
 `;
 }
 
+// ==================== XRAY FORWARD CHAINING ====================
+
+/**
+ * Apply forward proxy chain to an existing Xray config.
+ * Creates outbounds for each link in the chain using proxySettings.tag mechanism.
+ * Traffic flows: client → proxy1 → proxy2 → ... → internet
+ *
+ * @param {Object} config - Parsed Xray config object (mutated in place)
+ * @param {Array} forwardLinks - CascadeLink documents (mode='forward') ordered by chain position
+ * @param {string} clientInboundTag - Tag of the client-facing inbound
+ */
+function applyForwardChain(config, forwardLinks, clientInboundTag) {
+    if (!forwardLinks || forwardLinks.length === 0) return;
+
+    config.outbounds = config.outbounds || [];
+    config.routing = config.routing || { rules: [] };
+    config.routing.rules = config.routing.rules || [];
+
+    const chainOutbounds = [];
+    const geoRoutedLinks = [];
+    const defaultLinks = [];
+
+    // Create outbounds for each link in the chain
+    for (let i = 0; i < forwardLinks.length; i++) {
+        const link = forwardLinks[i];
+        const bridgeNode = link.bridgeNode;
+        const linkIdShort = String(link._id).slice(-8);
+        const outboundTag = `chain-${linkIdShort}`;
+
+        const outbound = {
+            tag: outboundTag,
+            protocol: link.tunnelProtocol || 'vless',
+            settings: {
+                vnext: [{
+                    address: bridgeNode.ip || bridgeNode,
+                    port: link.tunnelPort || 443,
+                    users: [{
+                        id: link.tunnelUuid,
+                        encryption: 'none',
+                    }],
+                }],
+            },
+            streamSettings: buildCascadeTunnelStreamSettings(link, true),
+        };
+
+        // Add MUX if enabled
+        const muxConfig = buildMuxConfig(link);
+        if (muxConfig) {
+            outbound.mux = muxConfig;
+        }
+
+        // Chain to next outbound (if not last)
+        if (i < forwardLinks.length - 1) {
+            const nextLinkId = String(forwardLinks[i + 1]._id).slice(-8);
+            outbound.proxySettings = { tag: `chain-${nextLinkId}` };
+        }
+
+        chainOutbounds.push(outbound);
+
+        // Separate geo-routed from default
+        if (link.geoRouting?.enabled && (link.geoRouting.domains?.length || link.geoRouting.geoip?.length)) {
+            geoRoutedLinks.push({ link, outboundTag });
+        } else {
+            defaultLinks.push({ link, outboundTag });
+        }
+    }
+
+    // Add chain outbounds to config (in reverse order so last hop is first in array)
+    config.outbounds.unshift(...chainOutbounds.reverse());
+
+    // Add geo-routing rules (specific rules first)
+    for (const { link, outboundTag } of geoRoutedLinks) {
+        const gr = link.geoRouting;
+        
+        if (gr.domains?.length && clientInboundTag) {
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                domain: gr.domains,
+                outboundTag: outboundTag,
+            });
+        }
+        
+        if (gr.geoip?.length && clientInboundTag) {
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                ip: gr.geoip,
+                outboundTag: outboundTag,
+            });
+        }
+    }
+
+    // Default routing through first hop of chain
+    if (clientInboundTag && chainOutbounds.length > 0) {
+        if (defaultLinks.length === 1) {
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                outboundTag: defaultLinks[0].outboundTag,
+            });
+        } else if (defaultLinks.length > 1) {
+            // Multiple chains - use balancer
+            const balancerTag = 'forward-chain-balancer';
+            const fallbackTag = defaultLinks[0].link.fallbackTag || 'direct';
+            config.routing.balancers = config.routing.balancers || [];
+            config.routing.balancers.push({
+                tag: balancerTag,
+                selector: defaultLinks.map(d => d.outboundTag),
+                strategy: { type: 'leastPing' },
+                fallbackTag: fallbackTag,
+            });
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                balancerTag: balancerTag,
+            });
+        } else {
+            // All geo-routed, use first chain as fallback
+            const firstOutbound = chainOutbounds[chainOutbounds.length - 1];
+            config.routing.rules.push({
+                type: 'field',
+                inboundTag: [clientInboundTag],
+                outboundTag: firstOutbound.tag,
+            });
+        }
+    }
+}
+
+/**
+ * Apply node's custom outbounds (socks5/http proxies) to Xray config.
+ * Creates outbound entries and corresponding ACL-like routing rules.
+ *
+ * @param {Object} config - Parsed Xray config object (mutated in place)
+ * @param {Object} node - HyNode with outbounds array
+ */
+function applyXrayOutbounds(config, node) {
+    const customOutbounds = node.outbounds || [];
+    if (customOutbounds.length === 0) return;
+
+    config.outbounds = config.outbounds || [];
+
+    for (const ob of customOutbounds) {
+        if (ob.type === 'direct') {
+            // Direct outbound already exists
+            continue;
+        }
+
+        const outbound = { tag: ob.name, protocol: ob.type };
+
+        if (ob.type === 'socks5' || ob.type === 'socks') {
+            outbound.protocol = 'socks';
+            outbound.settings = {
+                servers: [{
+                    address: ob.addr?.split(':')[0] || '127.0.0.1',
+                    port: parseInt(ob.addr?.split(':')[1]) || 1080,
+                    users: ob.username ? [{
+                        user: ob.username,
+                        pass: ob.password || '',
+                    }] : undefined,
+                }],
+            };
+        } else if (ob.type === 'http') {
+            outbound.settings = {
+                servers: [{
+                    address: ob.addr?.split(':')[0] || '127.0.0.1',
+                    port: parseInt(ob.addr?.split(':')[1]) || 8080,
+                    users: ob.username ? [{
+                        user: ob.username,
+                        pass: ob.password || '',
+                    }] : undefined,
+                }],
+            };
+        }
+
+        config.outbounds.push(outbound);
+    }
+
+    // Apply ACL rules if specified
+    const aclRules = node.aclRules || [];
+    if (aclRules.length > 0 && config.routing) {
+        config.routing.rules = config.routing.rules || [];
+        
+        for (const rule of aclRules) {
+            // Parse ACL rules like "outbound_name(domain:google.com)" or "reject(geoip:cn)"
+            const match = rule.match(/^(\w+)\((.+)\)$/);
+            if (!match) continue;
+
+            const [, action, target] = match;
+            const routingRule = { type: 'field' };
+
+            // Determine outbound tag
+            if (action === 'reject' || action === 'block') {
+                routingRule.outboundTag = 'block';
+            } else if (action === 'direct') {
+                routingRule.outboundTag = 'direct';
+            } else {
+                routingRule.outboundTag = action;
+            }
+
+            // Parse target (domain:xxx, geoip:xxx, ip:xxx)
+            if (target.startsWith('domain:')) {
+                routingRule.domain = [target.replace('domain:', '')];
+            } else if (target.startsWith('geoip:')) {
+                routingRule.ip = [target];
+            } else if (target.startsWith('geosite:')) {
+                routingRule.domain = [target];
+            } else if (target.startsWith('ip:')) {
+                routingRule.ip = [target.replace('ip:', '')];
+            } else {
+                routingRule.domain = [target];
+            }
+
+            // Insert before the last rule (block private IPs)
+            const insertIndex = Math.max(0, config.routing.rules.length - 1);
+            config.routing.rules.splice(insertIndex, 0, routingRule);
+        }
+    }
+}
+
+/**
+ * Apply cascade configuration to a Portal node's Xray config.
+ * Handles both reverse proxy and forward chain modes.
+ *
+ * @param {Object} config - Parsed Xray config object (mutated in place)
+ * @param {Array} cascadeLinks - All CascadeLink documents for this portal
+ * @param {string} clientInboundTag - Tag of the client-facing inbound
+ */
+function applyCascade(config, cascadeLinks, clientInboundTag) {
+    if (!cascadeLinks || cascadeLinks.length === 0) return;
+
+    const reverseLinks = cascadeLinks.filter(l => l.mode !== 'forward');
+    const forwardLinks = cascadeLinks.filter(l => l.mode === 'forward');
+
+    // Apply reverse proxy configuration
+    if (reverseLinks.length > 0) {
+        applyReversePortal(config, reverseLinks, clientInboundTag);
+    }
+
+    // Apply forward chain configuration
+    if (forwardLinks.length > 0) {
+        applyForwardChain(config, forwardLinks, clientInboundTag);
+    }
+}
+
 module.exports = {
     generateNodeConfig,
     generateNodeConfigACME,
@@ -781,8 +1166,12 @@ module.exports = {
     buildXrayStreamSettings,
     generateXraySystemdService,
     applyReversePortal,
+    applyForwardChain,
+    applyCascade,
+    applyXrayOutbounds,
     generateBridgeConfig,
     generateRelayConfig,
     buildCascadeTunnelStreamSettings,
+    buildMuxConfig,
     generateBridgeSystemdService,
 };

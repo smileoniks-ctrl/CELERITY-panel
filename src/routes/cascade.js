@@ -85,11 +85,15 @@ router.get('/links/:id', requireScope('nodes:read'), async (req, res) => {
  */
 router.post('/links', requireScope('nodes:write'), async (req, res) => {
     try {
-        const { name, portalNodeId, bridgeNodeId, tunnelPort, tunnelProtocol,
+        const { name, mode, portalNodeId, bridgeNodeId, tunnelPort, tunnelProtocol,
             tunnelSecurity, tunnelTransport, tunnelDomain, tunnelUuid,
             tcpFastOpen, tcpKeepAlive, tcpNoDelay,
             wsPath, wsHost, grpcServiceName,
-            xhttpPath, xhttpHost, xhttpMode } = req.body;
+            xhttpPath, xhttpHost, xhttpMode,
+            realityDest, realitySni, realityPrivateKey, realityPublicKey,
+            realityShortIds, realityFingerprint,
+            muxEnabled, muxConcurrency, muxXudpConcurrency, muxXudpProxyUDP443,
+            fallbackTag } = req.body;
 
         if (!name || !portalNodeId || !bridgeNodeId) {
             return res.status(400).json({ error: 'name, portalNodeId and bridgeNodeId are required' });
@@ -128,8 +132,9 @@ router.post('/links', requireScope('nodes:write'), async (req, res) => {
             });
         }
 
-        const link = await CascadeLink.create({
+        const linkData = {
             name,
+            mode: mode || 'reverse',
             portalNode: portalNodeId,
             bridgeNode: bridgeNodeId,
             tunnelUuid: tunnelUuid || generateUuid(),
@@ -147,7 +152,28 @@ router.post('/links', requireScope('nodes:write'), async (req, res) => {
             xhttpPath: xhttpPath || '/cascade',
             xhttpHost: xhttpHost || '',
             xhttpMode: xhttpMode || 'auto',
-        });
+            fallbackTag: fallbackTag || 'direct',
+        };
+
+        // REALITY settings (for tunnelSecurity === 'reality')
+        if (tunnelSecurity === 'reality') {
+            linkData.realityDest = realityDest || 'www.google.com:443';
+            linkData.realitySni = Array.isArray(realitySni) ? realitySni : ['www.google.com'];
+            linkData.realityPrivateKey = realityPrivateKey || '';
+            linkData.realityPublicKey = realityPublicKey || '';
+            linkData.realityShortIds = Array.isArray(realityShortIds) ? realityShortIds : [''];
+            linkData.realityFingerprint = realityFingerprint || 'chrome';
+        }
+
+        // MUX settings
+        if (muxEnabled) {
+            linkData.muxEnabled = true;
+            linkData.muxConcurrency = parseInt(muxConcurrency) || 8;
+            linkData.muxXudpConcurrency = parseInt(muxXudpConcurrency) || 16;
+            linkData.muxXudpProxyUDP443 = muxXudpProxyUDP443 || 'reject';
+        }
+
+        const link = await CascadeLink.create(linkData);
 
         const populated = await CascadeLink.findById(link._id)
             .populate('portalNode', 'name ip flag status')
@@ -182,11 +208,15 @@ router.put('/links/:id', requireScope('nodes:write'), async (req, res) => {
         }
 
         const allowedFields = [
-            'name', 'tunnelPort', 'tunnelDomain', 'tunnelProtocol',
+            'name', 'mode', 'tunnelPort', 'tunnelDomain', 'tunnelProtocol',
             'tunnelSecurity', 'tunnelTransport', 'tunnelUuid',
             'tcpFastOpen', 'tcpKeepAlive', 'tcpNoDelay', 'active', 'priority',
             'wsPath', 'wsHost', 'grpcServiceName',
             'xhttpPath', 'xhttpHost', 'xhttpMode',
+            'realityDest', 'realitySni', 'realityPrivateKey', 'realityPublicKey',
+            'realityShortIds', 'realityFingerprint',
+            'muxEnabled', 'muxConcurrency', 'muxXudpConcurrency', 'muxXudpProxyUDP443',
+            'fallbackTag',
         ];
 
         const updates = {};

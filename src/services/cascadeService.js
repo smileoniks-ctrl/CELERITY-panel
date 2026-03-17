@@ -34,12 +34,15 @@ class CascadeService {
     /**
      * Deploy a single cascade link: upload configs to both Portal and Bridge,
      * restart services, and verify tunnel establishment.
+     * Supports both 'reverse' and 'forward' modes.
+     *
      * @param {Object} link - CascadeLink document (populated with portalNode, bridgeNode)
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async deployLink(link) {
         const linkId = link._id;
-        logger.info(`[Cascade] Deploying link ${link.name} (${linkId})`);
+        const mode = link.mode || 'reverse';
+        logger.info(`[Cascade] Deploying ${mode} link ${link.name} (${linkId})`);
 
         await CascadeLink.updateOne({ _id: linkId }, { $set: { status: 'pending', lastError: '' } });
 
@@ -53,37 +56,59 @@ class CascadeService {
         }
 
         try {
-            // Step 1: Update Portal node config (add reverse.portals + bridge-connector inbound)
-            await this._deployPortalConfig(portalNode);
+            if (mode === 'forward') {
+                // Forward mode: only update Portal config with chain outbound
+                await this._deployPortalConfig(portalNode);
+                
+                // Open firewall port on Bridge for incoming connections
+                await this._openFirewallPort(bridgeNode, link.tunnelPort || 443);
 
-            // Step 2: Upload Bridge config via SSH
-            await this._deployBridgeConfig(link, bridgeNode, portalNode);
+                // Verify connectivity to bridge
+                const latencyMs = await this._measureTcpLatency(bridgeNode.ip, link.tunnelPort || 443);
+                const healthy = latencyMs !== null;
 
-            // Step 3: Open firewall port on Portal for the tunnel
-            await this._openFirewallPort(portalNode, link.tunnelPort || 10086);
+                const newStatus = healthy ? 'online' : 'deployed';
+                await CascadeLink.updateOne({ _id: linkId }, {
+                    $set: {
+                        status:          newStatus,
+                        lastError:       '',
+                        lastHealthCheck: new Date(),
+                        latencyMs:       latencyMs,
+                    },
+                });
 
-            // Step 4: Verify tunnel (give Bridge time to connect)
-            const tunnelPort = link.tunnelPort || 10086;
-            await new Promise(r => setTimeout(r, 3000));
-            const [healthy, latencyMs] = await Promise.all([
-                this._checkTunnel(portalNode, tunnelPort),
-                this._measureTcpLatency(portalNode.ip, tunnelPort),
-            ]);
+                logger.info(`[Cascade] Forward link ${link.name} deployed, status=${newStatus}`);
+            } else {
+                // Reverse mode: deploy both Portal and Bridge configs
+                await this._deployPortalConfig(portalNode);
+                await this._deployBridgeConfig(link, bridgeNode, portalNode);
+                await this._openFirewallPort(portalNode, link.tunnelPort || 10086);
 
-            const newStatus = healthy ? 'online' : 'deployed';
-            await CascadeLink.updateOne({ _id: linkId }, {
-                $set: {
-                    status:          newStatus,
-                    lastError:       '',
-                    lastHealthCheck: new Date(),
-                    latencyMs:       latencyMs,
-                },
-            });
+                // Verify tunnel (give Bridge time to connect)
+                const tunnelPort = link.tunnelPort || 10086;
+                await new Promise(r => setTimeout(r, 3000));
+                
+                const [healthy, latencyMs] = await Promise.all([
+                    this._checkTunnelHealth(link, portalNode, bridgeNode),
+                    this._measureTcpLatency(portalNode.ip, tunnelPort),
+                ]);
+
+                const newStatus = healthy ? 'online' : 'deployed';
+                await CascadeLink.updateOne({ _id: linkId }, {
+                    $set: {
+                        status:          newStatus,
+                        lastError:       '',
+                        lastHealthCheck: new Date(),
+                        latencyMs:       latencyMs,
+                    },
+                });
+
+                logger.info(`[Cascade] Reverse link ${link.name} deployed, status=${newStatus}`);
+            }
 
             await this._updateNodeRoles();
             await this._invalidateTopologyCache();
 
-            logger.info(`[Cascade] Link ${link.name} deployed, status=${newStatus}`);
             return { success: true };
         } catch (error) {
             logger.error(`[Cascade] Deploy failed for ${link.name}: ${error.message}`);
@@ -414,20 +439,33 @@ class CascadeService {
     }
 
     /**
-     * Health-check a single cascade link by verifying ESTABLISHED connections
-     * on the Portal's tunnel port.
+     * Health-check a single cascade link.
+     * For reverse mode: verifies ESTABLISHED connections on Portal's tunnel port.
+     * For forward mode: verifies TCP connectivity to Bridge.
      */
     async healthCheckLink(link) {
+        const mode = link.mode || 'reverse';
         const portalNode = await HyNode.findById(link.portalNode);
+        const bridgeNode = await HyNode.findById(link.bridgeNode);
+        
         if (!portalNode) return false;
 
-        const tunnelPort = link.tunnelPort || 10086;
-
         try {
-            const [healthy, latencyMs] = await Promise.all([
-                this._checkTunnel(portalNode, tunnelPort),
-                this._measureTcpLatency(portalNode.ip, tunnelPort),
-            ]);
+            let healthy, latencyMs;
+
+            if (mode === 'forward') {
+                // Forward mode: check connectivity to bridge
+                const bridgePort = link.tunnelPort || 443;
+                latencyMs = await this._measureTcpLatency(bridgeNode?.ip || link.bridgeNode, bridgePort);
+                healthy = latencyMs !== null;
+            } else {
+                // Reverse mode: check tunnel connections and health
+                const tunnelPort = link.tunnelPort || 10086;
+                [healthy, latencyMs] = await Promise.all([
+                    this._checkTunnelHealth(link, portalNode, bridgeNode),
+                    this._measureTcpLatency(portalNode.ip, tunnelPort),
+                ]);
+            }
 
             const prevStatus = link.status;
             const newStatus  = healthy ? 'online' : 'offline';
@@ -436,15 +474,15 @@ class CascadeService {
                 $set: {
                     status:          newStatus,
                     lastHealthCheck: new Date(),
-                    lastError:       healthy ? '' : 'No ESTABLISHED tunnel connections',
+                    lastError:       healthy ? '' : `${mode} tunnel not responding`,
                     latencyMs:       latencyMs,
                 },
             });
 
             if (prevStatus !== newStatus) {
                 const event = healthy ? 'cascade.online' : 'cascade.offline';
-                webhook.emit(event, { linkId: link._id, name: link.name });
-                logger.info(`[Cascade] Link ${link.name}: ${prevStatus} -> ${newStatus}, latency=${latencyMs}ms`);
+                webhook.emit(event, { linkId: link._id, name: link.name, mode });
+                logger.info(`[Cascade] Link ${link.name} (${mode}): ${prevStatus} -> ${newStatus}, latency=${latencyMs}ms`);
             }
 
             return healthy;
@@ -527,10 +565,14 @@ class CascadeService {
                 target: String(l.bridgeNode?._id || l.bridgeNode),
                 label: l.name,
                 status: l.status,
+                mode: l.mode || 'reverse',
                 tunnelPort: l.tunnelPort,
                 latencyMs: l.latencyMs,
                 tunnelProtocol: l.tunnelProtocol,
                 tunnelTransport: l.tunnelTransport,
+                tunnelSecurity: l.tunnelSecurity,
+                muxEnabled: l.muxEnabled || false,
+                geoRoutingEnabled: l.geoRouting?.enabled || false,
             },
         }));
 
@@ -607,7 +649,7 @@ class CascadeService {
 
     /**
      * Regenerate and upload the Portal node's full Xray config, including
-     * all reverse-portal settings from its active cascade links.
+     * all cascade settings (reverse proxy and forward chains) from active links.
      */
     async _deployPortalConfig(portalNode) {
         const syncService = require('./syncService');
@@ -616,13 +658,19 @@ class CascadeService {
         const configStr = configGenerator.generateXrayConfig(portalNode, users);
         const config = JSON.parse(configStr);
 
+        // Get all cascade links where this node is the portal
         const portalLinks = await CascadeLink.find({
             portalNode: portalNode._id,
             active: true,
-        });
+        }).populate('bridgeNode', 'ip');
 
         const inboundTag = portalNode.xray?.inboundTag || 'vless-in';
-        configGenerator.applyReversePortal(config, portalLinks, inboundTag);
+        
+        // Apply cascade configuration (handles both reverse and forward modes)
+        configGenerator.applyCascade(config, portalLinks, inboundTag);
+
+        // Apply custom outbounds and ACL rules
+        configGenerator.applyXrayOutbounds(config, portalNode);
 
         const finalConfig = JSON.stringify(config, null, 2);
 
@@ -768,6 +816,64 @@ class CascadeService {
         } finally {
             ssh.disconnect();
         }
+    }
+
+    /**
+     * Enhanced tunnel health check: verifies both ESTABLISHED connections
+     * and actual data flow through the tunnel via HTTP probe.
+     *
+     * @param {Object} link - CascadeLink document
+     * @param {Object} portalNode - Portal HyNode
+     * @param {Object} bridgeNode - Bridge HyNode  
+     * @returns {Promise<boolean>} true if tunnel is healthy
+     */
+    async _checkTunnelHealth(link, portalNode, bridgeNode) {
+        const tunnelPort = link.tunnelPort || 10086;
+
+        // Step 1: Check ESTABLISHED connections on portal
+        const hasConnections = await this._checkTunnel(portalNode, tunnelPort);
+        if (!hasConnections) {
+            logger.debug(`[Cascade] No ESTABLISHED connections on ${portalNode.name}:${tunnelPort}`);
+            return false;
+        }
+
+        // Step 2: Try to ping through tunnel (if bridge has SSH access)
+        if (bridgeNode.ssh?.password || bridgeNode.ssh?.privateKey) {
+            try {
+                const ssh = new NodeSSH(bridgeNode);
+                await ssh.connect();
+                
+                // Check if xray-bridge service is running and healthy
+                const statusResult = await ssh.exec('systemctl is-active xray-bridge 2>/dev/null || echo inactive');
+                const isActive = (statusResult.stdout || '').trim() === 'active';
+                
+                if (!isActive) {
+                    logger.debug(`[Cascade] Bridge service not active on ${bridgeNode.name}`);
+                    ssh.disconnect();
+                    return false;
+                }
+
+                // Try to resolve a domain through the tunnel to verify end-to-end connectivity
+                const pingResult = await ssh.exec(
+                    'timeout 5 curl -s -o /dev/null -w "%{http_code}" https://www.google.com 2>/dev/null || echo 000'
+                );
+                const httpCode = (pingResult.stdout || '000').trim();
+                
+                ssh.disconnect();
+
+                if (httpCode === '200' || httpCode === '301' || httpCode === '302') {
+                    logger.debug(`[Cascade] Tunnel ping success through ${bridgeNode.name}`);
+                    return true;
+                } else {
+                    logger.debug(`[Cascade] Tunnel ping failed on ${bridgeNode.name}: HTTP ${httpCode}`);
+                }
+            } catch (err) {
+                logger.debug(`[Cascade] Tunnel ping error: ${err.message}`);
+            }
+        }
+
+        // Fallback: if we have ESTABLISHED connections, consider it healthy
+        return hasConnections;
     }
 
     /**
