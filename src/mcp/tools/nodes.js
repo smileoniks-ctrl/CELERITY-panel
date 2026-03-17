@@ -24,6 +24,9 @@ function getSyncService() {
 // Active SSH sessions managed by ssh_session tool (sessionId -> {conn, buffer})
 const sshSessions = new Map();
 
+// Fields excluded from all node queries returned to MCP clients
+const NODE_SAFE_SELECT = '-ssh.password -ssh.privateKey -xray.realityPrivateKey -statsSecret';
+
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
 const queryNodesSchema = z.object({
@@ -112,7 +115,7 @@ async function queryNodes(args) {
     const parsed = queryNodesSchema.parse(args);
 
     if (parsed.id) {
-        const node = await HyNode.findById(parsed.id).populate('groups', 'name color');
+        const node = await HyNode.findById(parsed.id).select(NODE_SAFE_SELECT).populate('groups', 'name color');
         if (!node) return { error: `Node '${parsed.id}' not found`, code: 404 };
 
         const result = { ...node.toObject() };
@@ -138,7 +141,7 @@ async function queryNodes(args) {
     if (parsed.filter?.group) filter.groups = parsed.filter.group;
     if (parsed.filter?.status) filter.status = parsed.filter.status;
 
-    const nodes = await HyNode.find(filter).populate('groups', 'name color').sort({ name: 1 });
+    const nodes = await HyNode.find(filter).select(NODE_SAFE_SELECT).populate('groups', 'name color').sort({ name: 1 });
     return { nodes };
 }
 
