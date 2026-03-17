@@ -912,6 +912,73 @@ WantedBy=multi-user.target
 `;
 }
 
+/**
+ * Generate Xray config for Forward Chain Bridge (exit node).
+ * This is a simple VLESS inbound server that accepts connections from Portal
+ * and releases traffic to the internet.
+ *
+ * @param {Object} link - CascadeLink document (mode='forward')
+ * @returns {string} JSON string ready to write to config.json
+ */
+function generateForwardBridgeConfig(link) {
+    const protocol = link.tunnelProtocol || 'vless';
+
+    const inbound = {
+        tag: 'forward-in',
+        listen: '0.0.0.0',
+        port: link.tunnelPort || 443,
+        protocol,
+        settings: {
+            clients: [{
+                id: link.tunnelUuid,
+                level: 0,
+            }],
+            decryption: 'none',
+        },
+        streamSettings: buildCascadeTunnelStreamSettings(link, false),
+        sniffing: {
+            enabled: true,
+            destOverride: ['http', 'tls', 'quic'],
+            routeOnly: true,
+        },
+    };
+
+    const config = {
+        log: {
+            loglevel: 'warning',
+        },
+        inbounds: [inbound],
+        outbounds: [
+            {
+                tag: 'freedom',
+                protocol: 'freedom',
+                settings: { domainStrategy: 'UseIPv4' },
+            },
+            {
+                tag: 'blackhole',
+                protocol: 'blackhole',
+            },
+        ],
+        routing: {
+            domainStrategy: 'IPIfNonMatch',
+            rules: [
+                {
+                    type: 'field',
+                    ip: ['geoip:private'],
+                    outboundTag: 'blackhole',
+                },
+                {
+                    type: 'field',
+                    inboundTag: ['forward-in'],
+                    outboundTag: 'freedom',
+                },
+            ],
+        },
+    };
+
+    return JSON.stringify(config, null, 2);
+}
+
 // ==================== XRAY FORWARD CHAINING ====================
 
 /**
@@ -1170,6 +1237,7 @@ module.exports = {
     applyCascade,
     applyXrayOutbounds,
     generateBridgeConfig,
+    generateForwardBridgeConfig,
     generateRelayConfig,
     buildCascadeTunnelStreamSettings,
     buildMuxConfig,

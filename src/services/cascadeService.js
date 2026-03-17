@@ -57,13 +57,19 @@ class CascadeService {
 
         try {
             if (mode === 'forward') {
-                // Forward mode: only update Portal config with chain outbound
+                // Forward mode: deploy Bridge config (VLESS server) + update Portal config
+                
+                // Step 1: Deploy forward bridge config (inbound server on Bridge)
+                await this._deployForwardBridgeConfig(link, bridgeNode);
+                
+                // Step 2: Update Portal config with chain outbound
                 await this._deployPortalConfig(portalNode);
                 
-                // Open firewall port on Bridge for incoming connections
+                // Step 3: Open firewall port on Bridge for incoming connections
                 await this._openFirewallPort(bridgeNode, link.tunnelPort || 443);
 
-                // Verify connectivity to bridge
+                // Step 4: Wait for Bridge to start and verify connectivity
+                await new Promise(r => setTimeout(r, 2000));
                 const latencyMs = await this._measureTcpLatency(bridgeNode.ip, link.tunnelPort || 443);
                 const healthy = latencyMs !== null;
 
@@ -71,7 +77,7 @@ class CascadeService {
                 await CascadeLink.updateOne({ _id: linkId }, {
                     $set: {
                         status:          newStatus,
-                        lastError:       '',
+                        lastError:       healthy ? '' : 'Cannot connect to Bridge',
                         lastHealthCheck: new Date(),
                         latencyMs:       latencyMs,
                     },
@@ -403,7 +409,7 @@ class CascadeService {
     }
 
     /**
-     * Deploy pure Bridge node config (tail of chain).
+     * Deploy pure Bridge node config (tail of chain) for REVERSE mode.
      */
     async _deployPureBridge(node, upstreamLink, upstreamPortal) {
         if (!node.ssh?.password && !node.ssh?.privateKey) {
@@ -433,6 +439,52 @@ class CascadeService {
             await ssh.exec('systemctl daemon-reload && systemctl enable xray-bridge && systemctl restart xray-bridge');
 
             logger.info(`[Cascade] Bridge config deployed to ${node.name}`);
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    /**
+     * Deploy Forward Bridge config (exit node for FORWARD mode).
+     * Creates a VLESS inbound server that accepts connections from Portal.
+     */
+    async _deployForwardBridgeConfig(link, bridgeNode) {
+        if (!bridgeNode.ssh?.password && !bridgeNode.ssh?.privateKey) {
+            throw new Error(`Forward Bridge node ${bridgeNode.name} has no SSH credentials`);
+        }
+
+        const bridgeConfig = configGenerator.generateForwardBridgeConfig(link);
+        const serviceUnit = configGenerator.generateBridgeSystemdService();
+
+        const ssh = new NodeSSH(bridgeNode);
+        try {
+            await ssh.connect();
+
+            // Ensure Xray is installed
+            const xrayCheck = await ssh.exec('command -v xray');
+            if (!xrayCheck.stdout || !xrayCheck.stdout.trim()) {
+                logger.info(`[Cascade] Installing Xray on forward bridge ${bridgeNode.name}`);
+                await ssh.exec(
+                    'curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o /tmp/xray-install.sh ' +
+                    '&& chmod +x /tmp/xray-install.sh && bash /tmp/xray-install.sh install 2>&1 && rm -f /tmp/xray-install.sh'
+                );
+            }
+
+            await ssh.exec('mkdir -p /usr/local/etc/xray-bridge');
+            await ssh.uploadContent(bridgeConfig, '/usr/local/etc/xray-bridge/config.json');
+            await ssh.uploadContent(serviceUnit, '/etc/systemd/system/xray-bridge.service');
+            await ssh.exec('systemctl daemon-reload && systemctl enable xray-bridge && systemctl restart xray-bridge');
+
+            // Verify the service started
+            const statusResult = await ssh.exec('sleep 1 && systemctl is-active xray-bridge');
+            const isActive = (statusResult.stdout || '').trim() === 'active';
+
+            if (!isActive) {
+                const logs = await ssh.exec('journalctl -u xray-bridge --no-pager -n 20');
+                throw new Error(`Forward Bridge service not active. Logs: ${(logs.stdout || logs.stderr || '').slice(0, 500)}`);
+            }
+
+            logger.info(`[Cascade] Forward Bridge config deployed to ${bridgeNode.name}`);
         } finally {
             ssh.disconnect();
         }
