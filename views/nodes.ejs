@@ -255,10 +255,11 @@
     <div class="modal-overlay" id="addLinkModal">
         <div class="modal-card modal-card-lg">
             <div class="modal-header">
-                <h3><i class="ti ti-link"></i> <%= t('network.addLink') %></h3>
+                <h3><i class="ti ti-link"></i> <span id="linkModalTitle"><%= t('network.addLink') %></span></h3>
                 <button class="modal-close" id="modalClose"><i class="ti ti-x"></i></button>
             </div>
             <form id="addLinkForm" class="modal-body">
+                <input type="hidden" name="linkId" id="linkIdInput" value="">
                 <div class="form-group">
                     <label><%= t('network.linkName') %></label>
                     <input type="text" name="name" class="form-input" required placeholder="YandexCloud → France">
@@ -422,7 +423,7 @@
                         <span><%= t('network.autoDeploy') %></span>
                     </label>
                     <button type="button" class="btn" id="modalCancel"><%= t('common.cancel') %></button>
-                    <button type="submit" class="btn btn-primary"><%= t('network.createLink') %></button>
+                    <button type="submit" class="btn btn-primary" id="linkModalSubmit"><%= t('network.createLink') %></button>
                 </div>
             </form>
         </div>
@@ -820,6 +821,7 @@ window._networkI18n = {
     rolePortal: <%- JSON.stringify(t('network.rolePortal')) %>,
     roleBridge: <%- JSON.stringify(t('network.roleBridge')) %>,
     roleRelay: <%- JSON.stringify(t('network.roleRelay')) %>,
+    addLink: <%- JSON.stringify(t('network.addLink')) %>,
     createLink: <%- JSON.stringify(t('network.createLink')) %>,
     linkMode: <%- JSON.stringify(t('network.linkMode')) %>,
     modeReverse: <%- JSON.stringify(t('network.modeReverse')) %>,
@@ -834,6 +836,10 @@ window._networkI18n = {
     confirmUndeploy: <%- JSON.stringify(t('network.confirmUndeploy')) %>,
     undeploying: <%- JSON.stringify(t('network.undeploying')) %>,
     undeploySuccess: <%- JSON.stringify(t('network.undeploySuccess')) %>,
+    edit: <%- JSON.stringify(t('common.edit')) %>,
+    save: <%- JSON.stringify(t('common.save')) %>,
+    terminal: <%- JSON.stringify(t('nodes.terminal')) %>,
+    sshNotConfigured: <%- JSON.stringify(t('nodes.sshNotConfigured')) %>,
     nodes: <%- JSON.stringify(t('network.nodes')) %>,
     internetDesc: <%- JSON.stringify(t('network.internetDesc')) %>,
     internetExitDesc: <%- JSON.stringify(t('network.internetExitDesc')) %>,

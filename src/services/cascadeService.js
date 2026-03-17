@@ -608,7 +608,7 @@ class CascadeService {
 
         const [allNodes, allLinks] = await Promise.all([
             HyNode.find({ active: true })
-                .select('name ip domain flag type status onlineUsers cascadeRole mapPosition country port')
+                .select('name ip domain flag type status onlineUsers cascadeRole mapPosition country port ssh')
                 .lean(),
             CascadeLink.find({ active: true })
                 .populate('portalNode', 'name ip')
@@ -629,6 +629,7 @@ class CascadeService {
                 cascadeRole: n.cascadeRole || 'standalone',
                 country: n.country || '',
                 port: n.port,
+                sshConfigured: !!(n.ssh?.password || n.ssh?.privateKey),
             },
             position: (n.mapPosition?.x != null && n.mapPosition?.y != null)
                 ? { x: n.mapPosition.x, y: n.mapPosition.y }

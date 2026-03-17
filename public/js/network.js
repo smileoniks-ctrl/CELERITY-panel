@@ -56,6 +56,7 @@
     };
 
     let cy = null;
+    let linkModalMode = 'create';
 
     // ==================== INIT ====================
 
@@ -655,6 +656,11 @@
             '<div class="info-actions">' +
             '<a href="/panel/nodes/' + d.id + '" class="btn btn-sm btn-outline">' +
             '<i class="ti ti-external-link"></i> ' + (i18n.openNode || 'Open Node') + '</a>' +
+            (d.sshConfigured
+                ? '<a href="/panel/nodes/' + d.id + '/terminal" target="_blank" rel="noopener" class="btn btn-sm btn-outline">' +
+                  '<i class="ti ti-terminal-2"></i> ' + (i18n.terminal || 'SSH Terminal') + '</a>'
+                : '<button class="btn btn-sm btn-outline" disabled title="' + (i18n.sshNotConfigured || 'SSH not configured') + '">' +
+                  '<i class="ti ti-terminal-2"></i> ' + (i18n.terminal || 'SSH Terminal') + '</button>') +
             '</div>';
 
         openInfoModal((d.flag ? d.flag + ' ' : '') + (d.label || d.ip || ''), html);
@@ -701,6 +707,8 @@
                 : '') +
             '</div>' +
             '<div class="info-actions">' +
+            '<button class="btn btn-sm btn-outline" id="btnEdit" onclick="window._cascadeEdit(\'' + lid + '\')">' +
+            '<i class="ti ti-edit"></i> ' + (i18n.edit || 'Edit') + '</button>' +
             '<button class="btn btn-sm btn-success" id="btnDeploy" onclick="window._cascadeDeploy(\'' + lid + '\')">' +
             '<i class="ti ti-upload"></i> ' + (i18n.deploy || 'Deploy') + '</button>' +
             '<button class="btn btn-sm btn-primary" id="btnDeployChain" onclick="window._cascadeDeployChain(\'' + lid + '\')">' +
@@ -753,6 +761,14 @@
         const modal       = document.getElementById('addLinkModal');
         const portalSelect = document.getElementById('selectPortal');
         const bridgeSelect = document.getElementById('selectBridge');
+        const title = document.getElementById('linkModalTitle');
+        const submit = document.getElementById('linkModalSubmit');
+        const linkIdInput = document.getElementById('linkIdInput');
+
+        linkModalMode = 'create';
+        if (title) title.textContent = i18n.addLink || 'Add Link';
+        if (submit) submit.textContent = i18n.createLink || 'Create';
+        if (linkIdInput) linkIdInput.value = '';
 
         try {
             const res   = await fetch('/api/nodes');
@@ -771,9 +787,80 @@
         modal.classList.add('active');
     }
 
+    async function openEditLinkModal(linkId) {
+        const form = document.getElementById('addLinkForm');
+        const title = document.getElementById('linkModalTitle');
+        const submit = document.getElementById('linkModalSubmit');
+        const linkIdInput = document.getElementById('linkIdInput');
+
+        await openAddLinkModal();
+        linkModalMode = 'edit';
+        if (title) title.textContent = (i18n.edit || 'Edit') + ' Link';
+        if (submit) submit.textContent = i18n.save || 'Save';
+        if (linkIdInput) linkIdInput.value = linkId;
+
+        const res = await fetch('/api/cascade/links/' + linkId);
+        if (!res.ok) throw new Error('Failed to load link');
+        const link = await res.json();
+
+        form.name.value = link.name || '';
+        form.mode.value = link.mode || 'reverse';
+        form.portalNodeId.value = link.portalNode?._id || link.portalNode || '';
+        form.bridgeNodeId.value = link.bridgeNode?._id || link.bridgeNode || '';
+        form.tunnelPort.value = link.tunnelPort || 10086;
+        form.tunnelProtocol.value = link.tunnelProtocol || 'vless';
+        form.tunnelTransport.value = link.tunnelTransport === 'splithttp' ? 'xhttp' : (link.tunnelTransport || 'tcp');
+        form.tunnelSecurity.value = link.tunnelSecurity || 'none';
+        form.tunnelDomain.value = link.tunnelDomain || 'reverse.tunnel.internal';
+        form.muxEnabled.checked = !!link.muxEnabled;
+        form.muxConcurrency.value = link.muxConcurrency || 8;
+        form.priority.value = link.priority || 100;
+        form.autoDeploy.checked = false;
+
+        form.realityDest.value = link.realityDest || '';
+        form.realitySni.value = Array.isArray(link.realitySni) ? link.realitySni.join(', ') : (link.realitySni || '');
+        form.realityPrivateKey.value = link.realityPrivateKey || '';
+        form.realityPublicKey.value = link.realityPublicKey || '';
+        form.realityShortIds.value = Array.isArray(link.realityShortIds) ? link.realityShortIds.join(', ') : (link.realityShortIds || '');
+        form.realityFingerprint.value = link.realityFingerprint || 'chrome';
+
+        const geoEnabled = document.getElementById('geoRoutingEnabled');
+        const geoFields = document.getElementById('geoRoutingFields');
+        const geoDomains = document.getElementById('geoRoutingDomains');
+        const geoGeoip = document.getElementById('geoRoutingGeoip');
+        if (geoEnabled) geoEnabled.checked = !!link.geoRouting?.enabled;
+        if (geoFields) geoFields.style.display = link.geoRouting?.enabled ? '' : 'none';
+        if (geoDomains) geoDomains.value = Array.isArray(link.geoRouting?.domains) ? link.geoRouting.domains.join(', ') : '';
+        if (geoGeoip) geoGeoip.value = Array.isArray(link.geoRouting?.geoip) ? link.geoRouting.geoip.join(', ') : '';
+
+        var realitySec = document.getElementById('realitySection');
+        if (realitySec) realitySec.style.display = form.tunnelSecurity.value === 'reality' ? '' : 'none';
+        var domGroup = document.getElementById('tunnelDomainGroup');
+        if (domGroup) domGroup.style.display = form.mode.value === 'forward' ? 'none' : '';
+        var hint = document.getElementById('modeHint');
+        if (hint) {
+            hint.textContent = form.mode.value === 'forward'
+                ? (i18n.modeForwardHint || 'Portal connects to Bridge directly. All nodes need public IP.')
+                : (i18n.modeReverseHint || 'Bridge initiates tunnel to Portal. Bridge can be behind NAT.');
+        }
+        var switcher = document.getElementById('modeSwitcher');
+        if (switcher) {
+            switcher.querySelectorAll('.mode-btn').forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-mode') === form.mode.value);
+            });
+        }
+    }
+
     function closeModal() {
         document.getElementById('addLinkModal').classList.remove('active');
         document.getElementById('addLinkForm').reset();
+        linkModalMode = 'create';
+        var title = document.getElementById('linkModalTitle');
+        if (title) title.textContent = i18n.addLink || 'Add Link';
+        var submit = document.getElementById('linkModalSubmit');
+        if (submit) submit.textContent = i18n.createLink || 'Create';
+        var linkIdInput = document.getElementById('linkIdInput');
+        if (linkIdInput) linkIdInput.value = '';
         // Reset mode switcher to reverse
         var modeInput = document.getElementById('linkModeInput');
         if (modeInput) modeInput.value = 'reverse';
@@ -797,6 +884,7 @@
         e.preventDefault();
         const form = e.target;
         const btn  = form.querySelector('[type="submit"]');
+        const linkId = form.linkId?.value || '';
 
         const data = {
             name:           form.name.value,
@@ -849,8 +937,8 @@
         btn.innerHTML = '<i class="ti ti-loader-2 spin"></i>';
 
         try {
-            const res = await fetch('/api/cascade/links', {
-                method: 'POST',
+            const res = await fetch(linkId ? ('/api/cascade/links/' + linkId) : '/api/cascade/links', {
+                method: linkId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
@@ -865,7 +953,7 @@
             showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="ti ti-plus"></i> ' + (i18n.createLink || 'Create');
+            btn.innerHTML = (linkId ? '' : '<i class="ti ti-plus"></i> ') + (linkId ? (i18n.save || 'Save') : (i18n.createLink || 'Create'));
         }
     }
 
@@ -975,6 +1063,15 @@
         } catch (err) {
             showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
         } finally { resetActionLoading(); }
+    };
+
+    window._cascadeEdit = async function (linkId) {
+        try {
+            await openEditLinkModal(linkId);
+            closeInfoModal();
+        } catch (err) {
+            showToast((i18n.networkError || 'Error') + ': ' + err.message, 'error');
+        }
     };
 
     // ==================== HELPERS ====================
