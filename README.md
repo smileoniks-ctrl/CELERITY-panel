@@ -23,7 +23,7 @@
 
 ## ⚡ Quick Start
 
-> Updating an existing installation? See [Safe Production Updates](safe-update.md).
+> Updating an existing installation? See [Safe Production Updates](docs/safe-update.md).
 
 **1. Install Docker** (if not installed):
 ```bash
@@ -57,6 +57,7 @@ docker compose up -d
 ```
 
 **3. Open** `https://your-domain/panel`
+> Planning to manage the panel from AI assistants? See [MCP Setup Guide](docs/mcp-user-guide.md).
 
 **Required `.env` variables:**
 ```env
