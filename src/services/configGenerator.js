@@ -170,8 +170,9 @@ function buildMasqueradeConfig(node) {
     if (type === 'string') {
         const statusCodeRaw = Number(masq.string?.statusCode) || 503;
         const statusCode = Math.min(599, Math.max(100, statusCodeRaw));
+        const content = String(masq.string?.content || 'Service Unavailable').replace(/\r\n?/g, '\n');
         cfg.string = {
-            content: masq.string?.content || 'Service Unavailable',
+            content,
             statusCode,
         };
         if (masq.string?.headers && typeof masq.string.headers === 'object' && Object.keys(masq.string.headers).length > 0) {

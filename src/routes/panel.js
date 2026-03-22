@@ -205,6 +205,10 @@ function parseIntegerOrDefault(raw, defaultValue) {
     return Number.isFinite(value) ? value : defaultValue;
 }
 
+function normalizeTextareaNewlines(value) {
+    return String(value || '').replace(/\r\n?/g, '\n');
+}
+
 const DEFAULT_INLINE_ACL_RULES = [
     'reject(geoip:cn)',
     'reject(geoip:private)',
@@ -245,7 +249,7 @@ function parseHysteriaFormFields(body) {
             insecure: parseBool(body, 'masquerade.proxy.insecure', false),
         },
         string: {
-            content: body['masquerade.string.content'] || 'Service Unavailable',
+            content: normalizeTextareaNewlines(body['masquerade.string.content'] || 'Service Unavailable'),
             headers: parseHeaderMap(body['masquerade.string.headers'], { 'content-type': 'text/plain' }),
             statusCode: parseInt(body['masquerade.string.statusCode']) || 503,
         },
