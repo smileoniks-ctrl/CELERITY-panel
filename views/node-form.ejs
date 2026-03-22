@@ -266,6 +266,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
 
                 <div class="form-group hysteria-only" id="acmeAdvancedToggleGroup" style="<%= node?.type === 'xray' || !node?.domain ? 'display:none' : '' %>">
                     <div class="section-subtitle"><%= t('nodes.sectionAcmeAdvanced') %> (<%= t('nodes.optionalSuffix') %>)</div>
+                    <small class="section-hint"><%- renderDocsIcon('acme') %><%= t('nodes.sectionAcmeAdvancedHint') %></small>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="acmeEmail"><%= t('nodes.acmeEmail') %></label>
@@ -283,7 +284,6 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                         <input type="checkbox" id="acmeAdvancedEnabled" name="acme.advanced.enabled" <%= acmeAdvancedEnabled ? 'checked' : '' %> onchange="toggleAcmeAdvancedFields()">
                         <span class="checkbox-text"><%= t('nodes.enableOptionalSection') %></span>
                     </label>
-                    <small class="section-hint"><%- renderDocsIcon('acme') %><%= t('nodes.sectionAcmeAdvancedHint') %></small>
                 </div>
 
                 <div class="hysteria-only optional-fields-wrap" id="acmeAdvancedFieldsWrap" style="<%= node?.type === 'xray' || !node?.domain || !acmeAdvancedEnabled ? 'display:none' : '' %>">
@@ -1236,35 +1236,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
     </div>
     <div class="card-body">
         <p class="hint"><%- t('nodes.configHint') %></p>
-        <pre class="code-block"><code>listen: :<%= node.port %>
-
-tls:
-<% if (node.domain) { %>
-  acme:
-    domains:
-      - <%= node.domain %>
-    email: admin@<%= node.domain %>
-<% } else { %>
-  cert: /etc/hysteria/cert.pem
-  key: /etc/hysteria/key.pem
-<% } %>
-  sniGuard: strict
-
-auth:
-  type: http
-  http:
-    url: <%= baseUrl %>/api/auth
-    insecure: false
-
-masquerade:
-  type: string
-  string:
-    content: "Hello World"
-    statusCode: 200
-
-acl:
-  inline:
-    - reject(geoip:cn)</code></pre>
+        <pre class="code-block"><code><%= nodeConfigPreview || '' %></code></pre>
         <button class="btn btn-sm" onclick="copyConfig()"><%= t('common.copy') %></button>
     </div>
 </div>

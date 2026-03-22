@@ -1240,7 +1240,7 @@ html {
     margin-bottom: 20px;
 }
 
-.form-group label {
+.form-group label:not(.checkbox-label) {
     display: block;
     margin-bottom: 8px;
     font-size: 14px;
@@ -1354,6 +1354,11 @@ html {
     color: var(--text-secondary);
     margin-bottom: 0;
     vertical-align: middle;
+}
+
+.form-group label.checkbox-label {
+    display: flex;
+    margin-bottom: 0;
 }
 
 .checkbox-label > input[type="checkbox"],

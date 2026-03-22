@@ -1254,7 +1254,7 @@ router.post('/nodes/preview-config', requireAuth, async (req, res) => {
 router.get('/nodes/:id', requireAuth, async (req, res) => {
     try {
         const CascadeLink = require('../models/cascadeLinkModel');
-        const [node, groups, cascadeLinks] = await Promise.all([
+        const [node, groups, cascadeLinks, settings] = await Promise.all([
             HyNode.findById(req.params.id).populate('groups', 'name color'),
             getActiveGroups(),
             CascadeLink.find({
@@ -1262,16 +1262,31 @@ router.get('/nodes/:id', requireAuth, async (req, res) => {
             }).populate('portalNode', 'name ip flag')
               .populate('bridgeNode', 'name ip flag')
               .sort({ createdAt: -1 }),
+            Settings.get(),
         ]);
 
         if (!node) {
             return res.redirect('/panel/nodes');
         }
 
+        let nodeConfigPreview = '';
+        if (node.type !== 'xray') {
+            const customConfig = String(node.customConfig || '').trim();
+            if (node.useCustomConfig && customConfig) {
+                nodeConfigPreview = customConfig;
+            } else {
+                const authInsecure = settings?.nodeAuth?.insecure ?? true;
+                const authUrl = `${config.BASE_URL}/api/auth`;
+                const useTlsFiles = !!(node.useTlsFiles || !node.domain);
+                nodeConfigPreview = configGenerator.generateNodeConfig(node, authUrl, { authInsecure, useTlsFiles });
+            }
+        }
+
         render(res, 'node-form', {
             title: `Edit: ${node.name}`,
             page: 'nodes',
             node,
+            nodeConfigPreview,
             groups,
             cascadeLinks: cascadeLinks || [],
             error: req.query.error || null,
