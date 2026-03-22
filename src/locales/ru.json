@@ -273,6 +273,7 @@
     "acmeHttpAltPort": "HTTP Alt Port",
     "acmeTlsAltPort": "TLS Alt Port",
     "acmeDnsName": "DNS провайдер",
+    "acmeDnsProviderHint": "Актуальные имена провайдеров смотрите в документации ACME DNS config.",
     "acmeDnsConfig": "Конфиг DNS провайдера (JSON)",
     "acmeDnsConfigHint": "JSON-объект с параметрами/ключами провайдера.",
     "sectionMasquerade": "Маскарад",

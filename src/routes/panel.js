@@ -28,6 +28,7 @@ const Admin = require('../models/adminModel');
 const ApiKey = require('../models/apiKeyModel');
 const webhookService = require('../services/webhookService');
 const syncService = require('../services/syncService');
+const configGenerator = require('../services/configGenerator');
 const cryptoService = require('../services/cryptoService');
 const totpService = require('../services/totpService');
 const cache = require('../services/cacheService');
@@ -217,7 +218,8 @@ function parseAclRulesInput(raw) {
 }
 
 function parseHysteriaFormFields(body) {
-    const acmeAdvancedEnabled = parseBool(body, 'acme.advanced.enabled', false) && !!String(body.domain || '').trim();
+    const hasDomain = !!String(body.domain || '').trim();
+    const acmeAdvancedEnabled = parseBool(body, 'acme.advanced.enabled', false) && hasDomain;
     const bandwidthEnabled = parseBool(body, 'bandwidth.enabled', false);
     const udpOptionsEnabled = parseBool(body, 'udp.options.enabled', false);
     const sniffEnabled = parseBool(body, 'sniff.enabled', false);
@@ -255,8 +257,8 @@ function parseHysteriaFormFields(body) {
     return {
         hopInterval: (body.hopInterval || '').trim(),
         acme: {
-            email: acmeAdvancedEnabled ? (body['acme.email'] || '').trim() : '',
-            ca: acmeAdvancedEnabled ? ((body['acme.ca'] || 'letsencrypt').trim() || 'letsencrypt') : '',
+            email: hasDomain ? (body['acme.email'] || '').trim() : '',
+            ca: hasDomain ? ((body['acme.ca'] || 'letsencrypt').trim() || 'letsencrypt') : '',
             listenHost: acmeAdvancedEnabled ? ((body['acme.listenHost'] || '').trim()) : '',
             type: acmeAdvancedEnabled ? (body['acme.type'] || '').trim() : '',
             httpAltPort: acmeAdvancedEnabled ? parseIntegerOrDefault(body['acme.httpAltPort'], 0) : 0,
@@ -1319,6 +1321,51 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
     } catch (error) {
         logger.error(`[Panel] Update node error: ${error.message}`);
         res.redirect(`/panel/nodes/${nodeId}?error=${encodeURIComponent(error.message)}`);
+    }
+});
+
+// POST /panel/nodes/preview-config - generate config preview from current form values
+router.post('/nodes/preview-config', requireAuth, async (req, res) => {
+    try {
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+        if (nodeType !== 'hysteria') {
+            return res.status(400).json({ success: false, error: 'Preview config supports only Hysteria nodes' });
+        }
+
+        const hyFields = parseHysteriaFormFields(req.body);
+        const hyValidationError = validateHysteriaFormFields(hyFields);
+        if (hyValidationError) {
+            return res.status(400).json({ success: false, error: hyValidationError });
+        }
+        delete hyFields.acmeDnsConfigValid;
+
+        const nodeData = {
+            type: 'hysteria',
+            port: parseInt(req.body.port, 10) || 443,
+            domain: (req.body.domain || '').trim(),
+            sni: (req.body.sni || '').trim(),
+            useTlsFiles: parseBool(req.body, 'useTlsFiles', false),
+            obfs: {
+                type: req.body['obfs.type'] || '',
+                password: req.body['obfs.password'] || '',
+            },
+            statsPort: parseInt(req.body.statsPort, 10) || 9999,
+            statsSecret: req.body.statsSecret || '',
+            outbounds: [],
+            aclRules: hyFields.aclRules || [],
+            ...hyFields,
+        };
+
+        const settings = await Settings.get();
+        const authInsecure = settings?.nodeAuth?.insecure ?? true;
+        const authUrl = `${config.BASE_URL}/api/auth`;
+        const useTlsFiles = nodeData.useTlsFiles || !nodeData.domain;
+
+        const generatedConfig = configGenerator.generateNodeConfig(nodeData, authUrl, { authInsecure, useTlsFiles });
+        return res.json({ success: true, config: generatedConfig });
+    } catch (error) {
+        logger.error('[Panel] Preview config generation error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 

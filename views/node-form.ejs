@@ -11,6 +11,7 @@ const hysteriaDocsByLang = {
     en: {
         portHopping: 'https://v2.hysteria.network/docs/advanced/Port-Hopping/',
         acme: 'https://v2.hysteria.network/docs/advanced/Full-Server-Config/#tls',
+        acmeDnsConfig: 'https://v2.hysteria.network/docs/advanced/ACME-DNS-Config/',
         stats: 'https://v2.hysteria.network/docs/advanced/Full-Server-Config/#traffic-stats-api-http',
         obfuscation: 'https://v2.hysteria.network/docs/advanced/Full-Server-Config/#obfuscation',
         masquerade: 'https://v2.hysteria.network/docs/advanced/Full-Server-Config/#masquerade',
@@ -25,6 +26,7 @@ const hysteriaDocsByLang = {
     ru: {
         portHopping: 'https://v2.hysteria.network/ru/docs/advanced/Port-Hopping/',
         acme: 'https://v2.hysteria.network/ru/docs/advanced/Full-Server-Config/#tls',
+        acmeDnsConfig: 'https://v2.hysteria.network/ru/docs/advanced/ACME-DNS-Config/',
         stats: 'https://v2.hysteria.network/ru/docs/advanced/Full-Server-Config/#api-http',
         obfuscation: 'https://v2.hysteria.network/ru/docs/advanced/Full-Server-Config/#_2',
         masquerade: 'https://v2.hysteria.network/ru/docs/advanced/Full-Server-Config/#_13',
@@ -96,7 +98,8 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
         <h2><%= node ? t('nodes.editNode') : t('nodes.newNode') %></h2>
     </div>
     <div class="card-body">
-        <form method="POST" action="/panel/nodes<%= node ? '/' + node._id : '' %>" class="form">
+        <form id="nodeForm" method="POST" action="/panel/nodes<%= node ? '/' + node._id : '' %>" class="form">
+            <input type="hidden" name="useTlsFiles" value="<%= node?.useTlsFiles ? '1' : '0' %>">
 
             <%# ========== 1. Identification ========== %>
             <div class="form-row-3">
@@ -263,14 +266,6 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
 
                 <div class="form-group hysteria-only" id="acmeAdvancedToggleGroup" style="<%= node?.type === 'xray' || !node?.domain ? 'display:none' : '' %>">
                     <div class="section-subtitle"><%= t('nodes.sectionAcmeAdvanced') %> (<%= t('nodes.optionalSuffix') %>)</div>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="acmeAdvancedEnabled" name="acme.advanced.enabled" <%= acmeAdvancedEnabled ? 'checked' : '' %> onchange="toggleAcmeAdvancedFields()">
-                        <span class="checkbox-text"><%= t('nodes.enableOptionalSection') %></span>
-                    </label>
-                    <small class="section-hint"><%- renderDocsIcon('acme') %><%= t('nodes.sectionAcmeAdvancedHint') %></small>
-                </div>
-
-                <div class="hysteria-only optional-fields-wrap" id="acmeAdvancedFieldsWrap" style="<%= node?.type === 'xray' || !node?.domain || !acmeAdvancedEnabled ? 'display:none' : '' %>">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="acmeEmail"><%= t('nodes.acmeEmail') %></label>
@@ -284,7 +279,14 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                             </select>
                         </div>
                     </div>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="acmeAdvancedEnabled" name="acme.advanced.enabled" <%= acmeAdvancedEnabled ? 'checked' : '' %> onchange="toggleAcmeAdvancedFields()">
+                        <span class="checkbox-text"><%= t('nodes.enableOptionalSection') %></span>
+                    </label>
+                    <small class="section-hint"><%- renderDocsIcon('acme') %><%= t('nodes.sectionAcmeAdvancedHint') %></small>
+                </div>
 
+                <div class="hysteria-only optional-fields-wrap" id="acmeAdvancedFieldsWrap" style="<%= node?.type === 'xray' || !node?.domain || !acmeAdvancedEnabled ? 'display:none' : '' %>">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="acmeListenHost"><%= t('nodes.acmeListenHost') %></label>
@@ -317,6 +319,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                             <div class="form-group">
                                 <label for="acmeDnsName"><%= t('nodes.acmeDnsName') %></label>
                                 <input type="text" id="acmeDnsName" name="acme.dns.name" value="<%= node?.acme?.dnsName || '' %>" placeholder="cloudflare">
+                                <small><%- renderDocsIcon('acmeDnsConfig') %><%= t('nodes.acmeDnsProviderHint') %></small>
                             </div>
                         </div>
                         <div class="form-group">
@@ -1637,49 +1640,26 @@ function generateObfsPassword() {
     document.getElementById('obfsPassword').value = pwd;
 }
 
-function generateConfig() {
-    const name = document.getElementById('name').value || 'Node';
-    const domain = document.getElementById('domain').value;
-    const port = document.getElementById('port').value || 443;
-    const statsPort = document.getElementById('statsPort')?.value || 9999;
-    const statsSecret = document.getElementById('statsSecret')?.value || 'secret';
+async function generateConfig() {
+    const form = document.getElementById('nodeForm');
+    const output = document.getElementById('customConfig');
+    if (!form || !output) return;
 
-    let tlsSection;
-    if (domain) {
-        tlsSection = `acme:\n  domains:\n    - ${domain}\n  email: admin@${domain}`;
-    } else {
-        tlsSection = `tls:\n  cert: /etc/hysteria/cert.pem\n  key: /etc/hysteria/key.pem`;
+    const formData = new URLSearchParams(new FormData(form));
+    try {
+        const res = await fetch('/panel/nodes/preview-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString(),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Failed to generate preview');
+        }
+        output.value = data.config || '';
+    } catch (err) {
+        alert(i18nConfig.error + ': ' + err.message);
     }
-
-    const config = `# Hysteria 2 Config - ${name}
-# Generated: ${new Date().toISOString()}
-
-listen: :${port}
-
-${tlsSection}
-
-auth:
-  type: http
-  http:
-    url: ${i18nConfig.baseUrl}/api/auth
-    insecure: false
-
-masquerade:
-  type: proxy
-  proxy:
-    url: https://www.google.com
-    rewriteHost: true
-
-acl:
-  inline:
-    - reject(geoip:cn)
-    - reject(geoip:private)
-
-trafficStats:
-  listen: :${statsPort}
-  secret: ${statsSecret}
-`;
-    document.getElementById('customConfig').value = config;
 }
 
 async function loadCurrentConfig() {

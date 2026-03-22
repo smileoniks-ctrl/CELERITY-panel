@@ -273,6 +273,7 @@
     "acmeHttpAltPort": "HTTP Alt Port",
     "acmeTlsAltPort": "TLS Alt Port",
     "acmeDnsName": "DNS Provider",
+    "acmeDnsProviderHint": "Available provider names are listed in ACME DNS config docs.",
     "acmeDnsConfig": "DNS Provider Config (JSON)",
     "acmeDnsConfigHint": "Raw JSON object for provider-specific credentials/options.",
     "sectionMasquerade": "Masquerade",
