@@ -168,8 +168,13 @@ const loginLimiter = rateLimit({
     legacyHeaders: false,
     handler: (req, res) => {
         logger.warn(`[Panel] Rate limit exceeded for IP: ${req.ip}`);
+        const lockout = getPanelLoginTotpLockout(req);
+        if (lockout) {
+            return renderPanelLoginPage(req, res, { status: 429 });
+        }
+
         const message = res.locals.t?.('auth.tooManyAttempts') || 'Too many login attempts. Try again in 15 minutes.';
-        res.status(429).render('login', { error: message });
+        return renderPanelLoginPage(req, res, { error: message, status: 429 });
     },
 });
 
@@ -305,6 +310,68 @@ function clearPanelTotpPending(req) {
     if (req.session) {
         delete req.session.panelTotpPending;
     }
+}
+
+function clearPanelLoginTotpLockout(req) {
+    if (req.session) {
+        delete req.session.panelLoginTotpLockout;
+    }
+}
+
+function normalizePanelLoginTotpLockoutTime(resetTime) {
+    if (!resetTime) return null;
+
+    if (resetTime instanceof Date) {
+        const value = resetTime.getTime();
+        return Number.isFinite(value) ? value : null;
+    }
+
+    const value = Number(resetTime);
+    return Number.isFinite(value) ? value : null;
+}
+
+function setPanelLoginTotpLockout(req, resetTime) {
+    if (!req.session) return null;
+
+    const blockedUntil = normalizePanelLoginTotpLockoutTime(resetTime);
+    if (!blockedUntil || blockedUntil <= Date.now()) {
+        clearPanelLoginTotpLockout(req);
+        return null;
+    }
+
+    req.session.panelLoginTotpLockout = { blockedUntil };
+    return req.session.panelLoginTotpLockout;
+}
+
+function getPanelLoginTotpLockout(req) {
+    const lockout = req.session?.panelLoginTotpLockout;
+    if (!lockout || typeof lockout !== 'object') return null;
+
+    const blockedUntil = Number(lockout.blockedUntil);
+    if (!Number.isFinite(blockedUntil)) {
+        clearPanelLoginTotpLockout(req);
+        return null;
+    }
+
+    if (blockedUntil <= Date.now()) {
+        clearPanelLoginTotpLockout(req);
+        return null;
+    }
+
+    return { blockedUntil };
+}
+
+function renderPanelLoginPage(req, res, { error = null, status = 200 } = {}) {
+    const lockout = getPanelLoginTotpLockout(req);
+    const t = typeof res.locals.t === 'function' ? res.locals.t : null;
+
+    return res.status(status).render('login', {
+        error,
+        lockoutActive: Boolean(lockout),
+        lockoutUntil: lockout?.blockedUntil || null,
+        lockoutIso: lockout ? new Date(lockout.blockedUntil).toISOString() : null,
+        lockoutReason: lockout ? (t ? t('auth.totpLoginLockoutMessage') : 'Login is temporarily blocked due to too many invalid verification attempts.') : null,
+    });
 }
 
 function getPanelTotpPending(req, { clearInvalid = true } = {}) {
@@ -479,6 +546,16 @@ const totpVerifyLimiter = rateLimit({
         const message = res.locals.t?.('auth.tooManyTotpAttempts') || 'Too many verification attempts. Try again later.';
         const pending = getPanelTotpPending(req, { clearInvalid: false });
 
+        if (pending?.type === 'login') {
+            setPanelLoginTotpLockout(req, req.rateLimit?.resetTime);
+            clearPanelTotpPending(req);
+            return res.redirect('/panel/login');
+        }
+
+        if (pending?.type === 'settings') {
+            return redirectSettingsSecurity(res, { error: message });
+        }
+
         if (pending) {
             return renderPanelTotpPage(res, pending, message);
         }
@@ -497,6 +574,16 @@ router.get('/login', async (req, res) => {
         return res.redirect('/panel');
     }
 
+    const loginLockout = getPanelLoginTotpLockout(req);
+    if (loginLockout) {
+        const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
+        if (pendingForLockout?.type === 'login') {
+            clearPanelTotpPending(req);
+        }
+
+        return renderPanelLoginPage(req, res, { status: 429 });
+    }
+
     const pending = getPanelTotpPending(req);
     if (pending && (pending.type === 'login' || pending.type === 'setup')) {
         return res.redirect('/panel/totp');
@@ -509,6 +596,7 @@ router.get('/login', async (req, res) => {
         }
 
         clearPanelTotpPending(req);
+        clearPanelLoginTotpLockout(req);
         return res.render('setup', { error: null, enableTotp: false });
     }
 
@@ -516,7 +604,7 @@ router.get('/login', async (req, res) => {
         clearPanelTotpPending(req);
     }
 
-    return res.render('login', { error: null });
+    return renderPanelLoginPage(req, res);
 });
 
 // POST /panel/setup - Первичная регистрация админа
@@ -576,6 +664,16 @@ router.post('/setup', async (req, res) => {
 
 // POST /panel/login (с rate limiting)
 router.post('/login', loginLimiter, async (req, res) => {
+    const lockout = getPanelLoginTotpLockout(req);
+    if (lockout) {
+        const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
+        if (pendingForLockout?.type === 'login') {
+            clearPanelTotpPending(req);
+        }
+
+        return renderPanelLoginPage(req, res, { status: 429 });
+    }
+
     const { username, password } = req.body;
 
     const hasAdmin = await Admin.hasAdmin();
@@ -587,13 +685,17 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     if (!admin) {
         logger.warn(`[Panel] Failed login attempt: ${username} from IP: ${req.ip}`);
-        return res.render('login', { error: res.locals.t?.('auth.invalidCredentials') || 'Invalid username or password' });
+        return renderPanelLoginPage(req, res, {
+            error: res.locals.t?.('auth.invalidCredentials') || 'Invalid username or password',
+        });
     }
 
     if (admin.twoFactor?.enabled) {
         if (!admin.twoFactor.secretEncrypted) {
             logger.warn(`[Panel] Missing TOTP secret for enabled 2FA login: ${admin.username} (IP: ${req.ip})`);
-            return res.render('login', { error: res.locals.t?.('auth.totpConfigError') || 'TOTP configuration error' });
+            return renderPanelLoginPage(req, res, {
+                error: res.locals.t?.('auth.totpConfigError') || 'TOTP configuration error',
+            });
         }
 
         req.session.panelTotpPending = {
@@ -602,6 +704,7 @@ router.post('/login', loginLimiter, async (req, res) => {
             secretEncrypted: admin.twoFactor.secretEncrypted,
             createdAt: Date.now(),
         };
+        clearPanelLoginTotpLockout(req);
         delete req.session.authenticated;
         delete req.session.adminUsername;
 
@@ -610,6 +713,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     clearPanelTotpPending(req);
+    clearPanelLoginTotpLockout(req);
     req.session.authenticated = true;
     req.session.adminUsername = admin.username;
     await Admin.recordSuccessfulLogin(admin.username);

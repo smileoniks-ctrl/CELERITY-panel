@@ -23,22 +23,30 @@
                 <a href="?lang=en" class="lang-btn <%= typeof lang !== 'undefined' && lang === 'en' ? 'active' : '' %>">EN</a>
             </div>
             
+            <% const lockoutIsActive = Boolean(lockoutActive && lockoutIso && lockoutUntil); %>
             <% if (error) { %>
             <div class="alert alert-error"><%= error %></div>
             <% } %>
+            <% if (lockoutIsActive) { %>
+            <div class="alert alert-error lockout-alert" id="login-lockout-alert" data-lockout-iso="<%= lockoutIso %>">
+                <strong><%= lockoutReason || (typeof t !== 'undefined' ? t('auth.totpLoginLockoutMessage') : 'Login is temporarily blocked due to too many invalid verification attempts.') %></strong>
+                <div class="lockout-meta"><%= typeof t !== 'undefined' ? t('auth.totpLockoutUntilLabel') : 'Unlock time' %>: <time id="lockout-until-time" datetime="<%= lockoutIso %>"><%= lockoutIso %></time></div>
+                <div class="lockout-meta"><%= typeof t !== 'undefined' ? t('auth.totpLockoutRemainingLabel') : 'Time remaining' %>: <span id="lockout-countdown">--:--</span></div>
+            </div>
+            <% } %>
             
-            <form method="POST" action="/panel/login" class="login-form">
+            <form method="POST" action="/panel/login" class="login-form" data-lockout-active="<%= lockoutIsActive ? 'true' : 'false' %>">
                 <div class="form-group">
                     <label for="username"><%= typeof t !== 'undefined' ? t('auth.login') : 'Login' %></label>
                     <input type="text" id="username" name="username" 
-                           placeholder="<%= typeof t !== 'undefined' ? t('auth.enterLogin') : 'Enter login' %>" required autofocus>
+                           placeholder="<%= typeof t !== 'undefined' ? t('auth.enterLogin') : 'Enter login' %>" required autofocus <%= lockoutIsActive ? 'disabled' : '' %>>
                 </div>
                 <div class="form-group">
                     <label for="password"><%= typeof t !== 'undefined' ? t('auth.password') : 'Password' %></label>
                     <input type="password" id="password" name="password" 
-                           placeholder="<%= typeof t !== 'undefined' ? t('auth.enterPassword') : 'Enter password' %>" required>
+                           placeholder="<%= typeof t !== 'undefined' ? t('auth.enterPassword') : 'Enter password' %>" required <%= lockoutIsActive ? 'disabled' : '' %>>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block"><%= typeof t !== 'undefined' ? t('auth.loginButton') : 'Sign In' %></button>
+                <button type="submit" class="btn btn-primary btn-block" <%= lockoutIsActive ? 'disabled' : '' %>><%= typeof t !== 'undefined' ? t('auth.loginButton') : 'Sign In' %></button>
             </form>
         </div>
     </div>
@@ -68,6 +76,72 @@
         color: var(--text-primary);
         background: var(--accent);
     }
+    .lockout-alert {
+        margin-bottom: 16px;
+    }
+    .lockout-meta {
+        margin-top: 6px;
+        font-size: 12px;
+        opacity: 0.9;
+    }
     </style>
+    <script>
+    (() => {
+        const lockoutAlert = document.getElementById('login-lockout-alert');
+        const loginForm = document.querySelector('.login-form');
+        if (!lockoutAlert || !loginForm) return;
+
+        const lockoutIso = lockoutAlert.dataset.lockoutIso;
+        const blockedUntil = Date.parse(lockoutIso);
+        if (!Number.isFinite(blockedUntil)) return;
+
+        const untilNode = document.getElementById('lockout-until-time');
+        const countdownNode = document.getElementById('lockout-countdown');
+        const expiredLabel = '<%= typeof t !== "undefined" ? t("auth.totpLockoutExpired") : "Expired" %>';
+        const locale = document.documentElement.lang || undefined;
+        const formatTime = new Intl.DateTimeFormat(locale, {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
+
+        const setFormDisabled = (disabled) => {
+            loginForm.querySelectorAll('input, button').forEach((element) => {
+                element.disabled = disabled;
+            });
+        };
+
+        const formatRemaining = (ms) => {
+            const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        };
+
+        if (untilNode) {
+            untilNode.textContent = formatTime.format(new Date(blockedUntil));
+        }
+
+        const tick = () => {
+            const remaining = blockedUntil - Date.now();
+            if (remaining <= 0) {
+                if (countdownNode) countdownNode.textContent = expiredLabel;
+                setFormDisabled(false);
+                lockoutAlert.remove();
+                return true;
+            }
+
+            if (countdownNode) {
+                countdownNode.textContent = formatRemaining(remaining);
+            }
+            return false;
+        };
+
+        if (tick()) return;
+        const timer = setInterval(() => {
+            if (tick()) clearInterval(timer);
+        }, 1000);
+    })();
+    </script>
 </body>
 </html>
