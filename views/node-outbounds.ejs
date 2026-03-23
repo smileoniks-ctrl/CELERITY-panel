@@ -9,8 +9,14 @@
 <div class="alert alert-error"><%= error %></div>
 <% } %>
 
+<%
+const aclInlineEditable = aclInlineState?.editable !== false;
+const aclInlineReason = aclInlineState?.reason || '';
+%>
+
 <style>
 .presets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 10px; margin-top: 12px; }
+.presets-grid.is-disabled { opacity: 0.5; pointer-events: none; }
 .preset-card {
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 14px 16px; cursor: pointer; transition: all 0.15s;
@@ -113,7 +119,7 @@
             <!-- PRESETS -->
             <div class="form-section">
                 <h3><%= t('outbounds.presets') %> <small style="font-weight:400; color:var(--text-muted); font-size:12px;"><%= t('outbounds.presetsHint') %></small></h3>
-                <div class="presets-grid">
+                <div class="presets-grid<%= !aclInlineEditable ? ' is-disabled' : '' %>">
                     <div class="preset-card" onclick="applyPreset('block-ads', this)">
                         <div class="preset-icon"><i class="ti ti-ban"></i></div>
                         <div class="preset-title"><%= t('outbounds.blockAds') %></div>
@@ -142,6 +148,13 @@
                 <h3><%= t('outbounds.rules') %></h3>
                 <p class="hint" style="margin-bottom: 12px;"><%- t('outbounds.rulesHint') %></p>
 
+                <% if (!aclInlineEditable) { %>
+                <div class="alert alert-warning" style="margin-bottom: 12px; font-size: 13px;">
+                    <i class="ti ti-alert-triangle"></i>
+                    <%= aclInlineReason === 'file' ? t('outbounds.aclInlineDisabledFile') : t('outbounds.aclInlineDisabled') %>
+                </div>
+                <% } %>
+
                 <div id="noProxyAclWarning" class="alert alert-warning" style="display:none; margin-bottom:10px; font-size:13px;"></div>
 
                 <div id="proxyChipsWrap" style="display:none; margin-bottom:8px;">
@@ -150,8 +163,9 @@
                 </div>
 
                 <textarea name="aclRules" id="aclRulesEditor" class="acl-editor"
-                    placeholder="reject(suffix:doubleclick.net)&#10;reject(geoip:cn)&#10;reject(geoip:private)&#10;direct(all)"><%= (node.aclRules || []).join('\n') %></textarea>
+                    placeholder="reject(suffix:doubleclick.net)&#10;reject(geoip:cn)&#10;reject(geoip:private)&#10;direct(all)" <%= aclInlineEditable ? '' : 'readonly disabled' %>><%= (node.aclRules || []).join('\n') %></textarea>
 
+                <% if (aclInlineEditable) { %>
                 <div style="margin-top: 10px;">
                     <small style="color: var(--text-muted)"><%= t('outbounds.templates') %>:</small>
                     <div class="acl-hint-tags">
@@ -167,10 +181,13 @@
                         <span class="acl-tag" onclick="insertAcl('direct(suffix:local)')">direct(suffix:local)</span>
                     </div>
                 </div>
+                <% } %>
 
+                <% if (aclInlineEditable) { %>
                 <div class="alert alert-warning" style="margin-top:12px; font-size:12px; padding:8px 12px;">
                     <i class="ti ti-info-circle"></i> <%- t('outbounds.defaultRulesWarning') %>
                 </div>
+                <% } %>
 
                 <button type="button" class="preview-toggle" onclick="togglePreview()">
                     <span id="previewArrow"><i class="ti ti-chevron-right"></i></span> <%= t('outbounds.yamlPreview') %>
@@ -244,15 +261,19 @@
 </div>
 
 <script>
-const NODE_ID = '<%= node._id %>';
+const NODE_ID = <%- JSON.stringify(String(node._id || '')) %>;
+const ACL_EDITOR_EDITABLE = <%= aclInlineEditable ? 'true' : 'false' %>;
+const ACL_EDITOR_REASON = <%- JSON.stringify(String(aclInlineReason || '')) %>;
 const I18N = {
-    noProxyWarning: '<%- t("outbounds.noProxyWarning") %>',
-    replaceRules: '<%= t("outbounds.replaceRules") %>',
-    applying: '<%= t("outbounds.applying") %>',
-    applied: '<%= t("outbounds.applied") %>',
-    applyError: '<%= t("outbounds.applyError") %>',
-    noRulesDefault: '<%= t("outbounds.noRulesDefault") %>',
-    proxyExists: '<%= t("common.error") %>: Proxy already exists'
+    noProxyWarning: <%- JSON.stringify(t("outbounds.noProxyWarning")) %>,
+    replaceRules: <%- JSON.stringify(t("outbounds.replaceRules")) %>,
+    applying: <%- JSON.stringify(t("outbounds.applying")) %>,
+    applied: <%- JSON.stringify(t("outbounds.applied")) %>,
+    applyError: <%- JSON.stringify(t("outbounds.applyError")) %>,
+    noRulesDefault: <%- JSON.stringify(t("outbounds.noRulesDefault")) %>,
+    aclInlineDisabled: <%- JSON.stringify(t("outbounds.aclInlineDisabled")) %>,
+    aclInlineDisabledFile: <%- JSON.stringify(t("outbounds.aclInlineDisabledFile")) %>,
+    proxyExists: <%- JSON.stringify(`${t("common.error")}: Proxy already exists`) %>
 };
 
 let pendingOutbounds = <%- JSON.stringify((node.outbounds || []).filter(o => o.type === 'socks5' || o.type === 'http')) %>;
@@ -272,6 +293,7 @@ const PRESETS = {
 };
 
 function applyPreset(key, el) {
+    if (!ACL_EDITOR_EDITABLE) return;
     const rules = PRESETS[key];
     if (rules === undefined) return;
 
@@ -287,6 +309,7 @@ function applyPreset(key, el) {
 }
 
 function insertAcl(rule) {
+    if (!ACL_EDITOR_EDITABLE) return;
     const ta = document.getElementById('aclRulesEditor');
     const lines = ta.value ? ta.value.split('\n') : [];
     if (!lines.includes(rule)) { lines.push(rule); ta.value = lines.join('\n'); }
@@ -294,6 +317,7 @@ function insertAcl(rule) {
 }
 
 function insertProxyName(name) {
+    if (!ACL_EDITOR_EDITABLE) return;
     const ta = document.getElementById('aclRulesEditor');
     const pos = ta.selectionStart;
     const ins = name + '(';
@@ -303,6 +327,11 @@ function insertProxyName(name) {
 }
 
 function checkProxyWarning() {
+    if (!ACL_EDITOR_EDITABLE) {
+        const warn = document.getElementById('noProxyAclWarning');
+        if (warn) warn.style.display = 'none';
+        return;
+    }
     const hasProxy = pendingOutbounds.length > 0;
     const aclVal = document.getElementById('aclRulesEditor').value.trim();
     const warn = document.getElementById('noProxyAclWarning');
@@ -391,8 +420,9 @@ function togglePreview() {
 }
 
 function updatePreview() {
-    const aclRules = document.getElementById('aclRulesEditor').value
-        .split('\n').map(r => r.trim()).filter(Boolean);
+    const aclRules = ACL_EDITOR_EDITABLE
+        ? document.getElementById('aclRulesEditor').value.split('\n').map(r => r.trim()).filter(Boolean)
+        : [];
     let yaml = '';
     if (pendingOutbounds.length > 0) {
         yaml += 'outbounds:\n';
@@ -413,6 +443,11 @@ function updatePreview() {
     if (aclRules.length > 0) {
         yaml += 'acl:\n  inline:\n';
         aclRules.forEach(r => { yaml += `    - ${r}\n`; });
+    } else if (!ACL_EDITOR_EDITABLE) {
+        const disabledMsg = ACL_EDITOR_REASON === 'file'
+            ? I18N.aclInlineDisabledFile
+            : I18N.aclInlineDisabled;
+        yaml += '# ' + disabledMsg + '\n';
     }
     document.getElementById('yamlPreview').textContent = yaml || I18N.noRulesDefault;
 }
@@ -452,8 +487,10 @@ function escHtml(s) {
 renderProxies();
 checkProxyWarning();
 if (pendingOutbounds.length > 0) toggleProxySection();
-document.getElementById('aclRulesEditor').addEventListener('input', () => {
-    checkProxyWarning();
-    if (document.getElementById('yamlPreview').style.display !== 'none') updatePreview();
-});
+if (ACL_EDITOR_EDITABLE) {
+    document.getElementById('aclRulesEditor').addEventListener('input', () => {
+        checkProxyWarning();
+        if (document.getElementById('yamlPreview').style.display !== 'none') updatePreview();
+    });
+}
 </script>

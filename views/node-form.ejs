@@ -89,6 +89,10 @@ const aclDefaultInlineRules = ['reject(geoip:cn)', 'reject(geoip:private)'];
 const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
     ? node.aclRules.join('\n')
     : aclDefaultInlineRules.join('\n');
+const sniDomainActive = !!String(node?.domain || '').trim();
+const sniVisibleInitially = node?.type !== 'xray' && !sniDomainActive;
+const outboundsAclReason = node?.type === 'hysteria' && node?.acl?.enabled === false ? 'disabled' : '';
+const outboundsAclLocked = outboundsAclReason === 'disabled';
 %>
 
 <div class="card">
@@ -328,7 +332,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                     </div>
                 </div>
 
-                <div class="form-group hysteria-only" id="sniGroup" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                <div class="form-group hysteria-only" id="sniGroup" style="<%= sniVisibleInitially ? '' : 'display:none' %>">
                     <label for="sni">SNI</label>
                     <input type="text" id="sni" name="sni" value="<%= node?.sni || '' %>"
                            placeholder="bing.com">
@@ -448,7 +452,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" name="masquerade.forceHTTPS" <%= node?.masquerade?.forceHTTPS ? 'checked' : '' %>>
+                        <input type="checkbox" id="masqForceHttps" name="masquerade.forceHTTPS" <%= node?.masquerade?.forceHTTPS ? 'checked' : '' %>>
                         <span class="checkbox-text"><%= t('nodes.masqueradeForceHttps') %></span>
                     </label>
                 </div>
@@ -1179,6 +1183,15 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                 <span class="action-icon"><i class="ti ti-settings"></i></span>
                 <span><%= t('nodes.autoSetup') %></span>
             </button>
+            <% if (outboundsAclLocked) { %>
+            <span class="action-btn is-disabled" style="text-decoration:none;text-align:center;" title="<%= t('nodes.outboundsAclLockedDisabled') %>" aria-disabled="true">
+                <span class="action-icon"><i class="ti ti-arrow-up-right"></i></span>
+                <span>Outbounds</span>
+                <% if (node.outbounds && node.outbounds.length > 0) { %>
+                <span class="badge" style="font-size:10px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px;"><%= node.outbounds.length %></span>
+                <% } %>
+            </span>
+            <% } else { %>
             <a href="/panel/nodes/<%= node._id %>/outbounds" class="action-btn" style="text-decoration:none;text-align:center;">
                 <span class="action-icon"><i class="ti ti-arrow-up-right"></i></span>
                 <span>Outbounds</span>
@@ -1186,6 +1199,7 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                 <span class="badge" style="font-size:10px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px;"><%= node.outbounds.length %></span>
                 <% } %>
             </a>
+            <% } %>
             <% if (node.ssh?.privateKey) { %>
             <a href="/panel/nodes/<%= node._id %>/download-ssh-key" class="action-btn" style="text-decoration:none;text-align:center;">
                 <span class="action-icon"><i class="ti ti-download"></i></span>
@@ -1214,6 +1228,12 @@ const aclInlineRulesValue = (node?.aclRules && node.aclRules.length > 0)
                 <span><%= t('nodes.resetStatus') %></span>
             </button>
         </div>
+        <% if (outboundsAclLocked) { %>
+        <div class="alert alert-warning mt-2">
+            <i class="ti ti-info-circle"></i>
+            <%= t('nodes.outboundsAclLockedDisabled') %>
+        </div>
+        <% } %>
         <div id="setupResult" class="mt-2"></div>
         <div id="logsContainer" class="mt-2" style="display:none;">
             <div class="logs-header">
@@ -1543,6 +1563,7 @@ function toggleAcmeByDomain() {
     }
 
     toggleAcmeAdvancedFields();
+    toggleSniField();
 }
 
 function toggleAcmeAdvancedFields() {
@@ -1574,6 +1595,19 @@ function toggleMasqueradeType() {
     const str = document.getElementById('masqueradeStringFields');
     if (proxy) proxy.style.display = type === 'proxy' ? '' : 'none';
     if (str) str.style.display = type === 'string' ? '' : 'none';
+    toggleSniField();
+}
+
+function toggleSniField() {
+    const proto = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
+    const group = document.getElementById('sniGroup');
+    if (!group) return;
+    if (proto === 'xray') {
+        group.style.display = 'none';
+        return;
+    }
+    const hasDomain = !!(document.getElementById('domain')?.value || '').trim();
+    group.style.display = hasDomain ? 'none' : '';
 }
 
 function toggleResolverFields() {
@@ -2002,6 +2036,13 @@ document.getElementById('generateSshKeyBtn')?.addEventListener('click', async fu
     checkXrayPortConflict();
     const ipInput = document.getElementById('ip');
     if (ipInput) ipInput.addEventListener('input', checkXrayPortConflict);
+})();
+
+// Keep SNI visibility synced with domain state
+(function () {
+    const domain = document.getElementById('domain');
+    if (domain) domain.addEventListener('input', toggleSniField);
+    toggleSniField();
 })();
 
 // ==================== Cascade link actions ====================

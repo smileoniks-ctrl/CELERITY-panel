@@ -221,11 +221,12 @@ function getNodeConfigs(node) {
 function parseHopIntervalSeconds(hopInterval) {
     const raw = String(hopInterval || '').trim().toLowerCase();
     if (!raw) return 0;
-    const m = raw.match(/^(\d+)(ms|s|m|h)?$/);
+    const m = raw.match(/^(\d+(\.\d+)?)(ms|s|m|h)?$/);
     if (!m) return 0;
     const value = Number(m[1]);
-    const unit = m[2] || 's';
-    if (unit === 'ms') return Math.floor(value / 1000);
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    const unit = m[3] || 's';
+    if (unit === 'ms') return value / 1000;
     if (unit === 's') return value;
     if (unit === 'm') return value * 60;
     if (unit === 'h') return value * 3600;
@@ -235,7 +236,7 @@ function parseHopIntervalSeconds(hopInterval) {
 function normalizeHopInterval(hopInterval) {
     const sec = parseHopIntervalSeconds(hopInterval);
     if (sec <= 0) return '';
-    const normalized = Math.max(sec, 5);
+    const normalized = Math.max(Math.ceil(sec), 5);
     return `${normalized}s`;
 }
 

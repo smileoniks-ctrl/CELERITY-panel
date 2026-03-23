@@ -221,6 +221,17 @@ function parseAclRulesInput(raw) {
         .filter(Boolean);
 }
 
+function getHysteriaAclInlineState(node) {
+    if (!node || node.type === 'xray') {
+        return { editable: true, reason: '' };
+    }
+    const aclEnabled = node.acl?.enabled !== false;
+    const aclType = node.acl?.type || 'inline';
+    if (!aclEnabled) return { editable: false, reason: 'disabled' };
+    if (aclType === 'file') return { editable: false, reason: 'file' };
+    return { editable: true, reason: '' };
+}
+
 function parseHysteriaFormFields(body) {
     const hasDomain = !!String(body.domain || '').trim();
     const acmeAdvancedEnabled = parseBool(body, 'acme.advanced.enabled', false) && hasDomain;
@@ -2859,11 +2870,14 @@ router.get('/nodes/:id/outbounds', requireAuth, async (req, res) => {
         if (!node) {
             return res.redirect('/panel/nodes');
         }
+
+        const aclInlineState = getHysteriaAclInlineState(node);
         
         render(res, 'node-outbounds', {
             title: `Outbounds: ${node.name}`,
             page: 'nodes',
             node,
+            aclInlineState,
             message: req.query.message || null,
             error: req.query.error || null,
         });
@@ -2880,6 +2894,8 @@ router.post('/nodes/:id/outbounds', requireAuth, async (req, res) => {
         if (!node) {
             return res.redirect('/panel/nodes');
         }
+
+        const aclInlineState = getHysteriaAclInlineState(node);
         
         // Парсим outbounds из form-data
         // Формат: outbound[0][name], outbound[0][type], outbound[0][addr], ...
@@ -2911,10 +2927,13 @@ router.post('/nodes/:id/outbounds', requireAuth, async (req, res) => {
         }
         
         // Парсим ACL правила (одна строка = одно правило)
-        const aclRaw = (rawBody.aclRules || '').trim();
-        const aclRules = aclRaw
-            ? aclRaw.split('\n').map(r => r.trim()).filter(Boolean)
-            : [];
+        let aclRules = Array.isArray(node.aclRules) ? node.aclRules : [];
+        if (aclInlineState.editable) {
+            const aclRaw = (rawBody.aclRules || '').trim();
+            aclRules = aclRaw
+                ? aclRaw.split('\n').map(r => r.trim()).filter(Boolean)
+                : [];
+        }
         
         await HyNode.findByIdAndUpdate(req.params.id, {
             $set: { outbounds, aclRules },
