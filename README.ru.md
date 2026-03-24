@@ -71,6 +71,56 @@ MONGO_PASSWORD=парольмонго         # openssl rand -hex 16
 
 ---
 
+## 🐳 Dokploy (разработка и релиз)
+
+Используйте `docker-compose.dokploy.yml` при деплое через Dokploy с Traefik.
+
+### Режим разработки (сборка из текущей ветки)
+
+1. В Dokploy создайте проект из этого репозитория/ветки.
+2. Укажите путь к compose-файлу: `docker-compose.dokploy.yml`.
+3. Добавьте переменные окружения из `docker.env.example`, минимум:
+   - `MONGO_PASSWORD`
+   - `PANEL_DOMAIN`
+   - `ACME_EMAIL`
+   - `ENCRYPTION_KEY`
+   - `SESSION_SECRET`
+   - `DOKPLOY_PANEL_HOST` (домен для правила Traefik `Host(...)`)
+   - `DOKPLOY_TRAEFIK_SERVICE_PORT` (порт Traefik/backend, по умолчанию `3000`)
+4. Запустите деплой: Dokploy выполнит `build: .` и поднимет стек.
+
+Этот режим удобен для проверки изменений из ветки до публикации релизного образа.
+
+### Режим релиза (образ из Docker Hub)
+
+Если нужен стабильный деплой по тегам Docker Hub (без сборки), замените источник `backend` в compose на образ:
+
+```yaml
+backend:
+  image: clickdevtech/hysteria-panel:latest
+  # или зафиксируйте тег релиза, например clickdevtech/hysteria-panel:v1.2.3
+  restart: always
+  depends_on:
+    mongo:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  expose:
+    - "${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.celerity.rule=Host(`${DOKPLOY_PANEL_HOST}`)"
+    - "traefik.http.routers.celerity.entrypoints=websecure"
+    - "traefik.http.routers.celerity.tls=true"
+    - "traefik.http.services.celerity.loadbalancer.server.port=${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+  env_file:
+    - .env
+```
+
+`latest` подходит для быстрых обновлений, фиксированный тег — для предсказуемых прод-выкаток.
+
+---
+
 ## ✨ Возможности
 
 - 🖥 **Веб-панель** — полноценный UI для управления нодами и пользователями
@@ -853,6 +903,8 @@ volumes:
 | Переменная           | Обязательно | Описание                                      |
 | -------------------- | ----------- | --------------------------------------------- |
 | `PANEL_DOMAIN`       | ✅           | Домен панели                                  |
+| `DOKPLOY_PANEL_HOST` | ❌           | Хост Traefik в Dokploy (правило `Host(...)`) |
+| `DOKPLOY_TRAEFIK_SERVICE_PORT` | ❌   | Порт Traefik/backend сервиса в Dokploy (default: `3000`) |
 | `ACME_EMAIL`         | ✅           | Email для Let's Encrypt                       |
 | `ENCRYPTION_KEY`     | ✅           | Ключ шифрования SSH (32 символа)              |
 | `SESSION_SECRET`     | ✅           | Секрет сессий                                 |

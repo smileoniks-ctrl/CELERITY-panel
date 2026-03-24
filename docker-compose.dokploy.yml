@@ -35,19 +35,19 @@ services:
       redis:
         condition: service_healthy
     expose:
-      - "3000"
+      - "${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.celerity.rule=Host(`${DOKPLOY_PANEL_HOST}`)"
       - "traefik.http.routers.celerity.entrypoints=websecure"
       - "traefik.http.routers.celerity.tls=true"
-      - "traefik.http.services.celerity.loadbalancer.server.port=3000"
+      - "traefik.http.services.celerity.loadbalancer.server.port=${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
     env_file:
       - .env
     environment:
       MONGO_URI: mongodb://${MONGO_USER:-hysteria}:${MONGO_PASSWORD}@mongo:27017/hysteria?authSource=admin
       REDIS_URL: redis://redis:6379
-      PORT: 3000
+      PORT: ${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}
       USE_CADDY: "true"
     volumes:
       - app_logs:/app/logs
