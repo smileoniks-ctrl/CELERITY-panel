@@ -70,6 +70,56 @@ MONGO_PASSWORD=yourmongopassword   # openssl rand -hex 16
 
 ---
 
+## 🐳 Dokploy (Development and Release)
+
+Use `docker-compose.dokploy.yml` when deploying through Dokploy with Traefik.
+
+### Development Mode (build from current branch)
+
+1. In Dokploy, create a project from this repository/branch.
+2. Set compose path to `docker-compose.dokploy.yml`.
+3. Add env vars from `docker.env.example` and set at least:
+   - `MONGO_PASSWORD`
+   - `PANEL_DOMAIN`
+   - `ACME_EMAIL`
+   - `ENCRYPTION_KEY`
+   - `SESSION_SECRET`
+   - `DOKPLOY_PANEL_HOST` (domain used in Traefik `Host(...)` rule)
+   - `DOKPLOY_TRAEFIK_SERVICE_PORT` (Traefik target/backend port, default `3000`)
+4. Deploy: Dokploy will run `build: .` and start the stack.
+
+This mode is best when you test branch changes before publishing a release image.
+
+### Release Mode (Docker Hub image)
+
+If you want stable deploys from Docker Hub tags (without building), replace `backend` image source in Dokploy compose with:
+
+```yaml
+backend:
+  image: clickdevtech/hysteria-panel:latest
+  # or pin a release tag, e.g. clickdevtech/hysteria-panel:v1.2.3
+  restart: always
+  depends_on:
+    mongo:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  expose:
+    - "${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.celerity.rule=Host(`${DOKPLOY_PANEL_HOST}`)"
+    - "traefik.http.routers.celerity.entrypoints=websecure"
+    - "traefik.http.routers.celerity.tls=true"
+    - "traefik.http.services.celerity.loadbalancer.server.port=${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+  env_file:
+    - .env
+```
+
+Use `latest` for fast updates, or pin an explicit tag for predictable production rollouts.
+
+---
+
 ## ✨ Features
 
 - 🖥 **Web Panel** — Full UI for managing nodes and users
@@ -801,6 +851,8 @@ volumes:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PANEL_DOMAIN` | ✅ | Panel domain |
+| `DOKPLOY_PANEL_HOST` | ❌ | Traefik host for Dokploy (`Host(...)` rule) |
+| `DOKPLOY_TRAEFIK_SERVICE_PORT` | ❌ | Traefik/backend service port in Dokploy (default: `3000`) |
 | `ACME_EMAIL` | ✅ | Let's Encrypt email |
 | `ENCRYPTION_KEY` | ✅ | SSH encryption key (32 chars) |
 | `SESSION_SECRET` | ✅ | Session secret |

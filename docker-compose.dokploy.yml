@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  mongo:
+    image: mongo:7
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: hysteria
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-hysteria}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build: .
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.celerity.rule=Host(`${DOKPLOY_PANEL_HOST}`)"
+      - "traefik.http.routers.celerity.entrypoints=websecure"
+      - "traefik.http.routers.celerity.tls=true"
+      - "traefik.http.services.celerity.loadbalancer.server.port=${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}"
+    env_file:
+      - .env
+    environment:
+      MONGO_URI: mongodb://${MONGO_USER:-hysteria}:${MONGO_PASSWORD}@mongo:27017/hysteria?authSource=admin
+      REDIS_URL: redis://redis:6379
+      PORT: ${DOKPLOY_TRAEFIK_SERVICE_PORT:-3000}
+      USE_CADDY: "true"
+    volumes:
+      - app_logs:/app/logs
+      - app_backups:/app/backups
+
+volumes:
+  mongo_data:
+  app_logs:
+  app_backups:
