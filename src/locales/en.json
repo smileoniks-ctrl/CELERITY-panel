@@ -178,6 +178,7 @@
     "portRangeHint": "Clients will connect to these ports",
     "statsPort": "Stats API Port",
     "statsSecret": "API Secret",
+    "sectionStatsApi": "Stats API",
     "sectionStatsHint": "Traffic stats API settings.",
     "docsLink": "Open documentation",
     "groups": "Server Groups",

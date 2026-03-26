@@ -1,6 +1,6 @@
             <%# ========== 5. Hysteria: Stats API ========== %>
             <div class="form-section hysteria-only" id="hysteriaStatsSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                <h3><%= t('nodes.statsPort') %> API</h3>
+                <h3><%= t('nodes.sectionStatsApi') %></h3>
                 <small class="section-hint"><%- renderDocsIcon('stats') %><%= t('nodes.sectionStatsHint') %></small>
                 <div class="form-row">
                     <div class="form-group">
@@ -161,8 +161,20 @@
                 </div>
             </div>
 
+            <%# ========== Advanced optional sections (collapsible) ========== %>
+            <%
+            const advancedSectionsOpen = !!(aclSectionEnabled || bandwidthEnabled || node?.speedTest || udpOptionsEnabled || quicSectionEnabled || node?.resolver?.enabled);
+            %>
+            <details class="hysteria-only node-advanced-details" id="hysteriaAdvancedDetails"
+                     <%= advancedSectionsOpen ? 'open' : '' %>
+                     style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+                <summary class="node-advanced-summary">
+                    <span><i class="ti ti-adjustments-horizontal"></i> <%= t('nodes.advancedSettings') %></span>
+                    <i class="ti ti-chevron-down node-advanced-chevron"></i>
+                </summary>
+
             <%# ========== 8. Hysteria: ACL Settings ========== %>
-            <div class="form-section hysteria-only" id="hysteriaAclSection" style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
+            <div class="form-section" id="hysteriaAclSection">
                 <h3><%= t('nodes.sectionAcl') %></h3>
                 <small class="section-hint"><%- renderDocsIcon('acl') %><%= t('nodes.sectionAclHint') %></small>
                 <label class="checkbox-label">
@@ -207,18 +219,6 @@
                     </div>
                 </div>
             </div>
-
-            <%# ========== Advanced optional sections (collapsible) ========== %>
-            <%
-            const advancedSectionsOpen = !!(bandwidthEnabled || node?.speedTest || udpOptionsEnabled || quicSectionEnabled || node?.resolver?.enabled);
-            %>
-            <details class="hysteria-only node-advanced-details" id="hysteriaAdvancedDetails"
-                     <%= advancedSectionsOpen ? 'open' : '' %>
-                     style="<%= node?.type === 'xray' ? 'display:none' : '' %>">
-                <summary class="node-advanced-summary">
-                    <span><i class="ti ti-adjustments-horizontal"></i> <%= t('nodes.advancedSettings') %></span>
-                    <i class="ti ti-chevron-down node-advanced-chevron"></i>
-                </summary>
 
             <%# ========== 9. Hysteria: Bandwidth ========== %>
             <div class="form-section" id="hysteriaBandwidthSection">

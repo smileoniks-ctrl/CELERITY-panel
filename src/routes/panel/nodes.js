@@ -126,7 +126,7 @@ router.get('/nodes/add', async (req, res) => {
     try {
         const groups = await getActiveGroups();
         render(res, 'node-form', {
-            title: 'New Node',
+            title: res.locals.t('nodes.newNode'),
             page: 'nodes',
             node: null,
             groups,
@@ -305,7 +305,7 @@ router.get('/nodes/:id', async (req, res) => {
         }
 
         render(res, 'node-form', {
-            title: `Edit: ${node.name}`,
+            title: `${res.locals.t('nodes.editNode')}: ${node.name}`,
             page: 'nodes',
             node,
             nodeConfigPreview,

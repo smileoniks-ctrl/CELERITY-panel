@@ -178,6 +178,7 @@
     "portRangeHint": "Клиенты будут подключаться на эти порты",
     "statsPort": "Порт API",
     "statsSecret": "Секрет API",
+    "sectionStatsApi": "Stats API",
     "sectionStatsHint": "Настройки Traffic Stats API.",
     "docsLink": "Открыть документацию",
     "groups": "Группы серверов",
