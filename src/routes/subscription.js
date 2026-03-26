@@ -153,17 +153,17 @@ async function getActiveNodes(user) {
         nodes.sort((a, b) => {
             const loadA = a.maxOnlineUsers ? a.onlineUsers / a.maxOnlineUsers : 0;
             const loadB = b.maxOnlineUsers ? b.onlineUsers / b.maxOnlineUsers : 0;
-            // Primary: load percentage (lowest first)
             if (loadA !== loadB) return loadA - loadB;
-            // Secondary: absolute online count for nodes without a limit (lowest first)
             if (a.onlineUsers !== b.onlineUsers) return a.onlineUsers - b.onlineUsers;
-            // Tertiary: explicit priority ranking
             return (a.rankingCoefficient || 1) - (b.rankingCoefficient || 1);
         });
         logger.debug(`[Sub] Load balancing applied`);
     } else {
         nodes.sort((a, b) => (a.rankingCoefficient || 1) - (b.rankingCoefficient || 1));
     }
+
+    // DEBUG: remove after confirming reorder works
+    logger.info(`[Sub] Node order for ${user.userId} (lb=${!!lb.enabled}): ${nodes.map(n => `${n.name}[rc=${n.rankingCoefficient},online=${n.onlineUsers}]`).join(', ')}`);
     
     return nodes;
 }
