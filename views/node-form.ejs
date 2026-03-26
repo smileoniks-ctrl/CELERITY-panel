@@ -93,6 +93,15 @@ const sniDomainActive = !!String(node?.domain || '').trim();
 const sniVisibleInitially = node?.type !== 'xray' && !sniDomainActive;
 const outboundsAclReason = node?.type === 'hysteria' && node?.acl?.enabled === false ? 'disabled' : '';
 const outboundsAclLocked = outboundsAclReason === 'disabled';
+
+// Expose to EJS partials (included templates run in separate scope)
+Object.assign(locals, {
+    renderDocsIcon, docsHref, escAttr, hysteriaDocs,
+    acmeAdvancedEnabled, bandwidthEnabled, udpOptionsEnabled,
+    sniffAdvancedEnabled, quicSectionEnabled, aclSectionEnabled,
+    sniffBaseEnabled, aclDefaultInlineRules, aclInlineRulesValue,
+    sniDomainActive, sniVisibleInitially, outboundsAclReason, outboundsAclLocked,
+});
 %>
 
 <div class="card">

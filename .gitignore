@@ -43,4 +43,5 @@ cc-agent/cc-agent-linux-amd64
 cc-agent/cc-agent-linux-arm64
 
 Rules.md
-TODO.md 
+TODO.md
+TEST-CHECKLIST.md 
