@@ -147,7 +147,6 @@ router.patch('/nodes/reorder', async (req, res) => {
     try {
         const order = req.body.order;
 
-        // Validate input: must be a non-empty array capped at 500 entries
         if (!Array.isArray(order) || order.length === 0 || order.length > 500) {
             return res.status(400).json({ success: false, error: 'Invalid order array' });
         }
@@ -156,14 +155,12 @@ router.patch('/nodes/reorder', async (req, res) => {
         const bulk = [];
 
         for (const item of order) {
-            // Reject any non-ObjectId strings to prevent injection
             if (!mongoose.Types.ObjectId.isValid(item.id)) continue;
             const pos = parseInt(item.position, 10);
-            // Reject non-finite or negative positions
             if (!Number.isFinite(pos) || pos < 0) continue;
             bulk.push({
                 updateOne: {
-                    filter: { _id: item.id },
+                    filter: { _id: new mongoose.Types.ObjectId(item.id) },
                     update: { $set: { rankingCoefficient: pos } },
                 },
             });
@@ -173,16 +170,19 @@ router.patch('/nodes/reorder', async (req, res) => {
             return res.status(400).json({ success: false, error: 'No valid entries' });
         }
 
-        // ordered:false maximises write throughput -- failures are independent
-        await HyNode.bulkWrite(bulk, { ordered: false });
+        const result = await HyNode.bulkWrite(bulk, { ordered: false });
+        logger.info(`[Panel] Reorder: ${bulk.length} ops, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
 
-        // Invalidate caches so the new order is reflected immediately
+        if (result.matchedCount === 0) {
+            return res.status(400).json({ success: false, error: `No nodes matched (${bulk.length} ops sent)` });
+        }
+
         await Promise.all([
             cache.invalidateNodes(),
             cache.invalidateAllSubscriptions(),
         ]);
 
-        res.json({ success: true });
+        res.json({ success: true, matched: result.matchedCount, modified: result.modifiedCount });
     } catch (error) {
         logger.error(`[Panel] Reorder nodes error: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
