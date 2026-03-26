@@ -10,6 +10,7 @@
 [Node.js](package.json)
 [Hysteria](https://v2.hysteria.network/)
 [Xray](https://xtls.github.io/)
+[![Telegram](https://img.shields.io/badge/Telegram-Chat-2CA5E0?logo=telegram&logoColor=white)](https://t.me/+JKFdEr7TqvIyOTFi)
 
 **C³ CELERITY** by Click Connect — современная веб-панель для управления серверами [Hysteria 2](https://v2.hysteria.network/) и [Xray VLESS](https://xtls.github.io/) с централизованной авторизацией, автоматической настройкой нод и гибким распределением пользователей по группам.
 
