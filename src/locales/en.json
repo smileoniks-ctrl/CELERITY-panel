@@ -127,7 +127,6 @@
     "uptime": "Uptime",
     "panelVersion": "Panel Version",
     "quickActions": "Quick Actions",
-    "syncAll": "Sync All Nodes",
     "createBackup": "Create Backup",
     "restoreBackup": "Restore Backup",
     "recentLogs": "Logs",

@@ -257,11 +257,13 @@ app.post('/api/login/totp', apiTotpVerifyLimiter, async (req, res) => {
 
 app.post('/api/logout', (req, res) => {
     const username = req.session?.adminUsername;
-    req.session.destroy();
-    if (username) {
-        logger.info(`[API] Logout: ${username}`);
-    }
-    res.json({ success: true });
+    req.session.destroy((err) => {
+        if (err) logger.error('[API] Session destroy error on logout:', err.message);
+        if (username) {
+            logger.info(`[API] Logout: ${username}`);
+        }
+        res.json({ success: true });
+    });
 });
 
 const rateLimitSettings = {
@@ -840,9 +842,20 @@ async function shutdown(signal) {
     process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM').catch(() => process.exit(1)));
-process.on('SIGINT', () => shutdown('SIGINT').catch(() => process.exit(1)));
-process.on('SIGTERM', () => setTimeout(() => process.exit(1), FORCE_SHUTDOWN_MS).unref());
-process.on('SIGINT', () => setTimeout(() => process.exit(1), FORCE_SHUTDOWN_MS).unref());
+for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.once(sig, () => {
+        setTimeout(() => process.exit(1), FORCE_SHUTDOWN_MS).unref();
+        shutdown(sig).catch(() => process.exit(1));
+    });
+}
+
+process.on('unhandledRejection', (reason) => {
+    logger.error('[Process] Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    logger.error('[Process] Uncaught exception:', err);
+    shutdown('uncaughtException').catch(() => process.exit(1));
+});
 
 startServer();

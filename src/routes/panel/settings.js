@@ -3,7 +3,6 @@
  */
 
 const router = require('express').Router();
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const HyUser = require('../../models/hyUserModel');
@@ -30,37 +29,45 @@ const {
 
 // GET /settings
 router.get('/settings', async (req, res) => {
-    const ssl = {
-        enabled: !!config.PANEL_DOMAIN,
-        domain: config.PANEL_DOMAIN || null,
-    };
-    
-    const [admin, settings, apiKeys] = await Promise.all([
-        Admin.findOne({ username: req.session.adminUsername }),
-        Settings.get(),
-        ApiKey.listKeys(),
-    ]);
+    try {
+        const ssl = {
+            enabled: !!config.PANEL_DOMAIN,
+            domain: config.PANEL_DOMAIN || null,
+        };
 
-    // Decrypt secrets for form display (stored encrypted since P1-encrypt-secrets)
-    if (settings?.webhook?.secret) {
-        settings.webhook.secret = cryptoService.decryptSafe(settings.webhook.secret);
+        const [admin, settingsDoc, apiKeys] = await Promise.all([
+            Admin.findOne({ username: req.session.adminUsername }),
+            Settings.get(),
+            ApiKey.listKeys(),
+        ]);
+
+        // Convert to plain object before mutating to avoid Mongoose change tracking
+        const settings = settingsDoc ? settingsDoc.toObject() : settingsDoc;
+
+        // Decrypt secrets for form display (stored encrypted since P1-encrypt-secrets)
+        if (settings?.webhook?.secret) {
+            settings.webhook.secret = cryptoService.decryptSafe(settings.webhook.secret);
+        }
+        if (settings?.backup?.s3?.secretAccessKey) {
+            settings.backup.s3.secretAccessKey = cryptoService.decryptSafe(settings.backup.s3.secretAccessKey);
+        }
+
+        render(res, 'settings', {
+            title: res.locals.locales.settings.title,
+            page: 'settings',
+            ssl,
+            admin,
+            settings,
+            apiKeys,
+            validScopes: ApiKey.VALID_SCOPES,
+            webhookEvents: Object.values(webhookService.EVENTS),
+            message: req.query.message || null,
+            error: req.query.error || null,
+        });
+    } catch (error) {
+        logger.error('[Panel] GET /settings error:', error.message);
+        res.status(500).send('Error: ' + error.message);
     }
-    if (settings?.backup?.s3?.secretAccessKey) {
-        settings.backup.s3.secretAccessKey = cryptoService.decryptSafe(settings.backup.s3.secretAccessKey);
-    }
-    
-    render(res, 'settings', {
-        title: res.locals.locales.settings.title,
-        page: 'settings',
-        ssl,
-        admin,
-        settings,
-        apiKeys,
-        validScopes: ApiKey.VALID_SCOPES,
-        webhookEvents: Object.values(webhookService.EVENTS),
-        message: req.query.message || null,
-        error: req.query.error || null,
-    });
 });
 
 // POST /settings - Save settings

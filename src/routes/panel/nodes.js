@@ -14,7 +14,7 @@ const sshKeyService = require('../../services/sshKeyService');
 const cache = require('../../services/cacheService');
 const cascadeService = require('../../services/cascadeService');
 const statsService = require('../../services/statsService');
-const { getActiveGroups, invalidateSettingsCache } = require('../../utils/helpers');
+const { getActiveGroups } = require('../../utils/helpers');
 const config = require('../../../config');
 const logger = require('../../utils/logger');
 
@@ -123,16 +123,21 @@ router.get('/nodes', async (req, res) => {
 
 // GET /panel/nodes/add - Node creation form
 router.get('/nodes/add', async (req, res) => {
-    const groups = await getActiveGroups();
-    render(res, 'node-form', {
-        title: 'New Node',
-        page: 'nodes',
-        node: null,
-        groups,
-        cascadeLinks: [],
-        error: req.query.error || null,
-        panelDomain: config.PANEL_DOMAIN || '',
-    });
+    try {
+        const groups = await getActiveGroups();
+        render(res, 'node-form', {
+            title: 'New Node',
+            page: 'nodes',
+            node: null,
+            groups,
+            cascadeLinks: [],
+            error: req.query.error || null,
+            panelDomain: config.PANEL_DOMAIN || '',
+        });
+    } catch (error) {
+        logger.error('[Panel] GET /nodes/add error:', error.message);
+        res.status(500).send('Error: ' + error.message);
+    }
 });
 
 // POST /panel/nodes - Create node

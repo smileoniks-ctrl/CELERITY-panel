@@ -211,59 +211,14 @@ class SyncService {
 
     /**
      * Resolve the full downstream forward-chain path for an Xray node.
-     * The resulting array is ordered from nearest downstream hop to final exit.
+     * Delegates to cascadeService to avoid duplication.
      *
      * @param {string|ObjectId} startNodeId
      * @returns {Promise<Array>}
      */
     async _getForwardChainLinks(startNodeId) {
-        const CascadeLink = require('../models/cascadeLinkModel');
-        const allForwardLinks = await CascadeLink.find({
-            mode: 'forward',
-            active: true,
-        }).populate('bridgeNode');
-
-        if (allForwardLinks.length === 0) return [];
-
-        const outgoingMap = new Map();
-        for (const link of allForwardLinks) {
-            const portalId = String(link.portalNode._id || link.portalNode);
-            if (!outgoingMap.has(portalId)) outgoingMap.set(portalId, []);
-            outgoingMap.get(portalId).push(link);
-        }
-
-        const ordered = [];
-        const visitedLinks = new Set();
-        const visitedNodes = new Set();
-        let currentNodeId = String(startNodeId);
-
-        while (true) {
-            const outgoing = (outgoingMap.get(currentNodeId) || [])
-                .filter(l => !visitedLinks.has(String(l._id)))
-                .sort((a, b) => (a.priority || 100) - (b.priority || 100));
-
-            if (outgoing.length === 0) break;
-
-            for (const link of outgoing) {
-                ordered.push(link);
-                visitedLinks.add(String(link._id));
-            }
-
-            visitedNodes.add(currentNodeId);
-            const tailLink = outgoing[outgoing.length - 1];
-            const nextNodeId = String(tailLink.bridgeNode?._id || tailLink.bridgeNode);
-
-            if (!nextNodeId || visitedNodes.has(nextNodeId)) {
-                if (visitedNodes.has(nextNodeId)) {
-                    logger.warn(`[Xray Sync] Forward chain cycle detected from node ${currentNodeId}, stopping path resolution`);
-                }
-                break;
-            }
-
-            currentNodeId = nextNodeId;
-        }
-
-        return ordered;
+        const cascadeService = require('./cascadeService');
+        return cascadeService._getForwardChainLinks(startNodeId);
     }
 
     /**

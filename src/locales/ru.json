@@ -127,7 +127,6 @@
     "uptime": "Аптайм",
     "panelVersion": "Версия панели",
     "quickActions": "Быстрые действия",
-    "syncAll": "Синхронизировать ноды",
     "createBackup": "Создать бэкап",
     "restoreBackup": "Восстановить БД",
     "recentLogs": "Логи",

@@ -19,41 +19,46 @@ const {
 
 // GET /panel/login
 router.get('/login', async (req, res) => {
-    if (req.session && req.session.authenticated) {
-        return res.redirect('/panel');
-    }
-
-    const loginLockout = getPanelLoginTotpLockout(req);
-    if (loginLockout) {
-        const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
-        if (pendingForLockout?.type === 'login') {
-            clearPanelTotpPending(req);
+    try {
+        if (req.session && req.session.authenticated) {
+            return res.redirect('/panel');
         }
 
-        return renderPanelLoginPage(req, res, { status: 429 });
-    }
+        const loginLockout = getPanelLoginTotpLockout(req);
+        if (loginLockout) {
+            const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
+            if (pendingForLockout?.type === 'login') {
+                clearPanelTotpPending(req);
+            }
 
-    const pending = getPanelTotpPending(req);
-    if (pending && (pending.type === 'login' || pending.type === 'setup')) {
-        return res.redirect('/panel/totp');
-    }
+            return renderPanelLoginPage(req, res, { status: 429 });
+        }
 
-    const hasAdmin = await Admin.hasAdmin();
-    if (!hasAdmin) {
-        if (pending && pending.type === 'setup') {
+        const pending = getPanelTotpPending(req);
+        if (pending && (pending.type === 'login' || pending.type === 'setup')) {
             return res.redirect('/panel/totp');
         }
 
-        clearPanelTotpPending(req);
-        clearPanelLoginTotpLockout(req);
-        return res.render('setup', { error: null, enableTotp: false });
-    }
+        const hasAdmin = await Admin.hasAdmin();
+        if (!hasAdmin) {
+            if (pending && pending.type === 'setup') {
+                return res.redirect('/panel/totp');
+            }
 
-    if (pending && pending.type !== 'login') {
-        clearPanelTotpPending(req);
-    }
+            clearPanelTotpPending(req);
+            clearPanelLoginTotpLockout(req);
+            return res.render('setup', { error: null, enableTotp: false });
+        }
 
-    return renderPanelLoginPage(req, res);
+        if (pending && pending.type !== 'login') {
+            clearPanelTotpPending(req);
+        }
+
+        return renderPanelLoginPage(req, res);
+    } catch (error) {
+        logger.error('[Panel] GET /login error:', error.message);
+        return res.status(500).send('Internal Server Error');
+    }
 });
 
 // POST /panel/setup
@@ -113,83 +118,95 @@ router.post('/setup', async (req, res) => {
 
 // POST /panel/login (with rate limiting)
 router.post('/login', loginLimiter, async (req, res) => {
-    const lockout = getPanelLoginTotpLockout(req);
-    if (lockout) {
-        const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
-        if (pendingForLockout?.type === 'login') {
-            clearPanelTotpPending(req);
+    try {
+        const lockout = getPanelLoginTotpLockout(req);
+        if (lockout) {
+            const pendingForLockout = getPanelTotpPending(req, { clearInvalid: false });
+            if (pendingForLockout?.type === 'login') {
+                clearPanelTotpPending(req);
+            }
+
+            return renderPanelLoginPage(req, res, { status: 429 });
         }
 
-        return renderPanelLoginPage(req, res, { status: 429 });
-    }
+        const { username, password } = req.body;
 
-    const { username, password } = req.body;
+        const hasAdmin = await Admin.hasAdmin();
+        if (!hasAdmin) {
+            return res.redirect('/panel/login');
+        }
 
-    const hasAdmin = await Admin.hasAdmin();
-    if (!hasAdmin) {
-        return res.redirect('/panel/login');
-    }
+        const admin = await Admin.verifyPassword(username, password);
 
-    const admin = await Admin.verifyPassword(username, password);
-
-    if (!admin) {
-        logger.warn(`[Panel] Failed login attempt: ${username} from IP: ${req.ip}`);
-        return renderPanelLoginPage(req, res, {
-            error: res.locals.t?.('auth.invalidCredentials') || 'Invalid username or password',
-        });
-    }
-
-    if (admin.twoFactor?.enabled) {
-        if (!admin.twoFactor.secretEncrypted) {
-            logger.warn(`[Panel] Missing TOTP secret for enabled 2FA login: ${admin.username} (IP: ${req.ip})`);
+        if (!admin) {
+            logger.warn(`[Panel] Failed login attempt: ${username} from IP: ${req.ip}`);
             return renderPanelLoginPage(req, res, {
-                error: res.locals.t?.('auth.totpConfigError') || 'TOTP configuration error',
+                error: res.locals.t?.('auth.invalidCredentials') || 'Invalid username or password',
             });
         }
 
-        req.session.panelTotpPending = {
-            type: 'login',
-            username: admin.username,
-            secretEncrypted: admin.twoFactor.secretEncrypted,
-            createdAt: Date.now(),
-        };
+        if (admin.twoFactor?.enabled) {
+            if (!admin.twoFactor.secretEncrypted) {
+                logger.warn(`[Panel] Missing TOTP secret for enabled 2FA login: ${admin.username} (IP: ${req.ip})`);
+                return renderPanelLoginPage(req, res, {
+                    error: res.locals.t?.('auth.totpConfigError') || 'TOTP configuration error',
+                });
+            }
+
+            req.session.panelTotpPending = {
+                type: 'login',
+                username: admin.username,
+                secretEncrypted: admin.twoFactor.secretEncrypted,
+                createdAt: Date.now(),
+            };
+            clearPanelLoginTotpLockout(req);
+            delete req.session.authenticated;
+            delete req.session.adminUsername;
+
+            logger.info(`[Panel] 2FA required for ${admin.username} (IP: ${req.ip})`);
+            return res.redirect('/panel/totp');
+        }
+
+        clearPanelTotpPending(req);
         clearPanelLoginTotpLockout(req);
-        delete req.session.authenticated;
-        delete req.session.adminUsername;
+        req.session.authenticated = true;
+        req.session.adminUsername = admin.username;
+        await Admin.recordSuccessfulLogin(admin.username);
 
-        logger.info(`[Panel] 2FA required for ${admin.username} (IP: ${req.ip})`);
-        return res.redirect('/panel/totp');
+        logger.info(`[Panel] Successful login: ${admin.username} from IP: ${req.ip}`);
+        return res.redirect('/panel');
+    } catch (error) {
+        logger.error('[Panel] POST /login error:', error.message);
+        return renderPanelLoginPage(req, res, {
+            error: res.locals.t?.('common.error') || 'An error occurred. Please try again.',
+        });
     }
-
-    clearPanelTotpPending(req);
-    clearPanelLoginTotpLockout(req);
-    req.session.authenticated = true;
-    req.session.adminUsername = admin.username;
-    await Admin.recordSuccessfulLogin(admin.username);
-
-    logger.info(`[Panel] Successful login: ${admin.username} from IP: ${req.ip}`);
-    return res.redirect('/panel');
 });
 
 // GET /panel/totp - Universal TOTP confirmation page
 router.get('/totp', async (req, res) => {
-    const pending = getPanelTotpPending(req);
-    if (!pending) {
-        if (req.session?.authenticated) {
-            return redirectSettingsSecurity(res, { error: res.locals.t?.('auth.totpPendingExpired') || 'TOTP session expired' });
-        }
-        return res.redirect('/panel/login');
-    }
-
-    if (pending.type === 'setup') {
-        const hasAdmin = await Admin.hasAdmin();
-        if (hasAdmin) {
-            clearPanelTotpPending(req);
+    try {
+        const pending = getPanelTotpPending(req);
+        if (!pending) {
+            if (req.session?.authenticated) {
+                return redirectSettingsSecurity(res, { error: res.locals.t?.('auth.totpPendingExpired') || 'TOTP session expired' });
+            }
             return res.redirect('/panel/login');
         }
-    }
 
-    return renderPanelTotpPage(res, pending);
+        if (pending.type === 'setup') {
+            const hasAdmin = await Admin.hasAdmin();
+            if (hasAdmin) {
+                clearPanelTotpPending(req);
+                return res.redirect('/panel/login');
+            }
+        }
+
+        return renderPanelTotpPage(res, pending);
+    } catch (error) {
+        logger.error('[Panel] GET /totp error:', error.message);
+        return res.redirect('/panel/login');
+    }
 });
 
 // POST /panel/totp - Universal TOTP confirmation handler
@@ -342,11 +359,13 @@ router.post('/totp', totpVerifyLimiter, async (req, res) => {
 // GET /panel/logout
 router.get('/logout', (req, res) => {
     const username = req.session?.adminUsername;
-    req.session.destroy();
-    if (username) {
-        logger.info(`[Panel] Logout: ${username}`);
-    }
-    res.redirect('/panel/login');
+    req.session.destroy((err) => {
+        if (err) logger.error('[Panel] Session destroy error on logout:', err.message);
+        if (username) {
+            logger.info(`[Panel] Logout: ${username}`);
+        }
+        res.redirect('/panel/login');
+    });
 });
 
 module.exports = router;

@@ -330,13 +330,6 @@ function copySubscription(token) {
     });
 }
 
-// Toast
-function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = 'toast show ' + type;
-    setTimeout(() => toast.className = 'toast', 2000);
-}
 
 // Sort by field
 function sortBy(field) {

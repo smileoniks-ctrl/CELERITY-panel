@@ -103,15 +103,20 @@ router.get('/users', async (req, res) => {
 
 // GET /users/add - Create user form
 router.get('/users/add', async (req, res) => {
-    const groups = await getActiveGroups();
-    render(res, 'user-form', {
-        title: res.locals.locales.users.newUser,
-        page: 'users',
-        groups,
-        isEdit: false,
-        user: null,
-        error: null,
-    });
+    try {
+        const groups = await getActiveGroups();
+        render(res, 'user-form', {
+            title: res.locals.locales.users.newUser,
+            page: 'users',
+            groups,
+            isEdit: false,
+            user: null,
+            error: null,
+        });
+    } catch (error) {
+        logger.error('[Panel] GET /users/add error:', error.message);
+        res.status(500).send('Error: ' + error.message);
+    }
 });
 
 // GET /users/:userId/edit - Edit user form
@@ -327,11 +332,8 @@ router.get('/users/:userId', async (req, res) => {
         if (directNodes.length > 0) {
             effectiveNodes = directNodes;
         } else if (user.groups && user.groups.length > 0) {
-            const userGroupIds = user.groups.map(g => g._id?.toString() || g.toString());
-            const allNodes = await HyNode.find({ active: true }).select('name ip domain groups').lean();
-            effectiveNodes = allNodes.filter(n =>
-                (n.groups || []).some(g => userGroupIds.includes(g.toString()))
-            );
+            effectiveNodes = await HyNode.find({ active: true, groups: { $in: user.groups } })
+                .select('name ip domain groups').lean();
         }
         
         render(res, 'user-detail', {

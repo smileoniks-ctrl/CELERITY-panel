@@ -26,6 +26,7 @@
                 <option value="<%= group._id %>"><%= group.name %></option>
                 <% }); } %>
             </select>
+            <span id="resultsCount" class="filter-count"></span>
         </div>
     </div>
     <div class="page-header-center" id="networkToolbar" style="display:none">
@@ -740,12 +741,6 @@ async function deleteNode(id) {
     }
 }
 
-function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = 'toast show ' + type;
-    setTimeout(() => toast.className = 'toast', 3000);
-}
 
 // ==================== View Tabs ====================
 
