@@ -225,7 +225,7 @@
                 function reindex() {
                     list.querySelectorAll('.sub-btn-row').forEach(function(row, i) {
                         row.querySelectorAll('[data-field]').forEach(function(inp) {
-                            inp.name = 'subscription.buttons[' + i + '].' + inp.dataset.field;
+                            inp.name = 'subscription.buttons[' + i + '][' + inp.dataset.field + ']';
                         });
                     });
                     updateCount();
