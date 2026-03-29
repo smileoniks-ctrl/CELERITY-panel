@@ -100,7 +100,6 @@
                         <i class="ti ti-info-circle"></i>
                         Используйте <code>{url}</code> в URL для подстановки ссылки подписки (например: <code>hiddify://import/{url}</code>).
                         Для Shadowrocket: <code>sub://{url_b64}</code>. Для query-параметров: <code>{url_encoded}</code>.
-                        Иконки: <a href="https://tabler.io/icons" target="_blank" style="color: var(--primary);">tabler.io/icons</a> (например: <code>ti-download</code>).
                     </p>
                     <div id="subButtonsList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
                     <button type="button" id="subAddBtn" class="btn btn-secondary" style="font-size: 13px;" onclick="subAddButton()">
@@ -115,18 +114,112 @@
                 </div>
             </form>
 
+            <style>
+            .sub-btn-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; align-items: center; }
+            .icon-pick-btn { display:flex; align-items:center; justify-content:center; width:38px; height:38px; background:var(--bg-secondary,#1a1a2e); border:1px solid var(--border); border-radius:8px; cursor:pointer; color:var(--text); font-size:18px; flex-shrink:0; transition: border-color .15s; }
+            .icon-pick-btn:hover { border-color: var(--primary); }
+            .icon-picker { position:fixed; z-index:9999; width:280px; background:var(--bg-secondary,#1c1c2e); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.5); padding:10px; display:none; }
+            .icon-picker.open { display:block; }
+            .icon-picker-search { width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg,#0a0a0a); color:var(--text); font-size:13px; margin-bottom:8px; outline:none; }
+            .icon-picker-search:focus { border-color: var(--primary); }
+            .icon-picker-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; max-height:210px; overflow-y:auto; }
+            .icon-picker-grid::-webkit-scrollbar { width:4px; }
+            .icon-picker-grid::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+            .icon-pick-cell { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:6px; cursor:pointer; font-size:17px; color:var(--text-muted,#aaa); transition: background .1s, color .1s; }
+            .icon-pick-cell:hover { background:var(--primary); color:#fff; }
+            </style>
+
             <script>
             (function() {
-                const MAX_BUTTONS = 10;
-                const initialButtons = <%- JSON.stringify((settings?.subscription?.buttons || []).map(b => ({ label: b.label || '', url: b.url || '', icon: b.icon || '' }))) %>;
-                const list = document.getElementById('subButtonsList');
-                const addBtn = document.getElementById('subAddBtn');
-                const countEl = document.getElementById('subBtnCount');
+                var ICONS = [
+                    'ti-download','ti-external-link','ti-link','ti-share','ti-send','ti-copy','ti-cloud-download',
+                    'ti-brand-telegram','ti-brand-whatsapp','ti-brand-discord','ti-brand-twitter','ti-brand-github',
+                    'ti-brand-youtube','ti-brand-instagram','ti-brand-tiktok','ti-brand-reddit','ti-brand-facebook',
+                    'ti-brand-apple','ti-brand-android','ti-brand-windows','ti-brand-chrome','ti-brand-safari','ti-brand-firefox',
+                    'ti-device-mobile','ti-device-desktop','ti-device-tablet','ti-devices',
+                    'ti-shield','ti-shield-lock','ti-lock','ti-key','ti-fingerprint',
+                    'ti-wifi','ti-world','ti-globe','ti-server','ti-cloud','ti-network',
+                    'ti-rocket','ti-bolt','ti-flame','ti-star','ti-heart','ti-zap',
+                    'ti-headset','ti-message','ti-mail','ti-phone','ti-messages',
+                    'ti-apps','ti-puzzle','ti-plug','ti-tool','ti-settings','ti-adjustments',
+                    'ti-info-circle','ti-help','ti-book','ti-file','ti-home','ti-user',
+                    'ti-arrow-right','ti-chevron-right','ti-player-play','ti-check','ti-plus',
+                    'ti-photo','ti-camera','ti-qrcode','ti-scan','ti-bell','ti-clock',
+                    'ti-map-pin','ti-compass','ti-antenna-bars-5','ti-satellite',
+                    'ti-currency-dollar','ti-wallet','ti-credit-card','ti-gift',
+                    'ti-brand-speedtest','ti-gauge','ti-chart-line','ti-trending-up',
+                ];
+
+                var MAX_BUTTONS = 10;
+                var initialButtons = <%- JSON.stringify((settings?.subscription?.buttons || []).map(b => ({ label: b.label || '', url: b.url || '', icon: b.icon || '' }))) %>;
+                var list = document.getElementById('subButtonsList');
+                var addBtnEl = document.getElementById('subAddBtn');
+                var countEl = document.getElementById('subBtnCount');
+
+                var picker = document.createElement('div');
+                picker.className = 'icon-picker';
+                picker.innerHTML = '<input type="text" class="icon-picker-search" placeholder="Поиск...">'
+                    + '<div class="icon-picker-grid"></div>';
+                document.body.appendChild(picker);
+
+                var pickerSearch = picker.querySelector('.icon-picker-search');
+                var pickerGrid = picker.querySelector('.icon-picker-grid');
+                var pickerTarget = null;
+
+                function renderPickerIcons(filter) {
+                    var f = (filter || '').toLowerCase().replace(/^ti-/, '');
+                    pickerGrid.innerHTML = '';
+                    ICONS.forEach(function(ic) {
+                        if (f && ic.replace('ti-','').indexOf(f) === -1) return;
+                        var cell = document.createElement('div');
+                        cell.className = 'icon-pick-cell';
+                        cell.title = ic;
+                        cell.innerHTML = '<i class="ti ' + ic + '"></i>';
+                        cell.onclick = function() { selectIcon(ic); };
+                        pickerGrid.appendChild(cell);
+                    });
+                }
+
+                pickerSearch.addEventListener('input', function() { renderPickerIcons(this.value); });
+
+                function openPicker(btn, hiddenInput) {
+                    pickerTarget = { btn: btn, input: hiddenInput };
+                    pickerSearch.value = '';
+                    renderPickerIcons('');
+                    picker.classList.add('open');
+                    var r = btn.getBoundingClientRect();
+                    var pw = 280, ph = 290;
+                    var left = r.left - pw - 8;
+                    if (left < 8) left = r.right + 8;
+                    var top = r.top;
+                    if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
+                    picker.style.left = left + 'px';
+                    picker.style.top = top + 'px';
+                    setTimeout(function(){ pickerSearch.focus(); }, 50);
+                }
+
+                function selectIcon(ic) {
+                    if (!pickerTarget) return;
+                    pickerTarget.input.value = ic;
+                    pickerTarget.btn.innerHTML = '<i class="ti ' + ic + '"></i>';
+                    picker.classList.remove('open');
+                    pickerTarget = null;
+                }
+
+                document.addEventListener('mousedown', function(e) {
+                    if (picker.classList.contains('open') && !picker.contains(e.target) && (!pickerTarget || e.target !== pickerTarget.btn)) {
+                        picker.classList.remove('open');
+                    }
+                });
+
+                function esc(s) {
+                    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                }
 
                 function updateCount() {
-                    const rows = list.querySelectorAll('.sub-btn-row');
+                    var rows = list.querySelectorAll('.sub-btn-row');
                     countEl.textContent = rows.length + ' / ' + MAX_BUTTONS;
-                    addBtn.disabled = rows.length >= MAX_BUTTONS;
+                    addBtnEl.disabled = rows.length >= MAX_BUTTONS;
                 }
 
                 function reindex() {
@@ -141,24 +234,57 @@
                 window.subAddButton = function(data) {
                     if (list.querySelectorAll('.sub-btn-row').length >= MAX_BUTTONS) return;
                     data = data || {};
-                    const row = document.createElement('div');
+                    var iconVal = data.icon || '';
+                    var iconDisplay = iconVal ? '<i class="ti ' + esc(iconVal) + '"></i>' : '<i class="ti ti-plus" style="opacity:.4"></i>';
+
+                    var row = document.createElement('div');
                     row.className = 'sub-btn-row';
-                    row.style.cssText = 'display:grid; grid-template-columns: 1fr 2fr 1fr auto; gap:8px; align-items:center;';
-                    row.innerHTML = [
-                        '<input type="text" data-field="label" placeholder="Hiddify" value="' + esc(data.label || '') + '" style="min-width:0;" title="Название кнопки">',
-                        '<input type="text" data-field="url"   placeholder="hiddify://import/{url}" value="' + esc(data.url || '') + '" style="min-width:0; font-size:12px;" title="URL — переменные: {url}, {url_b64}, {url_encoded}">',
-                        '<input type="text" data-field="icon"  placeholder="ti-download" value="' + esc(data.icon || '') + '" style="min-width:0; font-size:12px;" title="Иконка из Tabler Icons">',
-                        '<button type="button" class="btn btn-danger" style="padding:0.4rem 0.6rem; flex-shrink:0;" onclick="this.closest(\'.sub-btn-row\').remove(); reindexSubButtons();" title="Удалить"><i class="ti ti-trash" style="font-size:14px;"></i></button>',
-                    ].join('');
+
+                    var labelInp = document.createElement('input');
+                    labelInp.type = 'text';
+                    labelInp.dataset.field = 'label';
+                    labelInp.placeholder = 'Hiddify';
+                    labelInp.value = data.label || '';
+                    labelInp.style.cssText = 'min-width:0;';
+                    labelInp.title = 'Название кнопки';
+
+                    var urlInp = document.createElement('input');
+                    urlInp.type = 'text';
+                    urlInp.dataset.field = 'url';
+                    urlInp.placeholder = 'hiddify://import/{url}';
+                    urlInp.value = data.url || '';
+                    urlInp.style.cssText = 'min-width:0; font-size:12px;';
+                    urlInp.title = 'URL — переменные: {url}, {url_b64}, {url_encoded}';
+
+                    var iconInp = document.createElement('input');
+                    iconInp.type = 'hidden';
+                    iconInp.dataset.field = 'icon';
+                    iconInp.value = iconVal;
+
+                    var iconBtn = document.createElement('div');
+                    iconBtn.className = 'icon-pick-btn';
+                    iconBtn.title = iconVal || 'Выбрать иконку';
+                    iconBtn.innerHTML = iconDisplay;
+                    iconBtn.onclick = function() { openPicker(iconBtn, iconInp); };
+
+                    var delBtn = document.createElement('button');
+                    delBtn.type = 'button';
+                    delBtn.className = 'btn btn-danger';
+                    delBtn.style.cssText = 'padding:0.4rem 0.6rem; flex-shrink:0;';
+                    delBtn.title = 'Удалить';
+                    delBtn.innerHTML = '<i class="ti ti-trash" style="font-size:14px;"></i>';
+                    delBtn.onclick = function() { row.remove(); reindex(); };
+
+                    row.appendChild(labelInp);
+                    row.appendChild(urlInp);
+                    row.appendChild(iconInp);
+                    row.appendChild(iconBtn);
+                    row.appendChild(delBtn);
                     list.appendChild(row);
                     reindex();
                 };
 
                 window.reindexSubButtons = reindex;
-
-                function esc(s) {
-                    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                }
 
                 initialButtons.forEach(function(b) { window.subAddButton(b); });
                 updateCount();
