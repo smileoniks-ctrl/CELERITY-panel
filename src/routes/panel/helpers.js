@@ -748,6 +748,16 @@ const generateSshKeyLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+const sniScanLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        res.status(429).json({ error: 'Too many scan requests. Try again in a minute.' });
+    },
+});
+
 module.exports = {
     backupUpload,
     buildSshKeyFilename,
@@ -764,6 +774,7 @@ module.exports = {
     loginLimiter,
     totpVerifyLimiter,
     generateSshKeyLimiter,
+    sniScanLimiter,
     clearPanelTotpPending,
     clearPanelLoginTotpLockout,
     setPanelLoginTotpLockout,

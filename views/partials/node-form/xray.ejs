@@ -65,9 +65,16 @@
                         </div>
                         <div class="form-group">
                             <label for="xrayRealitySni"><%= t('nodes.xrayRealitySni') %></label>
-                            <input type="text" id="xrayRealitySni" name="xray.realitySni"
-                                   value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
-                                   placeholder="www.google.com">
+                            <div class="input-with-button">
+                                <input type="text" id="xrayRealitySni" name="xray.realitySni"
+                                       value="<%= (node?.xray?.realitySni || ['www.google.com']).join(', ') %>"
+                                       placeholder="www.google.com">
+                                <button type="button" class="btn btn-sm" id="sniScanOpenBtn"
+                                        onclick="openSniScanner()"
+                                        title="<%= t('nodes.sniScanTitle') %>">
+                                    <i class="ti ti-radar"></i> <%= t('nodes.sniScan') %>
+                                </button>
+                            </div>
                             <small><%= t('nodes.xrayRealitySniHint') %></small>
                         </div>
                     </div>
@@ -97,6 +104,69 @@
                                value="<%= (node?.xray?.realityShortIds || ['']).join(', ') %>"
                                placeholder=", 0123456789abcdef">
                         <small><%= t('nodes.xrayShortIdsHint') %></small>
+                    </div>
+                </div>
+
+                <%# SNI Scanner modal (Reality only) %>
+                <div id="sniScanModal" class="sni-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+                    <div class="sni-modal-card">
+                        <div class="sni-modal-header">
+                            <h3><i class="ti ti-radar"></i> <%= t('nodes.sniScanTitle') %></h3>
+                            <button type="button" class="sni-modal-close" onclick="closeSniScanner()"><i class="ti ti-x"></i></button>
+                        </div>
+                        <div class="sni-modal-body">
+                            <p class="sni-modal-hint"><%= t('nodes.sniScanHint') %></p>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="sniScanIp"><%= t('nodes.ipAddress') %></label>
+                                    <input type="text" id="sniScanIp" placeholder="185.100.200.1" autocomplete="off">
+                                </div>
+                                <div class="form-group" style="max-width:100px">
+                                    <label for="sniScanPort"><%= t('nodes.sniScanPortLabel') %></label>
+                                    <input type="number" id="sniScanPort" value="443" min="1" max="65535">
+                                </div>
+                                <div class="form-group" style="max-width:110px">
+                                    <label for="sniScanThreads"><%= t('nodes.sniScanThreads') %></label>
+                                    <input type="number" id="sniScanThreads" value="50" min="1" max="200">
+                                </div>
+                                <div class="form-group" style="max-width:110px">
+                                    <label for="sniScanTimeout"><%= t('nodes.sniScanTimeout') %></label>
+                                    <input type="number" id="sniScanTimeout" value="5" min="2" max="30">
+                                </div>
+                            </div>
+                            <div class="sni-scan-controls">
+                                <button type="button" class="btn btn-primary" id="sniScanStartBtn" onclick="startSniScan()">
+                                    <i class="ti ti-player-play"></i> <%= t('nodes.sniScanStart') %>
+                                </button>
+                                <button type="button" class="btn" id="sniScanStopBtn" onclick="stopSniScan()" style="display:none">
+                                    <i class="ti ti-player-stop"></i> <%= t('nodes.sniScanStop') %>
+                                </button>
+                                <span id="sniScanStatus" class="sni-scan-status"></span>
+                            </div>
+                            <div id="sniScanProgressWrap" style="display:none">
+                                <div class="sni-progress-bar"><div id="sniScanProgressFill" class="sni-progress-fill" style="width:0%"></div></div>
+                            </div>
+                            <div id="sniScanResults" style="display:none">
+                                <div class="sni-results-header">
+                                    <span class="sni-results-title"><%= t('nodes.sniScanResults') %></span>
+                                    <span id="sniScanCount" class="sni-results-count"></span>
+                                </div>
+                                <div class="sni-table-wrap">
+                                    <table class="sni-table">
+                                        <thead>
+                                            <tr>
+                                                <th><%= t('nodes.sniScanPing') %></th>
+                                                <th><%= t('nodes.sniScanDomain') %></th>
+                                                <th><%= t('nodes.sniScanIssuer') %></th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sniScanTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div id="sniScanEmpty" style="display:none" class="sni-empty"><%= t('nodes.sniScanNoResults') %></div>
+                        </div>
                     </div>
                 </div>
 

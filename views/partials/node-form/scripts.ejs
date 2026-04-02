@@ -199,6 +199,150 @@
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
 }
+
+/* ── SNI Scanner modal ── */
+.sni-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.sni-modal-card {
+    background: var(--bg-card, var(--bg-secondary));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 640px;
+    max-width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.sni-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.sni-modal-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sni-modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+.sni-modal-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+}
+.sni-scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.sni-scan-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex: 1;
+}
+.sni-progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+.sni-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width .1s linear;
+}
+.sni-results-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.sni-results-title { font-weight: 600; font-size: 13px; }
+.sni-results-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1px 8px;
+}
+.sni-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 300px;
+    overflow-y: auto;
+}
+.sni-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.sni-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.sni-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+.sni-table tr:last-child td { border-bottom: none; }
+.sni-table tr:hover td { background: var(--accent-glow); }
+.sni-ping-fast  { color: var(--success); font-weight: 600; }
+.sni-ping-mid   { color: var(--warning); font-weight: 600; }
+.sni-ping-slow  { color: var(--text-muted); }
+.sni-domain     { font-weight: 500; }
+.sni-issuer     { font-size: 11px; color: var(--text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sni-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 24px 0;
+}
+.sni-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: color .15s;
+    line-height: 1;
+}
+.sni-modal-close:hover { color: var(--text-primary); }
 </style>
 
 <script>
@@ -864,5 +1008,199 @@ async function cascadeDelete(linkId, name) {
 function switchNodesViewNetwork() {
     window.location.href = '/panel/nodes';
     sessionStorage.setItem('nodesView', 'network');
+}
+
+// ── SNI Scanner ───────────────────────────────────────────────────────────────
+
+const sniI18n = {
+    scanning:   <%- JSON.stringify(t('nodes.sniScanScanning'))   %>,
+    found:      <%- JSON.stringify(t('nodes.sniScanFound'))      %>,
+    done:       <%- JSON.stringify(t('nodes.sniScanDone'))       %>,
+    noResults:  <%- JSON.stringify(t('nodes.sniScanNoResults'))  %>,
+    errInvalidIp: <%- JSON.stringify(t('nodes.sniScanErrIp'))   %>,
+};
+
+let _sniReader = null; // active SSE reader (for cancellation)
+
+function openSniScanner() {
+    const modal = document.getElementById('sniScanModal');
+    if (!modal) return;
+    // Pre-fill IP from the node IP field
+    const nodeIp = (document.getElementById('ip')?.value || '').trim();
+    const ipInput = document.getElementById('sniScanIp');
+    if (ipInput && nodeIp) ipInput.value = nodeIp;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSniScanner() {
+    stopSniScan();
+    const modal = document.getElementById('sniScanModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+// Close on overlay click
+document.getElementById('sniScanModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeSniScanner();
+});
+
+// Delegated handler for "Apply" buttons in results table
+document.getElementById('sniScanTableBody')?.addEventListener('click', function(e) {
+    const btn = e.target.closest('.sni-apply-btn');
+    if (btn) applySniResult(btn.dataset.domain);
+});
+
+function _sniSetStatus(msg) {
+    const el = document.getElementById('sniScanStatus');
+    if (el) el.textContent = msg;
+}
+
+function _sniSetProgress(done, total) {
+    const fill = document.getElementById('sniScanProgressFill');
+    if (fill) fill.style.width = (total > 0 ? Math.round(done / total * 100) : 0) + '%';
+}
+
+function _sniPingClass(ping) {
+    if (ping <= 20) return 'sni-ping-fast';
+    if (ping <= 60) return 'sni-ping-mid';
+    return 'sni-ping-slow';
+}
+
+function _sniAddRow(result) {
+    const tbody = document.getElementById('sniScanTableBody');
+    if (!tbody) return;
+
+    // Insert in sorted order by ping (table is sorted ascending)
+    const rows = tbody.querySelectorAll('tr');
+    const newPing = result.ping;
+    let insertBefore = null;
+    for (const row of rows) {
+        if (parseInt(row.dataset.ping, 10) > newPing) { insertBefore = row; break; }
+    }
+
+    const tr = document.createElement('tr');
+    tr.dataset.ping = newPing;
+    tr.innerHTML = `
+        <td><span class="${_sniPingClass(newPing)}">${newPing}ms</span></td>
+        <td class="sni-domain">${_escHtml(result.domain)}</td>
+        <td><span class="sni-issuer" title="${_escHtml(result.issuer)}">${_escHtml(result.issuer)}</span></td>
+        <td><button type="button" class="btn btn-sm btn-primary sni-apply-btn"
+                    data-domain="${_escHtml(result.domain)}">
+            <i class="ti ti-check"></i> <%- t('nodes.sniScanApply') %>
+        </button></td>`;
+
+    if (insertBefore) tbody.insertBefore(tr, insertBefore);
+    else tbody.appendChild(tr);
+
+    // Update count badge
+    const count = tbody.querySelectorAll('tr').length;
+    const badge = document.getElementById('sniScanCount');
+    if (badge) badge.textContent = `${count} ${sniI18n.found}`;
+}
+
+function _escHtml(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function startSniScan() {
+    const ip      = (document.getElementById('sniScanIp')?.value      || '').trim();
+    const port    = parseInt(document.getElementById('sniScanPort')?.value    || '443', 10);
+    const threads = parseInt(document.getElementById('sniScanThreads')?.value || '50',  10);
+    const timeout = parseInt(document.getElementById('sniScanTimeout')?.value || '5',   10);
+
+    if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        _sniSetStatus(sniI18n.errInvalidIp);
+        return;
+    }
+
+    // Reset UI
+    document.getElementById('sniScanTableBody').innerHTML = '';
+    document.getElementById('sniScanResults').style.display = 'none';
+    document.getElementById('sniScanEmpty').style.display   = 'none';
+    document.getElementById('sniScanProgressWrap').style.display = '';
+    document.getElementById('sniScanStartBtn').style.display = 'none';
+    document.getElementById('sniScanStopBtn').style.display  = '';
+    document.getElementById('sniScanCount').textContent = '';
+    _sniSetProgress(0, 1);
+    _sniSetStatus(sniI18n.scanning);
+
+    try {
+        const response = await fetch('/panel/nodes/scan-sni', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, port, threads, timeout }),
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            _sniSetStatus((err.error || 'Scan failed'));
+            _resetSniButtons();
+            return;
+        }
+
+        const reader = response.body.getReader();
+        _sniReader = reader;
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let foundAny = false;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete trailing line
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                let evt;
+                try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+                if (evt.type === 'progress') {
+                    _sniSetProgress(evt.done, evt.total);
+                    _sniSetStatus(`${sniI18n.scanning} ${evt.done}/${evt.total}`);
+                } else if (evt.type === 'result') {
+                    foundAny = true;
+                    document.getElementById('sniScanResults').style.display = '';
+                    _sniAddRow(evt);
+                } else if (evt.type === 'done') {
+                    _sniSetProgress(1, 1);
+                    const count = document.getElementById('sniScanTableBody').querySelectorAll('tr').length;
+                    _sniSetStatus(`${sniI18n.done} — ${count} ${sniI18n.found}`);
+                    if (!foundAny) document.getElementById('sniScanEmpty').style.display = '';
+                } else if (evt.type === 'error') {
+                    _sniSetStatus(evt.message || 'Scan error');
+                }
+            }
+        }
+    } catch (err) {
+        if (err.name !== 'AbortError') _sniSetStatus(err.message);
+    } finally {
+        _sniReader = null;
+        _resetSniButtons();
+    }
+}
+
+function stopSniScan() {
+    if (_sniReader) { _sniReader.cancel(); _sniReader = null; }
+    _resetSniButtons();
+}
+
+function _resetSniButtons() {
+    document.getElementById('sniScanStartBtn').style.display = '';
+    document.getElementById('sniScanStopBtn').style.display  = 'none';
+}
+
+function applySniResult(domain) {
+    const destInput = document.getElementById('xrayRealityDest');
+    const sniInput  = document.getElementById('xrayRealitySni');
+    if (destInput) destInput.value = `${domain}:443`;
+    if (sniInput)  sniInput.value  = domain;
+    closeSniScanner();
 }
 </script>

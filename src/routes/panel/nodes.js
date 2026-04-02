@@ -28,7 +28,10 @@ const {
     buildSshKeyFilename,
     connectNodeSSH,
     generateSshKeyLimiter,
+    sniScanLimiter,
 } = require('./helpers');
+
+const sniScanner = require('../../services/sniScanner');
 
 // ==================== DASHBOARD ====================
 
@@ -797,6 +800,53 @@ router.get('/nodes/:id/terminal', async (req, res) => {
 // GET /panel/network - Redirect to nodes page (network map is a tab there)
 router.get('/network', (req, res) => {
     res.redirect('/panel/nodes');
+});
+
+// ==================== SNI SCANNER ====================
+
+// POST /panel/nodes/scan-sni - Stream TLS 1.3+H2 scan results as SSE
+router.post('/nodes/scan-sni', sniScanLimiter, async (req, res) => {
+    const ip      = String(req.body.ip      || '').trim();
+    const port    = Math.min(65535, Math.max(1,   parseInt(req.body.port,    10) || 443));
+    const threads = Math.min(200,   Math.max(1,   parseInt(req.body.threads, 10) || 50));
+    const timeout = Math.min(30,    Math.max(2,   parseInt(req.body.timeout, 10) || 5));
+
+    if (!sniScanner.isValidIpv4(ip)) {
+        return res.status(400).json({ error: 'Invalid IPv4 address' });
+    }
+
+    res.setHeader('Content-Type',    'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control',   'no-cache');
+    res.setHeader('Connection',      'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const controller = new AbortController();
+    req.on('close', () => controller.abort());
+
+    const send = (type, data = {}) => {
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+        }
+    };
+
+    try {
+        await sniScanner.scanRange({
+            ip,
+            port,
+            threads,
+            timeout,
+            signal:      controller.signal,
+            onResult:    r    => send('result',   r),
+            onProgress:  (done, total) => send('progress', { done, total }),
+        });
+        send('done');
+    } catch (err) {
+        logger.error(`[SNI Scan] ${err.message}`);
+        send('error', { message: err.message });
+    } finally {
+        res.end();
+    }
 });
 
 // ==================== STATS ====================
