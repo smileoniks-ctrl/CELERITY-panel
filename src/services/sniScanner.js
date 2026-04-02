@@ -2,10 +2,11 @@
 
 /**
  * SNI Scanner — finds TLS 1.3 + H2 hosts suitable for Xray Reality SNI.
- * Uses only Node.js built-in modules (tls, net).
+ * Uses only Node.js built-in modules (tls, dns).
  */
 
 const tls = require('tls');
+const dns = require('dns').promises;
 
 // Hard cap: only scan /24 subnets (254 hosts) to keep it lightweight
 const MAX_PREFIX = 24;
@@ -147,37 +148,82 @@ async function runPool(tasks, concurrency, signal) {
     await Promise.all(Array.from({ length: slots }, worker));
 }
 
+// ── DNS verification ──────────────────────────────────────────────────────────
+
+/**
+ * Resolve domain DNS and verify it supports TLS 1.3+H2 at its real address.
+ * Returns enriched result or null if domain is unreachable/doesn't pass TLS check.
+ *
+ * @param {{ip, domain, issuer, ping}} candidate - Result from probeHost
+ * @param {number} port
+ * @param {number} timeoutMs
+ * @returns {Promise<object|null>}
+ */
+async function verifyDomain(candidate, port, timeoutMs) {
+    let resolvedIp;
+    try {
+        const { address } = await dns.lookup(candidate.domain, { family: 4 });
+        resolvedIp = address;
+    } catch {
+        // DNS resolution failed — domain likely invalid or unreachable
+        return null;
+    }
+
+    // Domain DNS resolves to the same IP we scanned — already verified
+    if (resolvedIp === candidate.ip) {
+        return { ...candidate, dnsMatch: true };
+    }
+
+    // Domain resolves to a different IP — probe the real address
+    const realResult = await probeHost(resolvedIp, port, timeoutMs);
+    if (!realResult || realResult.domain !== candidate.domain) {
+        // Real IP doesn't pass TLS check or cert domain doesn't match
+        return null;
+    }
+
+    // Use ping to the real IP (more accurate for Reality dest latency)
+    return { ...realResult, dnsMatch: true };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Scan the /24 subnet of the given IP for Reality-compatible SNI targets.
+ * Each candidate is DNS-verified: the domain must resolve and its real address
+ * must also pass TLS 1.3+H2 check.
  *
  * @param {object}       opts
  * @param {string}       opts.ip          - Any IP in the target /24
  * @param {number}       [opts.port=443]
  * @param {number}       [opts.threads=50]
  * @param {number}       [opts.timeout=5]  - Seconds per probe
- * @param {Function}     [opts.onResult]   - Called with each feasible result
+ * @param {Function}     [opts.onResult]   - Called with each verified result
  * @param {Function}     [opts.onProgress] - Called with (done, total)
  * @param {AbortSignal}  [opts.signal]     - Cancellation signal
  * @returns {Promise<Array>} Results sorted by ping ascending
  */
 async function scanRange({ ip, port = 443, threads = 50, timeout = 5, onResult, onProgress, signal } = {}) {
-    const cidr   = ipToCidr24(ip);
-    const hosts  = expandCidr(cidr);
-    const total  = hosts.length;
-    let   done   = 0;
+    const cidr    = ipToCidr24(ip);
+    const hosts   = expandCidr(cidr);
+    const total   = hosts.length;
+    let   done    = 0;
     const results = [];
 
     const tasks = hosts.map(host => async () => {
         if (signal?.aborted) return;
-        const res = await probeHost(host, port, timeout * 1000);
+
+        const candidate = await probeHost(host, port, timeout * 1000);
         done++;
         if (onProgress) onProgress(done, total);
-        if (res) {
-            results.push(res);
-            if (onResult) onResult(res);
-        }
+
+        if (!candidate) return;
+
+        // Verify domain resolves and is reachable at its real DNS address
+        const verified = await verifyDomain(candidate, port, timeout * 1000);
+        if (!verified) return;
+
+        results.push(verified);
+        if (onResult) onResult(verified);
     });
 
     await runPool(tasks, threads, signal);
