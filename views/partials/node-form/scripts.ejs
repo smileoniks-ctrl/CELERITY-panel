@@ -331,6 +331,16 @@
     font-size: 13px;
     padding: 24px 0;
 }
+.sni-ip-neighbor {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--success);
+}
+.sni-ip-other {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+}
 .sni-modal-close {
     background: none;
     border: none;
@@ -1080,11 +1090,19 @@ function _sniAddRow(result) {
         if (parseInt(row.dataset.ping, 10) > newPing) { insertBefore = row; break; }
     }
 
+    const scanSubnet = (document.getElementById('sniScanIp')?.value || '').split('.').slice(0,3).join('.');
+    const ipSubnet   = (result.ip || '').split('.').slice(0,3).join('.');
+    const isNeighbor = scanSubnet && ipSubnet && scanSubnet === ipSubnet;
+    const ipBadge    = isNeighbor
+        ? `<span class="sni-ip-neighbor" title="<%- t('nodes.sniScanNeighborHint') %>">${_escHtml(result.ip)}</span>`
+        : `<span class="sni-ip-other"    title="<%- t('nodes.sniScanOtherHint') %>">${_escHtml(result.ip)}</span>`;
+
     const tr = document.createElement('tr');
     tr.dataset.ping = newPing;
     tr.innerHTML = `
         <td><span class="${_sniPingClass(newPing)}">${newPing}ms</span></td>
         <td class="sni-domain">${_escHtml(result.domain)}</td>
+        <td>${ipBadge}</td>
         <td><span class="sni-issuer" title="${_escHtml(result.issuer)}">${_escHtml(result.issuer)}</span></td>
         <td><button type="button" class="btn btn-sm btn-primary sni-apply-btn"
                     data-domain="${_escHtml(result.domain)}">
