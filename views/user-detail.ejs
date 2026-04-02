@@ -74,6 +74,10 @@
                         </span>
                     </div>
                     <div class="detail-item">
+                        <label><%= t('users.createdAt') %></label>
+                        <span class="value"><%= user.createdAt ? new Date(user.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : '—' %></span>
+                    </div>
+                    <div class="detail-item">
                         <label><%= t('users.expires') %></label>
                         <span class="value"><%= user.expireAt ? new Date(user.expireAt).toLocaleString(lang === 'en' ? 'en-US' : 'ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : t('users.forever') %></span>
                     </div>
