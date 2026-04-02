@@ -204,29 +204,29 @@
 .sni-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,.55);
+    background: rgba(0,0,0,.6);
     z-index: 9000;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    padding: 16px;
+    padding: 40px 16px 16px;
+    overflow-y: auto;
 }
 .sni-modal-card {
     background: var(--bg-card, var(--bg-secondary));
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    width: 640px;
-    max-width: 100%;
-    max-height: 90vh;
+    width: min(820px, 100%);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    box-shadow: 0 32px 80px rgba(0,0,0,.6);
+    margin: auto;
 }
 .sni-modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px 12px;
+    padding: 16px 22px 14px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
@@ -239,33 +239,48 @@
     gap: 8px;
 }
 .sni-modal-body {
-    padding: 18px 20px;
-    overflow-y: auto;
-    flex: 1;
+    padding: 20px 22px 22px;
 }
 .sni-modal-hint {
     font-size: 12px;
     color: var(--text-muted);
-    margin: 0 0 14px;
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+/* 2-row params grid */
+.sni-params {
+    display: grid;
+    grid-template-columns: 1fr 100px;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.sni-params-row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 160px;
+    gap: 12px;
+    margin-bottom: 14px;
 }
 .sni-scan-controls {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
+    margin-bottom: 10px;
 }
 .sni-scan-status {
     font-size: 12px;
     color: var(--text-muted);
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .sni-progress-bar {
-    height: 4px;
+    height: 3px;
     background: var(--border);
     border-radius: 2px;
     overflow: hidden;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
 }
 .sni-progress-fill {
     height: 100%;
@@ -288,16 +303,17 @@
     padding: 1px 8px;
 }
 .sni-table-wrap {
-    overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    max-height: 300px;
+    max-height: 360px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 .sni-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: fixed;
 }
 .sni-table th {
     position: sticky;
@@ -314,22 +330,31 @@
     white-space: nowrap;
 }
 .sni-table td {
-    padding: 8px 12px;
+    padding: 9px 12px;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .sni-table tr:last-child td { border-bottom: none; }
 .sni-table tr:hover td { background: var(--accent-glow); }
+/* Column widths */
+.sni-table th:nth-child(1), .sni-table td:nth-child(1) { width: 72px; }   /* Ping   */
+.sni-table th:nth-child(2), .sni-table td:nth-child(2) { width: auto; }    /* Domain */
+.sni-table th:nth-child(3), .sni-table td:nth-child(3) { width: 140px; }  /* IP     */
+.sni-table th:nth-child(4), .sni-table td:nth-child(4) { width: 130px; }  /* Issuer */
+.sni-table th:nth-child(5), .sni-table td:nth-child(5) { width: 48px; text-align:center; } /* Apply */
 .sni-ping-fast  { color: var(--success); font-weight: 600; }
 .sni-ping-mid   { color: var(--warning); font-weight: 600; }
 .sni-ping-slow  { color: var(--text-muted); }
 .sni-domain     { font-weight: 500; }
-.sni-issuer     { font-size: 11px; color: var(--text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sni-issuer     { font-size: 11px; color: var(--text-muted); }
 .sni-empty {
     text-align: center;
     color: var(--text-muted);
     font-size: 13px;
-    padding: 24px 0;
+    padding: 28px 0;
 }
 .sni-ip-neighbor {
     font-size: 12px;
@@ -341,6 +366,11 @@
     font-family: 'JetBrains Mono', monospace;
     color: var(--text-muted);
 }
+.sni-apply-btn {
+    padding: 5px 8px !important;
+    font-size: 16px !important;
+    line-height: 1;
+}
 .sni-modal-close {
     background: none;
     border: none;
@@ -348,7 +378,7 @@
     cursor: pointer;
     padding: 4px 6px;
     border-radius: 6px;
-    font-size: 16px;
+    font-size: 18px;
     transition: color .15s;
     line-height: 1;
 }
@@ -1104,9 +1134,10 @@ function _sniAddRow(result) {
         <td class="sni-domain">${_escHtml(result.domain)}</td>
         <td>${ipBadge}</td>
         <td><span class="sni-issuer" title="${_escHtml(result.issuer)}">${_escHtml(result.issuer)}</span></td>
-        <td><button type="button" class="btn btn-sm btn-primary sni-apply-btn"
-                    data-domain="${_escHtml(result.domain)}">
-            <i class="ti ti-check"></i> <%- t('nodes.sniScanApply') %>
+        <td style="text-align:center"><button type="button" class="btn btn-sm btn-primary sni-apply-btn"
+                    data-domain="${_escHtml(result.domain)}"
+                    title="<%- t('nodes.sniScanApply') %>">
+            <i class="ti ti-check"></i>
         </button></td>`;
 
     if (insertBefore) tbody.insertBefore(tr, insertBefore);
@@ -1140,8 +1171,8 @@ async function startSniScan() {
     document.getElementById('sniScanResults').style.display = 'none';
     document.getElementById('sniScanEmpty').style.display   = 'none';
     document.getElementById('sniScanProgressWrap').style.display = '';
-    document.getElementById('sniScanStartBtn').style.display = 'none';
-    document.getElementById('sniScanStopBtn').style.display  = '';
+    document.getElementById('sniScanStartBtn').style.display  = 'none';
+    document.getElementById('sniScanStopBtn').style.display   = '';
     document.getElementById('sniScanCount').textContent = '';
     _sniSetProgress(0, 1);
     _sniSetStatus(sniI18n.scanning);

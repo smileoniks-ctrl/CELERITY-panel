@@ -116,35 +116,37 @@
                         </div>
                         <div class="sni-modal-body">
                             <p class="sni-modal-hint"><%= t('nodes.sniScanHint') %></p>
-                            <div class="form-row">
-                                <div class="form-group">
+                            <div class="sni-params">
+                                <div class="form-group" style="margin:0">
                                     <label for="sniScanIp"><%= t('nodes.ipAddress') %></label>
                                     <input type="text" id="sniScanIp" placeholder="185.100.200.1" autocomplete="off">
                                 </div>
-                                <div class="form-group" style="max-width:100px">
+                                <div class="form-group" style="margin:0">
                                     <label for="sniScanPort"><%= t('nodes.sniScanPortLabel') %></label>
                                     <input type="number" id="sniScanPort" value="443" min="1" max="65535">
                                 </div>
-                                <div class="form-group" style="max-width:110px">
+                            </div>
+                            <div class="sni-params-row2">
+                                <div class="form-group" style="margin:0">
                                     <label for="sniScanThreads"><%= t('nodes.sniScanThreads') %></label>
                                     <input type="number" id="sniScanThreads" value="50" min="1" max="200">
                                 </div>
-                                <div class="form-group" style="max-width:110px">
+                                <div class="form-group" style="margin:0">
                                     <label for="sniScanTimeout"><%= t('nodes.sniScanTimeout') %></label>
                                     <input type="number" id="sniScanTimeout" value="5" min="2" max="30">
                                 </div>
+                                <div class="sni-scan-controls" style="margin:0; align-self:flex-end">
+                                    <button type="button" class="btn btn-primary" id="sniScanStartBtn" onclick="startSniScan()">
+                                        <i class="ti ti-radar"></i> <%= t('nodes.sniScanStart') %>
+                                    </button>
+                                    <button type="button" class="btn" id="sniScanStopBtn" onclick="stopSniScan()" style="display:none">
+                                        <i class="ti ti-player-stop"></i> <%= t('nodes.sniScanStop') %>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="sni-scan-controls">
-                                <button type="button" class="btn btn-primary" id="sniScanStartBtn" onclick="startSniScan()">
-                                    <i class="ti ti-player-play"></i> <%= t('nodes.sniScanStart') %>
-                                </button>
-                                <button type="button" class="btn" id="sniScanStopBtn" onclick="stopSniScan()" style="display:none">
-                                    <i class="ti ti-player-stop"></i> <%= t('nodes.sniScanStop') %>
-                                </button>
-                                <span id="sniScanStatus" class="sni-scan-status"></span>
-                            </div>
-                            <div id="sniScanProgressWrap" style="display:none">
+                            <div id="sniScanProgressWrap" style="display:none; margin-bottom:4px">
                                 <div class="sni-progress-bar"><div id="sniScanProgressFill" class="sni-progress-fill" style="width:0%"></div></div>
+                                <span id="sniScanStatus" class="sni-scan-status"></span>
                             </div>
                             <div id="sniScanResults" style="display:none">
                                 <div class="sni-results-header">
