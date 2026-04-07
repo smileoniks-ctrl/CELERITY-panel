@@ -45,20 +45,20 @@ const settingsSchema = new mongoose.Schema({
     
     backup: {
         enabled: { type: Boolean, default: false },
-        intervalHours: { type: Number, default: 24 },       // интервал в часах
-        keepLast: { type: Number, default: 7 },             // сколько хранить локально
-        lastBackup: { type: Date, default: null },          // время последнего бэкапа
+        intervalHours: { type: Number, default: 24 },       // interval in hours
+        keepLast: { type: Number, default: 7 },             // how many to keep locally
+        lastBackup: { type: Date, default: null },          // last backup timestamp
         
-        // S3 настройки (опционально)
+        // S3 settings (optional)
         s3: {
             enabled: { type: Boolean, default: false },
-            endpoint: { type: String, default: '' },        // для MinIO и подобных
+            endpoint: { type: String, default: '' },        // for MinIO and similar
             region: { type: String, default: 'us-east-1' },
             bucket: { type: String, default: '' },
-            prefix: { type: String, default: 'backups' },   // префикс в bucket
+            prefix: { type: String, default: 'backups' },   // prefix in bucket
             accessKeyId: { type: String, default: '' },
             secretAccessKey: { type: String, default: '' },
-            keepLast: { type: Number, default: 30 },        // сколько хранить в S3
+            keepLast: { type: Number, default: 30 },        // how many to keep in S3
         },
     },
 
@@ -85,6 +85,34 @@ const settingsSchema = new mongoose.Schema({
                 icon:  { type: String, default: '' },
             }],
             default: [],
+        },
+        happ: {
+            announce:     { type: String, default: '' },
+            hideSettings: { type: Boolean, default: false },
+            notifyExpire: { type: Boolean, default: false },
+            alwaysHwid:   { type: Boolean, default: false },
+            pingType:     { type: String, enum: ['', 'proxy', 'proxy-head', 'tcp', 'icmp'], default: '' },
+            pingUrl:      { type: String, default: '' },
+            colorProfile: { type: String, default: '' },
+        },
+    },
+
+    routing: {
+        enabled: { type: Boolean, default: false },
+        rules: {
+            type: [{
+                _id: false,
+                action:  { type: String, enum: ['direct', 'block'], default: 'direct' },
+                type:    { type: String, enum: ['domain_suffix', 'domain_keyword', 'domain', 'geosite', 'geoip', 'ip_cidr'] },
+                value:   { type: String },
+                comment: { type: String, default: '' },
+                enabled: { type: Boolean, default: true },
+            }],
+            default: [],
+        },
+        dns: {
+            domestic: { type: String, default: '77.88.8.8' },
+            remote:   { type: String, default: 'tls://1.1.1.1' },
         },
     },
     

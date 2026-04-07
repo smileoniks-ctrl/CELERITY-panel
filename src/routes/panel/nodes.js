@@ -14,6 +14,7 @@ const sshKeyService = require('../../services/sshKeyService');
 const cache = require('../../services/cacheService');
 const cascadeService = require('../../services/cascadeService');
 const statsService = require('../../services/statsService');
+const uaStatsService = require('../../services/uaStatsService');
 const { getActiveGroups } = require('../../utils/helpers');
 const config = require('../../../config');
 const logger = require('../../utils/logger');
@@ -916,6 +917,17 @@ router.post('/stats/cleanup', async (req, res) => {
     try {
         const result = await statsService.cleanup();
         res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /panel/stats/api/clients - VPN client distribution
+router.get('/stats/api/clients', async (req, res) => {
+    try {
+        const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
+        const data = await uaStatsService.getAggregated(days);
+        res.json(data);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -127,6 +127,52 @@ router.post('/settings', async (req, res) => {
                 .filter(b => b && b.label && b.url)
                 .slice(0, 10)
                 .map(b => ({ label: String(b.label).trim(), url: String(b.url).trim(), icon: String(b.icon || '').trim() }));
+
+            // HAPP-specific settings
+            const VALID_PING_TYPES = ['', 'proxy', 'proxy-head', 'tcp', 'icmp'];
+            const rawPingType = req.body['subscription.happ.pingType'] || '';
+            updates['subscription.happ.announce']     = String(req.body['subscription.happ.announce'] || '').trim().slice(0, 200);
+            updates['subscription.happ.hideSettings'] = req.body['subscription.happ.hideSettings'] === 'on';
+            updates['subscription.happ.notifyExpire'] = req.body['subscription.happ.notifyExpire'] === 'on';
+            updates['subscription.happ.alwaysHwid']   = req.body['subscription.happ.alwaysHwid'] === 'on';
+            updates['subscription.happ.pingType']     = VALID_PING_TYPES.includes(rawPingType) ? rawPingType : '';
+            updates['subscription.happ.pingUrl']      = String(req.body['subscription.happ.pingUrl'] || '').trim().slice(0, 500);
+            updates['subscription.happ.colorProfile'] = (() => {
+                const raw = String(req.body['subscription.happ.colorProfile'] || '').trim();
+                if (!raw) return '';
+                if (raw.length > 5120) return '';
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) return '';
+                    return JSON.stringify(parsed);
+                } catch {
+                    return '';
+                }
+            })();
+        }
+
+        // Routing settings
+        if (req.body['_routingSettings'] !== undefined) {
+            updates['routing.enabled'] = req.body['routing.enabled'] === 'on';
+            updates['routing.dns.domestic'] = (req.body['routing.dns.domestic'] || '77.88.8.8').trim();
+            updates['routing.dns.remote']   = (req.body['routing.dns.remote']   || 'tls://1.1.1.1').trim();
+            let parsedRules = [];
+            try { parsedRules = JSON.parse(req.body['routing.rulesJson'] || '[]'); } catch {}
+            if (!Array.isArray(parsedRules)) parsedRules = [];
+            const VALID_ACTIONS = ['direct', 'block'];
+            const VALID_TYPES   = ['domain_suffix', 'domain_keyword', 'domain', 'geosite', 'geoip', 'ip_cidr'];
+            updates['routing.rules'] = parsedRules
+                .filter(r => r && VALID_ACTIONS.includes(r.action) && VALID_TYPES.includes(r.type) && r.value)
+                .slice(0, 200)
+                .map(r => ({
+                    action:  r.action,
+                    type:    r.type,
+                    value:   String(r.value).trim(),
+                    comment: String(r.comment || '').trim().slice(0, 100),
+                    enabled: r.enabled !== false,
+                }));
+            // Invalidate all cached subscriptions so clients receive updated rules immediately
+            await cache.invalidateAllSubscriptions();
         }
 
         // Backup settings

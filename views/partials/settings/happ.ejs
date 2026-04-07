@@ -1,0 +1,239 @@
+<%# ==================== SECTION: HAPP INTEGRATION ==================== %>
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h2><i class="ti ti-rocket"></i> <%= t('settings.happTitle') %></h2>
+        <p class="hint" style="margin:0"><%= t('settings.happDesc') %></p>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="/panel/settings" id="happForm">
+            <input type="hidden" name="_subscriptionSettings" value="1">
+
+            <%# Carry over all other subscription fields as hidden so the save handler =%>
+            <%# does not wipe them when only happ fields are submitted. =%>
+            <input type="hidden" name="subscription.supportUrl"     value="<%= settings?.subscription?.supportUrl || '' %>">
+            <input type="hidden" name="subscription.webPageUrl"     value="<%= settings?.subscription?.webPageUrl || '' %>">
+            <input type="hidden" name="subscription.logoUrl"        value="<%= settings?.subscription?.logoUrl || '' %>">
+            <input type="hidden" name="subscription.pageTitle"      value="<%= settings?.subscription?.pageTitle || '' %>">
+            <input type="hidden" name="subscription.updateInterval" value="<%= settings?.subscription?.updateInterval ?? 12 %>">
+            <input type="hidden" name="subscription.buttonsJson"    value="<%= JSON.stringify(settings?.subscription?.buttons || []) %>">
+
+            <%# ======== Provider ID ======== %>
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label><%= t('settings.subHappProviderId') || 'HAPP Provider ID' %></label>
+                <input type="text" name="subscription.happProviderId" id="happProviderId"
+                       value="<%= settings?.subscription?.happProviderId || '' %>"
+                       placeholder="Ab12Cd34"
+                       maxlength="8"
+                       style="font-family: monospace; letter-spacing: 0.05em; max-width: 200px;">
+                <small class="hint"><%= t('settings.subHappProviderIdHint') || '8-symbol code from happ-proxy.com (optional).' %></small>
+            </div>
+
+            <%# ======== Announce (no Provider ID required) ======== %>
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label><%= t('settings.happAnnounce') %></label>
+                <div style="position: relative;">
+                    <textarea name="subscription.happ.announce" id="happAnnounce"
+                              maxlength="200"
+                              rows="3"
+                              style="width:100%; resize:vertical; font-size:13px; padding-bottom:22px;"
+                              oninput="happAnnounceCount(this)"><%= settings?.subscription?.happ?.announce || '' %></textarea>
+                    <span id="happAnnounceCounter" style="position:absolute; bottom:6px; right:8px; font-size:11px; color:var(--text-muted); pointer-events:none;"></span>
+                </div>
+                <small class="hint"><%= t('settings.happAnnounceHint') %></small>
+            </div>
+
+            <hr style="margin: 1.25rem 0; border-color: var(--border);">
+
+            <%# ======== Advanced collapsible (requires Provider ID) ======== %>
+            <div id="happAdvancedWrap">
+                <button type="button" id="happAdvancedToggleBtn" class="happ-toggle-btn" onclick="toggleHappAdvanced()">
+                    <i class="ti ti-chevron-right" id="happAdvancedChevron"></i>
+                    <span><%= t('settings.happAdvancedToggle') %></span>
+                </button>
+
+                <p id="happAdvancedHint" class="hint" style="margin-top:6px; display:none;">
+                    <%= t('settings.happAdvancedHint') %>
+                </p>
+
+                <div id="happAdvancedBody" style="display:none; margin-top:1.25rem;">
+
+                    <%# ======== Toggles ======== %>
+                    <div class="happ-toggles-grid" style="margin-bottom:1.25rem;">
+                        <label class="checkbox-label happ-toggle-item">
+                            <input type="checkbox" name="subscription.happ.hideSettings"
+                                   <%= settings?.subscription?.happ?.hideSettings ? 'checked' : '' %>>
+                            <span class="checkbox-text">
+                                <strong><%= t('settings.happHideSettings') %></strong>
+                                <small class="hint" style="display:block; margin-top:2px;"><%= t('settings.happHideSettingsHint') %></small>
+                            </span>
+                        </label>
+                        <label class="checkbox-label happ-toggle-item">
+                            <input type="checkbox" name="subscription.happ.notifyExpire"
+                                   <%= settings?.subscription?.happ?.notifyExpire ? 'checked' : '' %>>
+                            <span class="checkbox-text">
+                                <strong><%= t('settings.happNotifyExpire') %></strong>
+                                <small class="hint" style="display:block; margin-top:2px;"><%= t('settings.happNotifyExpireHint') %></small>
+                            </span>
+                        </label>
+                        <label class="checkbox-label happ-toggle-item">
+                            <input type="checkbox" name="subscription.happ.alwaysHwid"
+                                   <%= settings?.subscription?.happ?.alwaysHwid ? 'checked' : '' %>>
+                            <span class="checkbox-text">
+                                <strong><%= t('settings.happAlwaysHwid') %></strong>
+                                <small class="hint" style="display:block; margin-top:2px;"><%= t('settings.happAlwaysHwidHint') %></small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <%# ======== Ping settings ======== %>
+                    <div class="settings-grid" style="margin-bottom:1.25rem;">
+                        <div class="form-group">
+                            <label><%= t('settings.happPingType') %></label>
+                            <select name="subscription.happ.pingType" id="happPingType" onchange="happPingTypeChange(this.value)">
+                                <option value=""          <%= (!settings?.subscription?.happ?.pingType)                           ? 'selected' : '' %>><%= t('settings.happPingTypeAuto') %></option>
+                                <option value="proxy"      <%= settings?.subscription?.happ?.pingType === 'proxy'      ? 'selected' : '' %>><%= t('settings.happPingTypeProxy') %></option>
+                                <option value="proxy-head" <%= settings?.subscription?.happ?.pingType === 'proxy-head' ? 'selected' : '' %>><%= t('settings.happPingTypeProxyHead') %></option>
+                                <option value="tcp"        <%= settings?.subscription?.happ?.pingType === 'tcp'        ? 'selected' : '' %>><%= t('settings.happPingTypeTcp') %></option>
+                                <option value="icmp"       <%= settings?.subscription?.happ?.pingType === 'icmp'       ? 'selected' : '' %>><%= t('settings.happPingTypeIcmp') %></option>
+                            </select>
+                            <small class="hint"><%= t('settings.happPingTypeHint') %></small>
+                        </div>
+                        <div class="form-group" id="happPingUrlGroup" style="<%= ['proxy','proxy-head'].includes(settings?.subscription?.happ?.pingType) ? '' : 'display:none' %>">
+                            <label><%= t('settings.happPingUrl') %></label>
+                            <input type="url" name="subscription.happ.pingUrl" id="happPingUrl"
+                                   value="<%= settings?.subscription?.happ?.pingUrl || '' %>"
+                                   placeholder="https://cp.cloudflare.com/generate_204">
+                            <small class="hint"><%= t('settings.happPingUrlHint') %></small>
+                        </div>
+                    </div>
+
+                    <%# ======== Color theme ======== %>
+                    <div class="form-group">
+                        <label><%= t('settings.happColorProfile') %></label>
+                        <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="happColorPreset('violet')">
+                                <i class="ti ti-palette"></i> <%= t('settings.happColorPresetViolet') %>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="happColorPreset('turquoise')">
+                                <i class="ti ti-palette"></i> <%= t('settings.happColorPresetTurquoise') %>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="color:var(--danger);" onclick="happColorPreset('clear')">
+                                <i class="ti ti-trash"></i> <%= t('settings.happColorPresetClear') %>
+                            </button>
+                        </div>
+                        <textarea name="subscription.happ.colorProfile" id="happColorProfile"
+                                  rows="4"
+                                  style="width:100%; resize:vertical; font-family:monospace; font-size:12px;"><%= settings?.subscription?.happ?.colorProfile || '' %></textarea>
+                        <small class="hint"><%= t('settings.happColorProfileHint') %></small>
+                    </div>
+
+                </div><%# /happAdvancedBody %>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:1.25rem;">
+                <button type="submit" class="btn btn-primary" style="padding:0.75rem 2rem;">
+                    <i class="ti ti-device-floppy"></i> <%= t('common.save') %>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.happ-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0;
+    transition: color 0.15s;
+}
+.happ-toggle-btn:hover { color: var(--primary); }
+.happ-toggle-btn i { font-size: 14px; transition: transform 0.2s; }
+.happ-toggle-btn.open i { transform: rotate(90deg); }
+.happ-toggles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+.happ-toggle-item {
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+</style>
+
+<script>
+(function() {
+    var COLOR_PRESETS = {
+        violet: <%- JSON.stringify(JSON.stringify({
+            backgroundGradientRotationAngle:37.1,serverRowBackgroundColor:"#21003D67",subsHeaderColor:"#42296DFF",profileWebPageIconColor:"#A2B8FFFF",selectedServerRowColor:"#3E2F62B5",disclosureSubHeaderTextColor:"#C1C2E2FF",buttonTextColor:"#FFFFFFFF",buttonTimerColor:"#FFFFFFFF",subscriptionInfoBackgroundColor:"#21003CFF",backgroundColors:["#3D2A7DFF","#6557BAFF","#9377FF7F"],disclosureHeaderTextColor:"#FFFFFFFF",backgroundGradientColorIntensity:1,additionalOptionsButtonColor:"#FFFFFFFF",buttonImageType:"light",serverRowSubTitleTextColor:"#C1C2E2FF",supportIconColor:"#FFFFFFFF",topBarButtonsColor:"#FFFFFFFF",subscriptionTrafficBackgroundColor:"#533EA7FF",subHeaderButtonColor:"#FFFFFFFF",buttonColor:"#9377FFFF",powerIconColor:"#3D2A7DFF",subscriptionInfoTextColor:"#FFFFFFFF",serverRowTitleTextColor:"#FFFFFFFF",backgroundImageType:"system",elipseColors:["#00B460FF","#CF72FFE0","#FFDD00FF"],serverRowChevronColor:"#FFFFFFFF"
+        })) %>,
+        turquoise: <%- JSON.stringify(JSON.stringify({
+            backgroundGradientRotationAngle:39.21,serverRowChevronColor:"#F3FFFDFF",buttonImageType:"light",buttonTimerColor:"#3B3C3DFF",subscriptionTrafficBackgroundColor:"#00343BFF",subscriptionInfoBackgroundColor:"#006B7AFF",serverRowTitleTextColor:"#D0FFF3FF",serverRowBackgroundColor:"#02424DFF",powerIconColor:"#05525ACA",supportIconColor:"#F3FFF9FF",profileWebPageIconColor:"#F5FFF9FF",selectedServerRowColor:"#006B7BFF",disclosureHeaderTextColor:"#D0FFF3FF",subsHeaderColor:"#007982FF",elipseColors:["#4DFF00CC","#E2FF00FF","#FF6000FF"],subscriptionInfoTextColor:"#E5FFF7FF",buttonColor:"#8FFFFEFF",serverRowSubTitleTextColor:"#ADD3CBFF",topBarButtonsColor:"#FFFFFFD8",settingsControlsTintColor:"#00C3C1FF",backgroundGradientColorIntensity:1,disclosureSubHeaderTextColor:"#A4FFE599",additionalOptionsButtonColor:"#FBFFFF99",backgroundImageType:"light",backgroundColors:["#003740FF","#003740FF","#005255FF","#00A6A1FF","#00C9DDFF"],subHeaderButtonColor:"#BAD7CFFF",buttonTextColor:"#000000FF"
+        })) %>,
+    };
+
+    var LS_KEY = 'happ-advanced-open';
+    var hasProviderId = !!(document.getElementById('happProviderId') &&
+                           document.getElementById('happProviderId').value.trim());
+
+    function isAdvancedOpen() {
+        var stored = localStorage.getItem(LS_KEY);
+        if (stored !== null) return stored === '1';
+        return hasProviderId;
+    }
+
+    function setAdvancedOpen(open) {
+        var body    = document.getElementById('happAdvancedBody');
+        var hint    = document.getElementById('happAdvancedHint');
+        var btn     = document.getElementById('happAdvancedToggleBtn');
+
+        body.style.display = open ? '' : 'none';
+        hint.style.display = open ? 'none' : '';
+        btn.classList.toggle('open', open);
+        localStorage.setItem(LS_KEY, open ? '1' : '0');
+    }
+
+    window.toggleHappAdvanced = function() {
+        var isOpen = document.getElementById('happAdvancedBody').style.display !== 'none';
+        setAdvancedOpen(!isOpen);
+    };
+
+    window.happPingTypeChange = function(val) {
+        document.getElementById('happPingUrlGroup').style.display =
+            (val === 'proxy' || val === 'proxy-head') ? '' : 'none';
+    };
+
+    window.happColorPreset = function(key) {
+        var ta = document.getElementById('happColorProfile');
+        ta.value = key === 'clear' ? '' : (COLOR_PRESETS[key] || '');
+    };
+
+    window.happAnnounceCount = function(el) {
+        var counter = document.getElementById('happAnnounceCounter');
+        if (counter) counter.textContent = el.value.length + '/200';
+    };
+
+    var providerIdInput = document.getElementById('happProviderId');
+    if (providerIdInput) {
+        providerIdInput.addEventListener('input', function() {
+            if (this.value.trim() && document.getElementById('happAdvancedBody').style.display === 'none') {
+                setAdvancedOpen(true);
+            }
+        });
+    }
+
+    setAdvancedOpen(isAdvancedOpen());
+
+    var announceEl = document.getElementById('happAnnounce');
+    if (announceEl) happAnnounceCount(announceEl);
+})();
+</script>

@@ -68,24 +68,13 @@
 
                 <hr style="margin: 1.25rem 0; border-color: var(--border);">
 
-                <div class="settings-grid">
-                    <div class="form-group">
-                        <label><%= t('settings.subHappProviderId') || 'HAPP Provider ID' %></label>
-                        <input type="text" name="subscription.happProviderId"
-                               value="<%= settings?.subscription?.happProviderId || '' %>"
-                               placeholder="Ab12Cd34"
-                               maxlength="8"
-                               style="font-family: monospace; letter-spacing: 0.05em;">
-                        <small class="hint"><%= t('settings.subHappProviderIdHint') || '8-символьный код из happ-proxy.com (опционально).' %></small>
-                    </div>
-                    <div class="form-group">
-                        <label><%= t('settings.subUpdateInterval') || 'Интервал обновления' %></label>
-                        <input type="number" name="subscription.updateInterval"
-                               value="<%= settings?.subscription?.updateInterval ?? 12 %>"
-                               min="1" max="168" step="1"
-                               style="max-width: 120px;">
-                        <small class="hint"><%= t('settings.subUpdateIntervalHint') || 'Как часто клиенты автоматически обновляют подписку (в часах). Отправляется в заголовке Profile-Update-Interval.' %></small>
-                    </div>
+                <div class="form-group">
+                    <label><%= t('settings.subUpdateInterval') || 'Интервал обновления' %></label>
+                    <input type="number" name="subscription.updateInterval"
+                           value="<%= settings?.subscription?.updateInterval ?? 12 %>"
+                           min="1" max="168" step="1"
+                           style="max-width: 120px;">
+                    <small class="hint"><%= t('settings.subUpdateIntervalHint') || 'Как часто клиенты автоматически обновляют подписку (в часах). Отправляется в заголовке Profile-Update-Interval.' %></small>
                 </div>
 
                 <hr style="margin: 1.25rem 0; border-color: var(--border);">
@@ -334,4 +323,8 @@
             </script>
         </div>
     </div>
+
+    <%- include('routing') %>
+
+<%- include('happ') %>
 </div>

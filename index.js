@@ -742,6 +742,17 @@ function setupCronJobs() {
             logger.error(`[Cron] Monthly maintenance failed: ${error.message}`);
         }
     });
+
+    // Flush yesterday's UA client stats from Redis to MongoDB at 00:15
+    cron.schedule('15 0 * * *', async () => {
+        try {
+            const uaStatsService = require('./src/services/uaStatsService');
+            await uaStatsService.flushYesterday();
+            await uaStatsService.cleanup();
+        } catch (error) {
+            logger.error(`[Cron] UA stats flush failed: ${error.message}`);
+        }
+    });
     
     // Clean old logs daily at 3:00
     cron.schedule('0 3 * * *', () => {

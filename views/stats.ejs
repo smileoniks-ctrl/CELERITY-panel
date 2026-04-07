@@ -142,6 +142,38 @@
     </div>
 </div>
 
+<!-- VPN Clients Section -->
+<div class="card mt-2" id="clientsCard">
+    <div class="card-header">
+        <h2><i class="ti ti-device-mobile"></i> <%= t('stats.clientsTitle') %></h2>
+        <div class="header-actions">
+            <span class="stat-trend text-muted" id="clientsTotal"></span>
+        </div>
+    </div>
+    <div class="card-body">
+        <p class="text-muted" style="font-size:13px; margin-bottom:16px;"><%= t('stats.clientsDesc') %></p>
+        <div class="clients-layout">
+            <div class="clients-chart-wrap">
+                <canvas id="clientsChart"></canvas>
+            </div>
+            <div class="clients-table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th><%= t('stats.clientName') %></th>
+                            <th class="text-right"><%= t('stats.uniqueUsers') %></th>
+                            <th class="text-right"><%= t('stats.percentage') %></th>
+                        </tr>
+                    </thead>
+                    <tbody id="clientsTableBody">
+                        <tr><td colspan="3" class="text-center text-muted"><%= t('common.loading') %></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <style>
@@ -249,7 +281,8 @@
     font-weight: 600;
 }
 
-#nodesTableBody .value-highlight {
+#nodesTableBody .value-highlight,
+#clientsTableBody .value-highlight {
     font-weight: 600;
     color: var(--accent);
 }
@@ -296,6 +329,44 @@
         font-size: 11px;
     }
 }
+
+.clients-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+.clients-chart-wrap {
+    width: 260px;
+    height: 260px;
+    position: relative;
+}
+
+.clients-table-wrap .table th.text-right,
+.clients-table-wrap .table td.text-right {
+    text-align: right;
+}
+
+.client-color-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+    .clients-layout {
+        grid-template-columns: 1fr;
+    }
+    .clients-chart-wrap {
+        width: 220px;
+        height: 220px;
+        margin: 0 auto;
+    }
+}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -311,6 +382,8 @@ const i18n = {
     allNodes: <%- JSON.stringify(t('stats.allNodes')) %>,
     noData: <%- JSON.stringify(t('stats.noData')) %>,
     hourChange: <%- JSON.stringify(t('stats.hourChange')) %>,
+    clientsUniqueUsers: <%- JSON.stringify(t('stats.uniqueUsers')) %>,
+    clientsNoData: <%- JSON.stringify(t('stats.clientsNoData')) %>,
 };
 
 // Last fetched nodes data -- stored so metric toggle doesn't require a refetch
@@ -321,6 +394,7 @@ let onlineChart = null;
 let trafficChart = null;
 let nodesChart = null;
 let nodesTrafficChart = null;
+let clientsChart = null;
 
 // Current period
 let currentPeriod = '1h';
@@ -431,6 +505,33 @@ function initCharts() {
         },
         options: getChartOptions('nodesTraffic')
     });
+
+    // VPN Clients Donut Chart
+    const clientsCtx = document.getElementById('clientsChart').getContext('2d');
+    clientsChart = new Chart(clientsCtx, {
+        type: 'doughnut',
+        data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1f1f23',
+                    titleColor: '#fafafa',
+                    bodyColor: '#a1a1aa',
+                    borderColor: '#27272a',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed} ${i18n.clientsUniqueUsers}`,
+                    }
+                }
+            },
+            cutout: '65%',
+        }
+    });
 }
 
 function getChartOptions(type) {
@@ -503,12 +604,21 @@ function getChartOptions(type) {
     return baseOptions;
 }
 
+// Maps period selector value to days count for the clients API
+function periodToDays(period) {
+    if (period === '7d') return 7;
+    if (period === '30d') return 30;
+    return 1; // 1h, 6h, 24h all map to today only
+}
+
 async function loadData(period) {
     try {
-        const [onlineData, trafficData, nodesData] = await Promise.all([
+        const days = periodToDays(period);
+        const [onlineData, trafficData, nodesData, clientsData] = await Promise.all([
             fetch(`/panel/stats/api/online?period=${period}`, { credentials: 'include' }).then(r => r.json()),
             fetch(`/panel/stats/api/traffic?period=${period}`, { credentials: 'include' }).then(r => r.json()),
             fetch(`/panel/stats/api/nodes?period=${period}`, { credentials: 'include' }).then(r => r.json()),
+            fetch(`/panel/stats/api/clients?days=${days}`, { credentials: 'include' }).then(r => r.json()),
         ]);
         
         // Cache nodes response so metric toggle re-renders without a refetch
@@ -518,6 +628,7 @@ async function loadData(period) {
         updateTrafficChart(trafficData);
         updateNodesChart(nodesData);
         updateNodesTable(nodesData);
+        updateClientsSection(clientsData);
         updateTrend();
         
     } catch (error) {
@@ -643,6 +754,54 @@ function updateNodesTable(data) {
                         ${lastStatus}
                     </span>
                 </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateClientsSection(data) {
+    const tbody = document.getElementById('clientsTableBody');
+    const totalEl = document.getElementById('clientsTotal');
+
+    if (!data || !data.totals || data.total === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">${i18n.clientsNoData}</td></tr>`;
+        if (totalEl) totalEl.textContent = '';
+        if (clientsChart) {
+            clientsChart.data.labels = [];
+            clientsChart.data.datasets[0].data = [];
+            clientsChart.data.datasets[0].backgroundColor = [];
+            clientsChart.update('none');
+        }
+        return;
+    }
+
+    // Sort clients by count descending, skip zeros
+    const entries = Object.entries(data.totals)
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+
+    const chartColors = colors.nodeColors;
+
+    // Update donut chart
+    if (clientsChart) {
+        clientsChart.data.labels = entries.map(([name]) => name);
+        clientsChart.data.datasets[0].data = entries.map(([, v]) => v);
+        clientsChart.data.datasets[0].backgroundColor = entries.map((_, i) => chartColors[i % chartColors.length]);
+        clientsChart.update('none');
+    }
+
+    // Update total label
+    if (totalEl) totalEl.textContent = `${data.total} ${i18n.clientsUniqueUsers}`;
+
+    // Update table
+    tbody.innerHTML = entries.map(([name, count], i) => {
+        const pct = data.total > 0 ? ((count / data.total) * 100).toFixed(1) : '0.0';
+        const color = chartColors[i % chartColors.length];
+        return `
+            <tr>
+                <td><span class="client-color-dot" style="background:${color}"></span>${name}</td>
+                <td class="text-right value-highlight">${count}</td>
+                <td class="text-right text-muted">${pct}%</td>
             </tr>
         `;
     }).join('');
