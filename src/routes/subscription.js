@@ -1574,14 +1574,21 @@ function sendCachedSubscription(res, data, format, userAgent, settings) {
     let content = data.content;
 
     // HAPP: deliver routing rules via native happ://routing/ protocol
-    if (/happ/i.test(userAgent) && settings?.routing?.enabled) {
-        const profile = buildHappRoutingProfile(settings.routing);
-        if (profile) {
-            const b64 = Buffer.from(JSON.stringify(profile)).toString('base64');
-            const routingLink = `happ://routing/onadd/${b64}`;
-            headers['routing'] = routingLink;
+    if (/happ/i.test(userAgent)) {
+        if (settings?.routing?.enabled) {
+            const profile = buildHappRoutingProfile(settings.routing);
+            if (profile) {
+                const b64 = Buffer.from(JSON.stringify(profile)).toString('base64');
+                const routingLink = `happ://routing/onadd/${b64}`;
+                headers['routing'] = routingLink;
+                if (format === 'uri' || format === 'raw') {
+                    content = `${routingLink}\n${content}`;
+                }
+            }
+        } else {
+            headers['routing'] = 'happ://routing/off';
             if (format === 'uri' || format === 'raw') {
-                content = `${routingLink}\n${content}`;
+                content = `happ://routing/off\n${content}`;
             }
         }
     }
