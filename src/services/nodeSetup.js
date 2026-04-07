@@ -248,7 +248,7 @@ if command -v netfilter-persistent &> /dev/null; then
     netfilter-persistent save 2>/dev/null
     echo "Done: Rules saved with netfilter-persistent"
 elif [ -f /etc/debian_version ]; then
-    apt-get install -y iptables-persistent 2>/dev/null || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y netfilter-persistent 2>/dev/null || true
     netfilter-persistent save 2>/dev/null || true
 elif command -v iptables-save &> /dev/null; then
     mkdir -p /etc/iptables
