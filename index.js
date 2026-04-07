@@ -469,6 +469,14 @@ async function startServer() {
         initSessionMiddleware();
         logger.info('[Redis] Session store initialized');
 
+        // Migration: drop legacy unique index on ip (replaced by compound {ip, type} index)
+        try {
+            await mongoose.connection.collection('hynodes').dropIndex('ip_1');
+            logger.info('[Migration] Dropped legacy ip_1 unique index from hynodes');
+        } catch (_e) {
+            // Index already dropped or never existed — safe to ignore
+        }
+
         // Migration: ensure all users have xrayUuid (for Xray VLESS support)
         const usersWithoutUuid = await HyUser.find({
             $or: [{ xrayUuid: { $exists: false } }, { xrayUuid: null }, { xrayUuid: '' }]

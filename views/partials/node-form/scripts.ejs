@@ -845,7 +845,7 @@ async function resetStatus() {
 }
 <% } %>
 
-<% if (node && node.type === 'xray') { %>
+<% if (node?._id && node.type === 'xray') { %>
 async function refreshNodeInfo() {
     const btn = document.getElementById('btnRefreshInfo');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'; }
@@ -874,7 +874,7 @@ async function refreshNodeInfo() {
 }
 <% } %>
 
-<% if (node && node.type === 'xray') { %>
+<% if (node?._id && node.type === 'xray') { %>
 async function generateXrayKeys() {
     if (!confirm(i18n.xrayGenerateKeysConfirm)) return;
     const btn = event.target;
@@ -1000,6 +1000,56 @@ document.getElementById('generateSshKeyBtn')?.addEventListener('click', async fu
     const ipInput = document.getElementById('ip');
     if (ipInput) ipInput.addEventListener('input', checkXrayPortConflict);
 })();
+
+// ==================== Sibling node hint ====================
+
+<% if (!node?._id) { %>
+(function () {
+    let siblingCheckTimer = null;
+
+    async function checkSiblingNode() {
+        const ipInput = document.getElementById('ip');
+        const hint = document.getElementById('siblingNodeHint');
+        const hintText = document.getElementById('siblingNodeHintText');
+        if (!ipInput || !hint || !hintText) return;
+
+        const ip = ipInput.value.trim();
+        const type = document.querySelector('input[name="type"]:checked')?.value || 'hysteria';
+        if (!ip) { hint.style.display = 'none'; return; }
+
+        try {
+            const res = await fetch('/api/nodes/check-ip?ip=' + encodeURIComponent(ip), { credentials: 'same-origin' });
+            if (!res.ok) { hint.style.display = 'none'; return; }
+            const data = await res.json();
+            const sibling = (data.nodes || []).find(n => n.type !== type);
+            if (sibling) {
+                const protoLabel = sibling.type === 'xray' ? 'Xray VLESS' : 'Hysteria 2';
+                hintText.textContent = protoLabel + ' node already exists at this IP — SSH credentials will be synced automatically.';
+                hint.style.display = '';
+            } else {
+                hint.style.display = 'none';
+            }
+        } catch (_e) {
+            hint.style.display = 'none';
+        }
+    }
+
+    function debouncedCheck() {
+        clearTimeout(siblingCheckTimer);
+        siblingCheckTimer = setTimeout(checkSiblingNode, 400);
+    }
+
+    const ipInput = document.getElementById('ip');
+    if (ipInput) {
+        ipInput.addEventListener('input', debouncedCheck);
+        ipInput.addEventListener('blur', checkSiblingNode);
+        // Also re-check when protocol type changes
+        document.querySelectorAll('input[name="type"]').forEach(function(r) {
+            r.addEventListener('change', checkSiblingNode);
+        });
+    }
+})();
+<% } %>
 
 // Keep SNI visibility synced with domain state
 (function () {

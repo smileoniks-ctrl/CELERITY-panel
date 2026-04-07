@@ -114,12 +114,17 @@ router.get('/nodes', async (req, res) => {
             Settings.get(),
         ]);
 
+        // Build a map of IP → protocol count so the template can show dual-protocol badges
+        const ipProtocolCount = {};
+        nodes.forEach(n => { ipProtocolCount[n.ip] = (ipProtocolCount[n.ip] || 0) + 1; });
+
         render(res, 'nodes', {
             title: res.locals.locales.nodes.title,
             page: 'nodes',
             nodes,
             groups,
             linksCount,
+            ipProtocolCount,
             loadBalancingEnabled: !!(settings?.loadBalancing?.enabled),
         });
     } catch (error) {
@@ -128,13 +133,35 @@ router.get('/nodes', async (req, res) => {
 });
 
 // GET /panel/nodes/add - Node creation form
+// Supports ?cloneFrom=<nodeId> to pre-fill IP, SSH, groups, flag and country from an existing node
+// and automatically switch to the opposite protocol type.
 router.get('/nodes/add', async (req, res) => {
     try {
         const groups = await getActiveGroups();
+
+        let prefillNode = null;
+        if (req.query.cloneFrom) {
+            const source = await HyNode.findById(req.query.cloneFrom)
+                .select('ip flag country groups type')
+                .populate('groups', '_id name color')
+                .lean();
+            if (source) {
+                // Flip the protocol: if source is hysteria → suggest xray, and vice-versa
+                prefillNode = {
+                    ip: source.ip,
+                    flag: source.flag || '',
+                    country: source.country || '',
+                    groups: source.groups || [],
+                    // Flip protocol type so the form opens with the opposite one pre-selected
+                    type: source.type === 'xray' ? 'hysteria' : 'xray',
+                };
+            }
+        }
+
         render(res, 'node-form', {
             title: res.locals.t('nodes.newNode'),
             page: 'nodes',
-            node: null,
+            node: prefillNode,
             groups,
             cascadeLinks: [],
             error: req.query.error || null,
@@ -202,9 +229,12 @@ router.post('/nodes', async (req, res) => {
             return res.redirect(`/panel/nodes/add?error=${encodeURIComponent('Name and IP address are required')}`);
         }
 
-        const existing = await HyNode.findOne({ ip });
+        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
+
+        // Ensure no duplicate node for the same IP + protocol type
+        const existing = await HyNode.findOne({ ip, type: nodeType });
         if (existing) {
-            return res.redirect(`/panel/nodes/add?error=${encodeURIComponent('A node with this IP already exists')}`);
+            return res.redirect(`/panel/nodes/add?error=${encodeURIComponent(`A ${nodeType} node with this IP already exists`)}`);
         }
 
         const sshPassword = req.body['ssh.password'] || '';
@@ -219,14 +249,28 @@ router.post('/nodes', async (req, res) => {
             encryptedPrivateKey = cryptoService.encrypt(sshPrivateKeyRaw.trim());
         }
 
+        // Inherit SSH credentials from sibling node (same IP, different protocol) if caller left them blank
+        const callerProvidedSsh = !!(encryptedPassword || encryptedPrivateKey);
+        let siblingSsh = null;
+        if (!callerProvidedSsh) {
+            const sibling = await HyNode.findOne({ ip, type: { $ne: nodeType } }).select('ssh').lean();
+            siblingSsh = sibling?.ssh || null;
+        }
+
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
         }
 
-        const nodeType = req.body.type === 'xray' ? 'xray' : 'hysteria';
-
         const statsSecret = req.body.statsSecret || cryptoService.generateNodeSecret();
+
+        // Resolve SSH: use provided values, or fall back to sibling node values
+        const resolvedSsh = {
+            port: parseInt(req.body['ssh.port']) || siblingSsh?.port || 22,
+            username: req.body['ssh.username'] || siblingSsh?.username || 'root',
+            password: encryptedPassword || siblingSsh?.password || '',
+            privateKey: encryptedPrivateKey || siblingSsh?.privateKey || '',
+        };
 
         const nodeData = {
             name,
@@ -251,12 +295,7 @@ router.post('/nodes', async (req, res) => {
                 type: req.body['obfs.type'] || '',
                 password: req.body['obfs.password'] || '',
             },
-            ssh: {
-                port: parseInt(req.body['ssh.port']) || 22,
-                username: req.body['ssh.username'] || 'root',
-                password: encryptedPassword,
-                privateKey: encryptedPrivateKey,
-            },
+            ssh: resolvedSsh,
         };
 
         if (nodeType === 'xray') {
@@ -500,6 +539,22 @@ router.post('/nodes/:id', async (req, res) => {
         }
 
         await HyNode.findByIdAndUpdate(nodeId, { $set: updates });
+
+        // Sync SSH credentials to sibling node on the same IP (if SSH was part of this update)
+        const sshChanged = updates['ssh.password'] !== undefined
+            || updates['ssh.privateKey'] !== undefined
+            || updates['ssh.port'] !== undefined
+            || updates['ssh.username'] !== undefined;
+        if (sshChanged) {
+            const updatedNode = await HyNode.findById(nodeId).select('ip ssh').lean();
+            if (updatedNode) {
+                await HyNode.updateMany(
+                    { ip: updatedNode.ip, _id: { $ne: updatedNode._id } },
+                    { $set: { ssh: updatedNode.ssh } }
+                );
+            }
+        }
+
         // Invalidate active-nodes and all subscription caches so ranking/config changes apply immediately
         await Promise.all([
             cache.invalidateNodes(),
