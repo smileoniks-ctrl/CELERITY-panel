@@ -23,9 +23,9 @@ function detectFormat(userAgent) {
     const ua = (userAgent || '').toLowerCase();
     // Shadowrocket expects base64-encoded URI list
     if (/shadowrocket/.test(ua)) return 'shadowrocket';
-    // HAPP (Xray-core based) — receives full v2ray JSON with routing rules
-    // NOTE: Click-Connect app sends UA "v2rayN/6.60" — it must NOT match here (different pattern)
-    if (/happ/.test(ua)) return 'v2ray-json';
+    // HAPP (Xray-core based) — plain URI list (individual servers in HAPP UI)
+    // v2ray-json available via ?format=v2ray-json for users who want routing rules
+    if (/happ/.test(ua)) return 'uri';
     // sing-box based clients — checked BEFORE clash because Hiddify UA contains "ClashMeta"
     // Example: "HiddifyNext/4.0.5 (android) like ClashMeta v2ray sing-box"
     if (/hiddify|hiddifynext|sing-?box|nekobox|nekoray|neko|sfi|sfa|sfm|sft|karing/.test(ua)) return 'singbox';
@@ -461,6 +461,85 @@ function buildClashRules(rules) {
         }
     }
     return result;
+}
+
+/**
+ * Build HAPP-native routing profile JSON from DB rules.
+ * HAPP uses its own routing format (DirectSites/DirectIp/BlockSites/BlockIp)
+ * delivered via happ://routing/onadd/{base64} link.
+ * See: https://www.happ.su/main/dev-docs/routing
+ */
+function buildHappRoutingProfile(routing) {
+    if (!routing || !routing.enabled || !routing.rules || routing.rules.length === 0) return null;
+
+    const domesticDns = (routing.dns && routing.dns.domestic) || '77.88.8.8';
+    const remoteDns   = (routing.dns && routing.dns.remote)   || 'tls://1.1.1.1';
+
+    const profile = {
+        Name: 'Auto',
+        GlobalProxy: 'true',
+        DomainStrategy: 'IPIfNonMatch',
+        FakeDNS: 'false',
+        DirectSites: [],
+        DirectIp: [
+            '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16',
+            '169.254.0.0/16', '224.0.0.0/4', '255.255.255.255',
+        ],
+        ProxySites: [],
+        ProxyIp: [],
+        BlockSites: [],
+        BlockIp: [],
+    };
+
+    // Parse remote DNS (tls://IP → DoT, https://url → DoH, plain IP → DoU)
+    if (remoteDns.startsWith('tls://')) {
+        profile.RemoteDNSType = 'DoT';
+        profile.RemoteDNSIP = remoteDns.slice(6);
+        profile.RemoteDNSDomain = '';
+    } else if (remoteDns.startsWith('https://')) {
+        profile.RemoteDNSType = 'DoH';
+        profile.RemoteDNSDomain = remoteDns;
+        profile.RemoteDNSIP = '1.1.1.1';
+        try {
+            const hostname = new URL(remoteDns).hostname;
+            profile.DnsHosts = { [hostname]: profile.RemoteDNSIP };
+        } catch {}
+    } else {
+        profile.RemoteDNSType = 'DoU';
+        profile.RemoteDNSIP = remoteDns;
+        profile.RemoteDNSDomain = '';
+    }
+
+    // Domestic DNS (plain IP → DoU)
+    profile.DomesticDNSType = 'DoU';
+    profile.DomesticDNSIP = domesticDns;
+    profile.DomesticDNSDomain = '';
+
+    for (const r of routing.rules) {
+        if (!r.enabled) continue;
+
+        // Domain-type rules → DirectSites / BlockSites
+        let siteVal = null;
+        if      (r.type === 'geosite')        siteVal = `geosite:${r.value}`;
+        else if (r.type === 'domain_suffix')   siteVal = `domain:${r.value.replace(/^\./, '')}`;
+        else if (r.type === 'domain')          siteVal = `full:${r.value}`;
+        else if (r.type === 'domain_keyword')  siteVal = `keyword:${r.value}`;
+
+        // IP-type rules → DirectIp / BlockIp
+        let ipVal = null;
+        if      (r.type === 'geoip')   ipVal = `geoip:${r.value}`;
+        else if (r.type === 'ip_cidr') ipVal = r.value;
+
+        if (r.action === 'direct') {
+            if (siteVal) profile.DirectSites.push(siteVal);
+            if (ipVal)   profile.DirectIp.push(ipVal);
+        } else if (r.action === 'block') {
+            if (siteVal) profile.BlockSites.push(siteVal);
+            if (ipVal)   profile.BlockIp.push(ipVal);
+        }
+    }
+
+    return profile;
 }
 
 /**
@@ -1261,13 +1340,6 @@ router.get('/files/:token', async (req, res) => {
         // Read settings (from Redis cache — fast)
         const settings = await getSettings();
 
-        // HAPP gets v2ray-json only when routing rules are enabled (otherwise there's no
-        // benefit, and the user loses per-server switching in HAPP UI). Fall back to URI.
-        if (format === 'v2ray-json' && !settings?.routing?.enabled) {
-            format = 'uri';
-            logger.debug(`[Sub] Routing disabled → downgrade HAPP to URI`);
-        }
-
         // Check cache
         const cached = await cache.getSubscription(token, format);
         if (cached) {
@@ -1405,8 +1477,22 @@ function sendCachedSubscription(res, data, format, userAgent, settings) {
     if (sub?.webPageUrl)     headers['profile-web-page-url'] = sub.webPageUrl;
     if (sub?.happProviderId) headers['providerid']            = sub.happProviderId;
 
+    let content = data.content;
+
+    // HAPP: deliver routing rules via native happ://routing/ protocol
+    // Header "routing:" + prepend to body for maximum compatibility
+    if (/happ/i.test(userAgent) && settings?.routing?.enabled) {
+        const profile = buildHappRoutingProfile(settings.routing);
+        if (profile) {
+            const b64 = Buffer.from(JSON.stringify(profile)).toString('base64');
+            const routingLink = `happ://routing/onadd/${b64}`;
+            headers['routing'] = routingLink;
+            content = `${routingLink}\n${content}`;
+        }
+    }
+
     res.set(headers);
-    res.send(data.content);
+    res.send(content);
 }
 
 // ==================== INFO ====================
