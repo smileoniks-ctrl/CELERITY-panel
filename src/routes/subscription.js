@@ -229,7 +229,11 @@ function generateURI(user, node, config) {
     params.push('alpn=h3');
     // insecure=1 only if no valid certificate (self-signed without domain)
     params.push(`insecure=${config.hasCert ? '0' : '1'}`);
-    if (config.portRange) params.push(`mport=${config.portRange}`);
+    if (config.portRange) {
+        params.push(`mport=${config.portRange}`);
+        const hopSec = parseDurationSeconds(normalizeHopInterval(config.hopInterval));
+        if (hopSec > 0) params.push(`mportHopInt=${hopSec}`);
+    }
     if (config.obfs === 'salamander' && config.obfsPassword) {
         params.push('obfs=salamander');
         params.push(`obfs-password=${encodeURIComponent(config.obfsPassword)}`);
@@ -377,14 +381,16 @@ function buildXrayDns(rules, dns) {
 }
 
 /**
- * Convert routing rules to sing-box route.rules array entries.
- * Groups rules by action+type for efficiency.
+ * Convert routing rules to sing-box 1.13+ route.rules entries.
+ * geosite/geoip replaced with rule_set references (removed in sing-box 1.12).
+ * Returns { rules: [], ruleSets: [] } so the caller can inject rule_set definitions.
  */
 function buildSingboxRules(rules) {
-    if (!rules || rules.length === 0) return [];
+    if (!rules || rules.length === 0) return { rules: [], ruleSets: [] };
 
     const buckets = {};
     const order   = [];
+    const ruleSetTags = new Set();
 
     for (const r of rules) {
         if (!r.enabled) continue;
@@ -392,53 +398,117 @@ function buildSingboxRules(rules) {
         const key = `${action}:${r.type}`;
 
         if (!buckets[key]) {
-            buckets[key] = { outbound: action, _type: r.type, values: [] };
+            buckets[key] = { action, _type: r.type, values: [] };
             order.push(key);
         }
         buckets[key].values.push(r.value);
     }
 
-    return order.map(k => {
+    const resultRules = order.map(k => {
         const b = buckets[k];
-        const rule = { outbound: b.outbound };
+        const rule = b.action === 'block'
+            ? { action: 'reject' }
+            : { action: 'route', outbound: 'direct' };
+
         switch (b._type) {
             case 'domain_suffix':  rule.domain_suffix  = b.values; break;
             case 'domain_keyword': rule.domain_keyword = b.values; break;
             case 'domain':         rule.domain         = b.values; break;
-            case 'geosite':        rule.geosite        = b.values; break;
-            case 'geoip':          rule.geoip          = b.values; break;
+            case 'geosite':
+                rule.rule_set = b.values.map(v => {
+                    const tag = `geosite-${v}`;
+                    ruleSetTags.add(tag);
+                    return tag;
+                });
+                break;
+            case 'geoip':
+                rule.rule_set = b.values.map(v => {
+                    const tag = `geoip-${v}`;
+                    ruleSetTags.add(tag);
+                    return tag;
+                });
+                break;
             case 'ip_cidr':        rule.ip_cidr        = b.values; break;
         }
         return rule;
     });
+
+    const ruleSets = [...ruleSetTags].map(tag => {
+        const isGeoip = tag.startsWith('geoip-');
+        const repo = isGeoip ? 'sing-geoip' : 'sing-geosite';
+        return {
+            tag,
+            type: 'remote',
+            format: 'binary',
+            url: `https://raw.githubusercontent.com/SagerNet/${repo}/rule-set/${tag}.srs`,
+        };
+    });
+
+    return { rules: resultRules, ruleSets };
 }
 
 /**
- * Build sing-box DNS servers+rules for split DNS.
+ * Build sing-box 1.13+ DNS servers+rules for split DNS.
+ * Uses typed server format and rule_set instead of deprecated geosite.
+ * Returns { servers, rules, final, ruleSets }.
  */
 function buildSingboxDns(rules, dns) {
     const domesticAddr = (dns && dns.domestic) ? dns.domestic : '77.88.8.8';
     const remoteAddr   = (dns && dns.remote)   ? dns.remote   : 'tls://1.1.1.1';
+    const ruleSetTags = new Set();
 
+    const remoteServer = _parseSingboxDnsServer(remoteAddr, 'dns-remote', 'dns-local');
     const servers = [
-        { tag: 'dns-remote', address: remoteAddr,   address_resolver: 'dns-local' },
-        { tag: 'dns-direct', address: domesticAddr, detour: 'direct' },
-        { tag: 'dns-local',  address: domesticAddr, detour: 'direct' },
-        { tag: 'dns-block',  address: 'rcode://refused' },
+        remoteServer,
+        { type: 'udp', tag: 'dns-direct', server: domesticAddr, detour: 'direct' },
+        { type: 'udp', tag: 'dns-local',  server: domesticAddr, detour: 'direct' },
     ];
 
-    const dnsRules = [{ outbound: 'any', server: 'dns-local' }];
+    const dnsRules = [];
 
-    const suffixes = [], geosites = [];
+    const suffixes = [], geositeTags = [];
     for (const r of (rules || [])) {
         if (!r.enabled || r.action !== 'direct') continue;
         if (r.type === 'domain_suffix') suffixes.push(r.value);
-        if (r.type === 'geosite')       geosites.push(r.value);
+        if (r.type === 'geosite') {
+            const tag = `geosite-${r.value}`;
+            geositeTags.push(tag);
+            ruleSetTags.add(tag);
+        }
     }
     if (suffixes.length > 0) dnsRules.push({ domain_suffix: suffixes, server: 'dns-direct' });
-    if (geosites.length > 0) dnsRules.push({ geosite: geosites,       server: 'dns-direct' });
+    if (geositeTags.length > 0) dnsRules.push({ rule_set: geositeTags, server: 'dns-direct' });
 
-    return { servers, rules: dnsRules, final: 'dns-remote' };
+    const ruleSets = [...ruleSetTags].map(tag => ({
+        tag,
+        type: 'remote',
+        format: 'binary',
+        url: `https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/${tag}.srs`,
+    }));
+
+    return { servers, rules: dnsRules, final: 'dns-remote', ruleSets };
+}
+
+/**
+ * Parse a DNS address string into a sing-box 1.12+ typed server object.
+ */
+function _parseSingboxDnsServer(addr, tag, domainResolver) {
+    if (addr.startsWith('tls://')) {
+        const server = { type: 'tls', tag, server: addr.slice(6) };
+        if (domainResolver) server.domain_resolver = domainResolver;
+        return server;
+    }
+    if (addr.startsWith('https://')) {
+        try {
+            const url = new URL(addr);
+            const server = { type: 'https', tag, server: url.hostname };
+            if (domainResolver) server.domain_resolver = domainResolver;
+            return server;
+        } catch { /* fall through */ }
+    }
+    const server = { type: 'udp', tag, server: addr };
+    if (domainResolver) server.domain_resolver = domainResolver;
+    return server;
 }
 
 /**
@@ -838,23 +908,35 @@ function generateV2rayJSON(user, nodes, routing) {
             });
             allTags.push(tag);
         } else {
-            // Hysteria2 via Xray-core (supported since Feb 2026)
             getNodeConfigs(node).forEach(cfg => {
                 const tag = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
-                const hy2Settings = {
-                    address: cfg.host,
-                    port: cfg.port,
-                    password: auth,
-                };
-                if (!cfg.hasCert) hy2Settings.allowInsecure = true;
-                if (cfg.sni) hy2Settings.serverName = cfg.sni;
-                if (cfg.obfs === 'salamander' && cfg.obfsPassword) {
-                    hy2Settings.obfs = { type: 'salamander', password: cfg.obfsPassword };
+                const hysteriaSettings = { version: 2, auth };
+                if (cfg.portRange) {
+                    hysteriaSettings.udphop = { port: cfg.portRange };
+                    const hopSec = parseDurationSeconds(normalizeHopInterval(cfg.hopInterval));
+                    if (hopSec > 0) hysteriaSettings.udphop.interval = hopSec;
                 }
+
+                const streamSettings = {
+                    network: 'hysteria',
+                    hysteriaSettings,
+                    security: 'tls',
+                    tlsSettings: {
+                        serverName: cfg.sni || cfg.host,
+                        allowInsecure: !cfg.hasCert,
+                        alpn: ['h3'],
+                    },
+                };
+
+                if (cfg.obfs === 'salamander' && cfg.obfsPassword) {
+                    streamSettings.udpmasks = [{ type: 'salamander', settings: { password: cfg.obfsPassword } }];
+                }
+
                 outbounds.push({
                     tag,
-                    protocol: 'hysteria2',
-                    settings: hy2Settings,
+                    protocol: 'hysteria',
+                    settings: { version: 2, address: cfg.host, port: cfg.port },
+                    streamSettings,
                 });
                 allTags.push(tag);
             });
@@ -961,37 +1043,44 @@ function generateSingboxJSON(user, nodes, routing) {
         { type: 'urltest', tag: 'auto', outbounds: tags, url: 'https://www.gstatic.com/generate_204', interval: '3m', tolerance: 50 },
         ...proxyOutbounds,
         { type: 'direct', tag: 'direct' },
-        { type: 'block', tag: 'block' },
-        { type: 'dns', tag: 'dns-out' },
     ];
+
+    const allRuleSets = [];
+    const hasRouting = routing && routing.enabled && routing.rules && routing.rules.length > 0;
 
     // Build sing-box DNS section (split DNS when routing enabled)
-    const dnsSection = (routing && routing.enabled && routing.rules && routing.rules.length > 0)
-        ? buildSingboxDns(routing.rules, routing.dns)
-        : {
+    let dnsSection;
+    if (hasRouting) {
+        const dnsResult = buildSingboxDns(routing.rules, routing.dns);
+        dnsSection = { servers: dnsResult.servers, rules: dnsResult.rules, final: dnsResult.final };
+        allRuleSets.push(...dnsResult.ruleSets);
+    } else {
+        dnsSection = {
             servers: [
-                { tag: 'dns-remote', address: 'tls://8.8.8.8', address_resolver: 'dns-local' },
-                { tag: 'dns-local', address: '223.5.5.5', detour: 'direct' },
-                { tag: 'dns-block', address: 'rcode://refused' },
+                { type: 'tls', tag: 'dns-remote', server: '8.8.8.8', domain_resolver: 'dns-local' },
+                { type: 'udp', tag: 'dns-local', server: '223.5.5.5', detour: 'direct' },
             ],
-            rules: [
-                { outbound: 'any', server: 'dns-local' },
-            ],
+            rules: [],
             final: 'dns-remote',
         };
-
-    // Build route.rules (inject custom rules between sniff and final)
-    const routeRules = [
-        { protocol: 'dns', outbound: 'dns-out' },
-        { inbound: 'tun-in', action: 'sniff' },
-        { ip_is_private: true, outbound: 'direct' },
-    ];
-    if (routing && routing.enabled && routing.rules && routing.rules.length > 0) {
-        routeRules.push(...buildSingboxRules(routing.rules));
     }
 
-    // Full sing-box structure — required by Hiddify and other clients for format detection
-    return {
+    // Build route.rules using 1.13+ action format
+    const routeRules = [
+        { protocol: 'dns', action: 'hijack-dns' },
+        { inbound: 'tun-in', action: 'sniff' },
+        { ip_is_private: true, action: 'route', outbound: 'direct' },
+    ];
+    if (hasRouting) {
+        const routeResult = buildSingboxRules(routing.rules);
+        routeRules.push(...routeResult.rules);
+        allRuleSets.push(...routeResult.ruleSets);
+    }
+
+    // Deduplicate rule_set definitions by tag
+    const uniqueRuleSets = [...new Map(allRuleSets.map(rs => [rs.tag, rs])).values()];
+
+    const config = {
         log: { level: 'warn', timestamp: true },
         dns: dnsSection,
         inbounds: [
@@ -1003,8 +1092,6 @@ function generateSingboxJSON(user, nodes, routing) {
                 auto_route: true,
                 strict_route: true,
                 stack: 'system',
-                sniff: true,
-                sniff_override_destination: false,
             },
         ],
         outbounds,
@@ -1014,6 +1101,13 @@ function generateSingboxJSON(user, nodes, routing) {
             auto_detect_interface: true,
         },
     };
+
+    if (uniqueRuleSets.length > 0) {
+        config.route.rule_set = uniqueRuleSets;
+        config.experimental = { cache_file: { enabled: true } };
+    }
+
+    return config;
 }
 
 // ==================== HTML PAGE ====================
@@ -1480,14 +1574,15 @@ function sendCachedSubscription(res, data, format, userAgent, settings) {
     let content = data.content;
 
     // HAPP: deliver routing rules via native happ://routing/ protocol
-    // Header "routing:" + prepend to body for maximum compatibility
     if (/happ/i.test(userAgent) && settings?.routing?.enabled) {
         const profile = buildHappRoutingProfile(settings.routing);
         if (profile) {
             const b64 = Buffer.from(JSON.stringify(profile)).toString('base64');
             const routingLink = `happ://routing/onadd/${b64}`;
             headers['routing'] = routingLink;
-            content = `${routingLink}\n${content}`;
+            if (format === 'uri' || format === 'raw') {
+                content = `${routingLink}\n${content}`;
+            }
         }
     }
 
