@@ -227,6 +227,8 @@ function getPortHoppingScript(portRange, mainPort) {
 echo "=== [4/5] Setting up port hopping ${start}-${end} -> ${mainPort} ==="
 
 # Clear old rules
+iptables -D INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
+ip6tables -D INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
 iptables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 ip6tables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
@@ -236,9 +238,14 @@ for iface in eth0 eth1 ens3 ens5 enp0s3 eno1; do
     ip6tables -t nat -D PREROUTING -i $iface -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 done
 
+# Open hop range in firewall before redirecting it
+iptables -C INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport ${start}:${end} -j ACCEPT
+ip6tables -C INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
+echo "Done: INPUT rules added"
+
 # Add new rules (no interface binding)
-iptables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
-ip6tables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
+iptables -t nat -C PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
+ip6tables -t nat -C PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || ip6tables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 echo "Done: iptables NAT rules added"
 
 # Open ports in firewall (ufw)
