@@ -69,7 +69,7 @@ router.get('/:id', requireScope('nodes:read'), async (req, res) => {
         const node = await HyNode.findById(req.params.id).populate('groups', 'name color');
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         // Считаем пользователей на этой ноде
@@ -242,7 +242,7 @@ router.delete('/:id', requireScope('nodes:write'), async (req, res) => {
         const node = await HyNode.findByIdAndDelete(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         // Удаляем ноду из списка пользователей
@@ -271,7 +271,7 @@ router.get('/:id/status', requireScope('nodes:read'), async (req, res) => {
         const node = await HyNode.findById(req.params.id).select('name status lastError onlineUsers lastSync');
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         res.json({
@@ -299,7 +299,7 @@ router.post('/:id/reset-status', requireScope('nodes:write'), async (req, res) =
         );
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         logger.info(`[Nodes API] Node ${node.name} status reset to online`);
@@ -330,7 +330,7 @@ router.get('/:id/agent-info', requireScope('nodes:read'), async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/sync - Принудительная синхронизация ноды
+ * POST /nodes/:id/sync - Force sync a single node
  */
 router.post('/:id/sync', requireScope('nodes:write'), async (req, res) => {
     try {
@@ -341,7 +341,7 @@ router.post('/:id/sync', requireScope('nodes:write'), async (req, res) => {
         );
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         const syncService = require('../services/syncService');
@@ -366,7 +366,7 @@ router.get('/:id/users', requireScope('nodes:read'), async (req, res) => {
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         const users = await HyUser.find({
@@ -399,7 +399,7 @@ router.post('/:id/groups', requireScope('nodes:write'), async (req, res) => {
         ).populate('groups', 'name color');
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         // Инвалидируем кэш
@@ -424,7 +424,7 @@ router.delete('/:id/groups/:groupId', requireScope('nodes:write'), async (req, r
         ).populate('groups', 'name color');
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         // Инвалидируем кэш
@@ -445,7 +445,7 @@ router.get('/:id/config', requireScope('nodes:read'), async (req, res) => {
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         // Генерируем конфиг с HTTP авторизацией
@@ -472,7 +472,7 @@ router.post('/:id/setup-port-hopping', requireScope('nodes:write'), async (req, 
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         const syncService = require('../services/syncService');
@@ -496,7 +496,7 @@ router.post('/:id/update-config', requireScope('nodes:write'), async (req, res) 
         const node = await HyNode.findById(req.params.id);
         
         if (!node) {
-            return res.status(404).json({ error: 'Нода не найдена' });
+            return res.status(404).json({ error: 'Node not found' });
         }
         
         const syncService = require('../services/syncService');
@@ -520,7 +520,7 @@ router.post('/:id/generate-xray-keys', requireScope('nodes:write'), async (req, 
     try {
         const node = await HyNode.findById(req.params.id);
 
-        if (!node) return res.status(404).json({ error: 'Нода не найдена' });
+        if (!node) return res.status(404).json({ error: 'Node not found' });
         if (node.type !== 'xray') return res.status(400).json({ error: 'Нода не является Xray-нодой' });
         if (!node.ssh?.password && !node.ssh?.privateKey) {
             return res.status(400).json({ error: 'SSH credentials not configured' });

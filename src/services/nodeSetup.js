@@ -101,6 +101,21 @@ function getPanelCertificates(domain) {
     }
 }
 
+// Reusable shell snippet: persist iptables rules across reboots
+const IPTABLES_SAVE_SNIPPET = `
+if command -v netfilter-persistent &> /dev/null; then
+    netfilter-persistent save 2>/dev/null
+    echo "Done: Rules saved with netfilter-persistent"
+elif [ -f /etc/debian_version ]; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y netfilter-persistent iptables-persistent 2>/dev/null || true
+    netfilter-persistent save 2>/dev/null || true
+elif command -v iptables-save &> /dev/null; then
+    mkdir -p /etc/iptables
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+    echo "Done: Rules saved with iptables-save"
+fi`;
+
 const INSTALL_SCRIPT = `#!/bin/bash
 set -e
 
@@ -536,6 +551,8 @@ if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     echo "Done: Port 80 opened in ufw"
 fi
 
+${IPTABLES_SAVE_SNIPPET}
+
 if ss -tlnp | grep -q ':80 '; then
     echo "⚠️  Warning: Port 80 is already in use (likely by the panel):"
     ss -tlnp | grep ':80 '
@@ -597,6 +614,8 @@ if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     ufw allow ${statsPort}/tcp 2>/dev/null || true
     echo "Done: Ports ${mainPort}, ${statsPort} opened in ufw"
 fi
+
+${IPTABLES_SAVE_SNIPPET}
 
 echo "Done: Firewall configured"
         `);
@@ -871,6 +890,7 @@ if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: acti
     ufw allow ${mainPort}/udp 2>/dev/null || true
     echo "Done: UFW rules added"
 fi
+${IPTABLES_SAVE_SNIPPET}
 echo "Done: Firewall configured"
         `);
         logs.push(firewallResult.output);
@@ -1070,6 +1090,11 @@ if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: acti
 fi`;
     } else {
         firewallRules = 'echo "WARNING: Panel source unknown, skipping firewall rules"';
+    }
+
+    // Persist iptables rules across reboots
+    if (firewallRules && !firewallRules.includes('WARNING')) {
+        firewallRules += '\n' + IPTABLES_SAVE_SNIPPET;
     }
 
     // Step 1: Download binary

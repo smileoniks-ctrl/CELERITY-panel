@@ -1016,7 +1016,7 @@ router.get('/stats/api/ssh-pool', async (req, res) => {
     }
 });
 
-// POST /nodes/:id/restart - Restart node service via SSH
+// POST /nodes/:id/restart - Restart node service (via Agent for Xray, SSH for Hysteria)
 router.post('/nodes/:id/restart', async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -1024,6 +1024,17 @@ router.post('/nodes/:id/restart', async (req, res) => {
             return res.status(404).json({ error: 'Node not found' });
         }
 
+        // Xray nodes with agent: restart + sync through the agent API
+        if (node.type === 'xray' && node.xray?.agentToken) {
+            try {
+                await syncService.updateNodeConfig(node);
+                return res.json({ success: true, output: 'Restarted and synced via agent' });
+            } catch (agentErr) {
+                return res.status(500).json({ error: `Agent restart failed: ${agentErr.message}` });
+            }
+        }
+
+        // Hysteria nodes (and Xray without agent): SSH restart
         if (!node.ssh?.password && !node.ssh?.privateKey) {
             return res.status(400).json({ error: 'SSH credentials not configured' });
         }
@@ -1040,6 +1051,26 @@ router.post('/nodes/:id/restart', async (req, res) => {
         });
 
         res.json({ success: isActive, output: result.output });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /nodes/:id/sync - Force full sync for a single node
+router.post('/nodes/:id/sync', async (req, res) => {
+    try {
+        const node = await HyNode.findById(req.params.id);
+        if (!node) {
+            return res.status(404).json({ error: 'Node not found' });
+        }
+
+        await HyNode.findByIdAndUpdate(req.params.id, { $set: { status: 'syncing' } });
+
+        syncService.updateNodeConfig(node).catch(err => {
+            require('../../utils/logger').error(`[Panel] Sync error for ${node.name}: ${err.message}`);
+        });
+
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -401,7 +401,8 @@ const i18n = {
     confirmUndeployCascade: <%- JSON.stringify(t("nodes.confirmUndeployCascade")) %>,
     confirmDeleteCascade: <%- JSON.stringify(t("nodes.confirmDeleteCascade")) %>,
     xrayGenerateKeysConfirm: <%- JSON.stringify(t("nodes.xrayGenerateKeysConfirm")) %>,
-    xrayKeysSuccess: <%- JSON.stringify(t("nodes.xrayKeysSuccess")) %>
+    xrayKeysSuccess: <%- JSON.stringify(t("nodes.xrayKeysSuccess")) %>,
+    syncSuccess: <%- JSON.stringify(t("nodes.syncSuccess")) %>
 };
 const i18nConfig = {
     copied: <%- JSON.stringify(t("common.copied")) %>,
@@ -836,6 +837,21 @@ async function resetStatus() {
         const data = await res.json();
         if (data.success) {
             document.getElementById('setupResult').innerHTML = '<div class="alert alert-success">' + i18n.statusReset + '</div>';
+        } else {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('setupResult').innerHTML = '<div class="alert alert-error">' + i18n.error + ': ' + err.message + '</div>';
+    }
+}
+
+async function syncNode() {
+    document.getElementById('setupResult').innerHTML = '<div class="alert"><i class="ti ti-loader-2"></i> ' + i18n.syncSuccess + '</div>';
+    try {
+        const res = await fetch('/panel/nodes/<%= node._id %>/sync', { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('setupResult').innerHTML = '<div class="alert alert-success"><i class="ti ti-check"></i> ' + i18n.syncSuccess + '</div>';
         } else {
             document.getElementById('setupResult').innerHTML = '<div class="alert alert-error"><i class="ti ti-x"></i> ' + (data.error || i18n.error) + '</div>';
         }
