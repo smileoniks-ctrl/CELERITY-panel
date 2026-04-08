@@ -560,16 +560,20 @@ echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
         logs.push('--- End config ---');
         
         if (setupPortHopping && node.portRange) {
-            log(`Setting up port hopping (${node.portRange})...`);
-            const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
-            if (portHoppingScript) {
-                const hopResult = await execSSH(conn, portHoppingScript);
-                logs.push(hopResult.output);
-                
-                if (!hopResult.success) {
-                    log(`Port hopping setup warning: ${hopResult.error}`);
-                } else {
-                    log('Port hopping configured');
+            if (isSameVpsAsPanel(node)) {
+                log('Skipping port hopping for self-hosted node (incompatible with Docker networking)');
+            } else {
+                log(`Setting up port hopping (${node.portRange})...`);
+                const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
+                if (portHoppingScript) {
+                    const hopResult = await execSSH(conn, portHoppingScript);
+                    logs.push(hopResult.output);
+
+                    if (!hopResult.success) {
+                        log(`Port hopping setup warning: ${hopResult.error}`);
+                    } else {
+                        log('Port hopping configured');
+                    }
                 }
             }
         }

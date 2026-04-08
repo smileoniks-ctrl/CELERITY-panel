@@ -9,6 +9,7 @@ const cryptoService = require('../../services/cryptoService');
 const syncService = require('../../services/syncService');
 const configGenerator = require('../../services/configGenerator');
 const nodeSetup = require('../../services/nodeSetup');
+const { isSameVpsAsPanel } = nodeSetup;
 const NodeSSH = require('../../services/nodeSSH');
 const sshKeyService = require('../../services/sshKeyService');
 const cache = require('../../services/cacheService');
@@ -608,9 +609,10 @@ router.post('/nodes/:id/setup', async (req, res) => {
         } else if (node.type === 'xray') {
             result = await nodeSetup.setupXrayNodeWithAgent(node, { restartService: true });
         } else {
+            const skipHopping = isSameVpsAsPanel(node);
             result = await nodeSetup.setupNode(node, {
                 installHysteria: true,
-                setupPortHopping: true,
+                setupPortHopping: !skipHopping,
                 restartService: true,
             });
         }

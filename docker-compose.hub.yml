@@ -49,8 +49,8 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:80/tcp"
+      - "443:443/tcp"
     volumes:
       - ./logs:/app/logs
       - ./greenlock.d:/app/greenlock.d

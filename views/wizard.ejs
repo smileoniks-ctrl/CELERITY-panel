@@ -451,10 +451,6 @@
                     <label><%= typeof t !== 'undefined' ? t('nodes.port') : 'Port' %> (UDP)</label>
                     <input type="number" name="hy.port" value="<%= defaults.hyPort %>" min="1" max="65535">
                 </div>
-                <div class="form-group" style="margin:0;">
-                    <label><%= typeof t !== 'undefined' ? t('nodes.portRange') : 'Port Range' %></label>
-                    <input type="text" name="hy.portRange" value="<%= defaults.hyPortRange %>" placeholder="20000-50000">
-                </div>
             </div>
             <div class="form-group" style="margin-top:16px; margin-bottom:0;">
                 <label><%= typeof t !== 'undefined' ? t('nodes.domain') : 'Domain' %></label>
@@ -554,23 +550,23 @@
 
     <div class="progress-log" id="progress-log"></div>
 
-    <div class="credentials-card" id="starter-credentials-card">
+    <div class="credentials-card" id="starter-subscription-card">
         <h3><%= typeof t !== 'undefined' ? t('wizard.credentialsTitle') : 'Starter credentials' %></h3>
-        <p><%= typeof t !== 'undefined' ? t('wizard.credentialsDesc') : 'These credentials are shown once for the automatically created starter VPN user. Store them in a safe place and change the password later if needed.' %></p>
+        <p><%= typeof t !== 'undefined' ? t('wizard.credentialsDesc') : 'Use this subscription link for the automatically prepared admin access bundle.' %></p>
         <div class="credentials-grid">
             <div class="credentials-item">
                 <label><%= typeof t !== 'undefined' ? t('wizard.credentialsUserLabel') : 'User ID' %></label>
                 <code id="starter-user-id">admin</code>
             </div>
             <div class="credentials-item">
-                <label><%= typeof t !== 'undefined' ? t('wizard.credentialsPasswordLabel') : 'Password' %></label>
-                <code id="starter-user-password"></code>
+                <label><%= typeof t !== 'undefined' ? t('wizard.credentialsPasswordLabel') : 'Subscription link' %></label>
+                <code id="starter-subscription-url"></code>
             </div>
         </div>
         <div class="onboarding-actions" style="margin-top: 16px;">
-            <button type="button" class="btn btn-secondary" id="copy-starter-password">
+            <button type="button" class="btn btn-secondary" id="copy-starter-subscription">
                 <i class="ti ti-copy"></i>
-                <%= typeof t !== 'undefined' ? t('wizard.copyCredentials') : 'Copy password' %>
+                <%= typeof t !== 'undefined' ? t('wizard.copyCredentials') : 'Copy subscription link' %>
             </button>
         </div>
     </div>
@@ -670,10 +666,10 @@
     const btnDash    = document.getElementById('btn-dashboard');
     const btnNodes   = document.getElementById('btn-nodes');
     const btnManual  = document.getElementById('btn-manual-form');
-    const credsCard  = document.getElementById('starter-credentials-card');
+    const credsCard  = document.getElementById('starter-subscription-card');
     const credsUser  = document.getElementById('starter-user-id');
-    const credsPass  = document.getElementById('starter-user-password');
-    const copyCredsBtn = document.getElementById('copy-starter-password');
+    const credsUrl   = document.getElementById('starter-subscription-url');
+    const copyCredsBtn = document.getElementById('copy-starter-subscription');
     const taskId     = '<%= typeof taskId !== "undefined" ? taskId : "" %>';
 
     if (logEl && taskId) {
@@ -705,9 +701,9 @@
                         ? '<i class="ti ti-circle-check" style="color:var(--success);"></i> <%= typeof t !== "undefined" ? t("wizard.installSuccess") : "Installation complete!" %>'
                         : '<i class="ti ti-alert-circle" style="color:var(--warning);"></i> <%= typeof t !== "undefined" ? t("wizard.installPartial") : "Finished with some errors. Check the log above." %>';
                 }
-                if (data.starterCredentials && credsCard && credsUser && credsPass) {
-                    credsUser.textContent = data.starterCredentials.userId || 'admin';
-                    credsPass.textContent = data.starterCredentials.password || '';
+                if (data.starterSubscription && credsCard && credsUser && credsUrl) {
+                    credsUser.textContent = data.starterSubscription.userId || 'admin';
+                    credsUrl.textContent = data.starterSubscription.url || '';
                     credsCard.style.display = 'block';
                 }
                 if (actionsEl) actionsEl.classList.add('is-visible');
@@ -731,9 +727,9 @@
         };
     }
 
-    if (copyCredsBtn && credsPass) {
+    if (copyCredsBtn && credsUrl) {
         copyCredsBtn.addEventListener('click', async function () {
-            const value = credsPass.textContent || '';
+            const value = credsUrl.textContent || '';
             if (!value) return;
             try {
                 await navigator.clipboard.writeText(value);

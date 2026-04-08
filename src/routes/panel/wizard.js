@@ -122,6 +122,12 @@ async function ensureStarterAccessBundle(nodeIds) {
         user = await HyUser.findById(user._id);
     }
 
+    if (user && !user.subscriptionToken) {
+        await user.save();
+    }
+
+    const subscriptionToken = user.subscriptionToken || user.userId;
+
     await Promise.all([
         invalidateGroupsCache(),
         cache.invalidateNodes(),
@@ -131,8 +137,8 @@ async function ensureStarterAccessBundle(nodeIds) {
     return {
         groupName: group.name,
         userId: user.userId,
-        password: generatedPassword,
-        createdUser,
+        subscriptionToken,
+        subscriptionUrl: `${config.BASE_URL}/api/files/${subscriptionToken}`,
     };
 }
 
@@ -245,7 +251,6 @@ router.post('/wizard/self-host', wizardLimiter, async (req, res) => {
 
         if (installHysteria) {
             const hyPort      = parseInt(req.body['hy.port'])      || 443;
-            const hyPortRange = (req.body['hy.portRange'] || '20000-50000').trim();
             const hyDomain    = (req.body['hy.domain']    || config.PANEL_DOMAIN || '').trim();
 
             nodesToCreate.push({
@@ -254,7 +259,7 @@ router.post('/wizard/self-host', wizardLimiter, async (req, res) => {
                 ip:                sshIp,
                 domain:            hyDomain,
                 port:              hyPort,
-                portRange:         hyPortRange,
+                portRange:         '',
                 statsPort:         9999,
                 statsSecret:       cryptoService.generateNodeSecret(),
                 ssh:               resolvedSsh,
@@ -311,7 +316,7 @@ router.post('/wizard/self-host', wizardLimiter, async (req, res) => {
             done: false,
             success: false,
             error: null,
-            starterCredentials: null,
+            starterSubscription: null,
         });
 
         // Run setup in background, do not await
@@ -341,14 +346,13 @@ async function _runBootstrap(taskId, nodeIds) {
         if (starterBundle) {
             pushLog(`[Info] Starter group ready: ${starterBundle.groupName}`);
             pushLog(`[Info] Starter user ready: ${starterBundle.userId}`);
-            if (starterBundle.createdUser && starterBundle.password) {
-                task.starterCredentials = {
-                    userId: starterBundle.userId,
-                    password: starterBundle.password,
-                };
-                pushLog('[Info] Starter user credentials are ready.');
-                pushLog('[Info] They will be shown separately after provisioning completes.');
-            }
+            task.starterSubscription = {
+                userId: starterBundle.userId,
+                url: starterBundle.subscriptionUrl,
+                token: starterBundle.subscriptionToken,
+            };
+            pushLog('[Info] Starter subscription link is ready.');
+            pushLog('[Info] It will be shown separately after provisioning completes.');
         }
     } catch (err) {
         pushLog(`[Error] Could not prepare starter access: ${err.message}`);
@@ -372,7 +376,7 @@ async function _runBootstrap(taskId, nodeIds) {
             } else {
                 result = await nodeSetup.setupNode(node, {
                     installHysteria:  true,
-                    setupPortHopping: true,
+                    setupPortHopping: false,
                     restartService:   true,
                 });
             }
@@ -466,7 +470,7 @@ router.get('/wizard/progress/:taskId/stream', (req, res) => {
         if (task.done) {
             send('done', {
                 success: task.success,
-                starterCredentials: task.starterCredentials,
+                starterSubscription: task.starterSubscription,
             });
             clearInterval(intervalId);
             res.end();
