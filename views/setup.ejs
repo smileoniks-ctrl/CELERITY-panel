@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 </head>
 <body class="onboarding-page">
     <div class="onboarding-shell">
@@ -19,6 +19,13 @@
                 <p class="onboarding-subtitle">
                     <%= typeof t !== 'undefined' ? t('setup.header') : 'Create the first administrator account and prepare the panel for secure onboarding.' %>
                 </p>
+            </div>
+
+            <div style="text-align:center;">
+                <div class="onboarding-lang-switch">
+                    <a href="?lang=ru" class="<%= typeof lang !== 'undefined' && lang === 'ru' ? 'active' : '' %>">RU</a>
+                    <a href="?lang=en" class="<%= typeof lang !== 'undefined' && lang === 'en' ? 'active' : '' %>">EN</a>
+                </div>
             </div>
 
             <% if (error) { %>

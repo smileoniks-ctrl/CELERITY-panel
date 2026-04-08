@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
     <style>
         .wizard-steps {
             display: grid;
@@ -277,6 +277,29 @@
         }
 
         .wizard-skip a:hover { color: var(--text-primary); }
+
+        #progress-actions {
+            margin-top: 20px;
+        }
+
+        #progress-actions.is-visible {
+            display: grid !important;
+            gap: 10px;
+        }
+
+        #progress-actions > a,
+        #progress-actions > form {
+            width: 100%;
+            margin: 0 !important;
+        }
+
+        #progress-actions form {
+            display: block;
+        }
+
+        #progress-actions .btn {
+            width: 100%;
+        }
 
         @media (max-width: 600px) {
             .scenario-cards { grid-template-columns: 1fr; }
@@ -559,9 +582,6 @@
         <a href="/panel/nodes" class="btn btn-secondary btn-block" id="btn-nodes" style="display:none; margin-top:8px;">
             <%= typeof t !== 'undefined' ? t('wizard.goToNodes') : 'View Nodes' %>
         </a>
-        <a href="/panel/wizard/self-host" class="btn btn-primary btn-block" id="btn-retry" style="display:none;">
-            <%= typeof t !== 'undefined' ? t('wizard.retrySetup') : 'Retry setup' %>
-        </a>
         <form method="POST" action="/panel/wizard/skip" id="btn-manual-form" style="display:none; margin-top:8px;">
             <button type="submit" class="btn btn-secondary btn-block">
                 <%= typeof t !== 'undefined' ? t('wizard.continueManual') : 'Continue manually' %>
@@ -649,7 +669,6 @@
     const actionsEl  = document.getElementById('progress-actions');
     const btnDash    = document.getElementById('btn-dashboard');
     const btnNodes   = document.getElementById('btn-nodes');
-    const btnRetry   = document.getElementById('btn-retry');
     const btnManual  = document.getElementById('btn-manual-form');
     const credsCard  = document.getElementById('starter-credentials-card');
     const credsUser  = document.getElementById('starter-user-id');
@@ -691,12 +710,11 @@
                     credsPass.textContent = data.starterCredentials.password || '';
                     credsCard.style.display = 'block';
                 }
-                if (actionsEl) actionsEl.style.display = 'block';
+                if (actionsEl) actionsEl.classList.add('is-visible');
                 if (data.success) {
                     if (btnDash)   btnDash.style.display = 'block';
                     if (btnNodes)  btnNodes.style.display = 'block';
                 } else {
-                    if (btnRetry)  btnRetry.style.display = 'block';
                     if (btnManual) btnManual.style.display = 'block';
                 }
             }
