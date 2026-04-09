@@ -106,10 +106,10 @@ Object.assign(locals, {
 
 <div class="card">
     <div class="card-header">
-        <h2><%= node ? t('nodes.editNode') : t('nodes.newNode') %></h2>
+        <h2><%= node?._id ? t('nodes.editNode') : t('nodes.newNode') %></h2>
     </div>
     <div class="card-body">
-        <form id="nodeForm" method="POST" action="/panel/nodes<%= node ? '/' + node._id : '' %>" class="form">
+        <form id="nodeForm" method="POST" action="/panel/nodes<%= node?._id ? '/' + node._id : '' %>" class="form">
             <input type="hidden" name="useTlsFiles" value="<%= node?.useTlsFiles ? '1' : '0' %>">
 
             <%- include('partials/node-form/basic') %>
@@ -177,7 +177,7 @@ Object.assign(locals, {
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">
-                    <%= node ? t('nodes.saveNode') : t('nodes.createNode') %>
+                    <%= node?._id ? t('nodes.saveNode') : t('nodes.createNode') %>
                 </button>
                 <a href="/panel/nodes" class="btn"><%= t('common.cancel') %></a>
             </div>

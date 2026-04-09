@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'en' %>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof t !== 'undefined' ? t('wizard.title') : 'Setup Wizard' %> | C³ CELERITY</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+    <style>
+        .wizard-steps {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .wizard-step-chip {
+            padding: 12px 14px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.03);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .wizard-step-chip.active {
+            color: white;
+            border-color: rgba(99, 102, 241, 0.45);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.38) 0%, rgba(124, 58, 237, 0.3) 100%);
+            box-shadow: 0 12px 32px rgba(99, 102, 241, 0.16);
+        }
+
+        .wizard-step-chip.done {
+            color: var(--success);
+            border-color: rgba(34, 197, 94, 0.3);
+            background: rgba(34, 197, 94, 0.08);
+        }
+
+        .scenario-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .choice-card {
+            position: relative;
+            border: 1px solid rgba(63, 63, 70, 0.9);
+            border-radius: 18px;
+            padding: 22px 20px;
+            cursor: pointer;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+            background: rgba(24, 24, 27, 0.74);
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .choice-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 35%);
+            pointer-events: none;
+        }
+
+        .choice-card:hover {
+            border-color: rgba(99, 102, 241, 0.45);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+            transform: translateY(-1px);
+        }
+
+        .choice-card.selected,
+        .protocol-choice:has(input:checked) {
+            border-color: rgba(99, 102, 241, 0.65);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(124, 58, 237, 0.12) 100%);
+            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.18), 0 18px 38px rgba(99, 102, 241, 0.12);
+        }
+
+        .choice-card input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .choice-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            margin-bottom: 14px;
+            border-radius: 14px;
+            font-size: 24px;
+            color: white;
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            box-shadow: 0 14px 34px rgba(99, 102, 241, 0.22);
+        }
+
+        .choice-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .choice-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        .protocol-choices {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .protocol-choice {
+            border: 1px solid rgba(63, 63, 70, 0.9);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            cursor: pointer;
+            transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+            background: rgba(24, 24, 27, 0.72);
+        }
+
+        .protocol-choice:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .protocol-choice input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .protocol-choice-label {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .protocol-choice-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .wizard-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .ssh-auth-tabs {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+            margin-bottom: 16px;
+        }
+
+        .ssh-tab {
+            padding: 8px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.18s ease;
+        }
+
+        .ssh-tab.active {
+            background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+            border-color: rgba(99, 102, 241, 0.4);
+            color: white;
+        }
+
+        .progress-log {
+            background: rgba(10, 10, 11, 0.78);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            height: 360px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .progress-log .log-ok   { color: var(--success); }
+        .progress-log .log-fail { color: var(--danger);  }
+        .progress-log .log-info { color: var(--accent);  }
+
+        .credentials-card {
+            display: none;
+            margin-top: 18px;
+            padding: 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(234, 179, 8, 0.32);
+            background: linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%);
+        }
+
+        .credentials-card h3 {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .credentials-card p {
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 14px;
+        }
+
+        .credentials-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .credentials-item label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .credentials-item code {
+            display: block;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: rgba(10, 10, 11, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .progress-spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .wizard-skip {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: var(--text-muted, var(--text-secondary));
+        }
+
+        .wizard-skip a {
+            color: var(--text-secondary);
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .wizard-skip a:hover { color: var(--text-primary); }
+
+        #progress-actions {
+            margin-top: 20px;
+        }
+
+        #progress-actions.is-visible {
+            display: grid !important;
+            gap: 10px;
+        }
+
+        #progress-actions > a,
+        #progress-actions > form {
+            width: 100%;
+            margin: 0 !important;
+        }
+
+        #progress-actions form {
+            display: block;
+        }
+
+        #progress-actions .btn {
+            width: 100%;
+        }
+
+        @media (max-width: 600px) {
+            .scenario-cards { grid-template-columns: 1fr; }
+            .protocol-choices { grid-template-columns: 1fr; }
+            .wizard-grid,
+            .wizard-steps { grid-template-columns: 1fr; }
+            .choice-card { padding: 18px 16px; }
+        }
+    </style>
+</head>
+<body class="onboarding-page">
+<div class="onboarding-shell">
+<div class="onboarding-card">
+
+    <div class="onboarding-header">
+        <span class="logo-icon">⚡</span>
+        <h1>C³ CELERITY</h1>
+        <a class="onboarding-brand" href="https://t.me/First_VPN_Click_bot" target="_blank" rel="noopener noreferrer">by Click Connect</a>
+        <p class="onboarding-subtitle"><%= typeof t !== 'undefined' ? t('wizard.subtitle') : 'Prepare the panel, the first nodes, and the initial access bundle in one guided flow.' %></p>
+    </div>
+
+    <div style="text-align:center;">
+        <div class="onboarding-lang-switch">
+            <a href="?lang=ru" class="<%= typeof lang !== 'undefined' && lang === 'ru' ? 'active' : '' %>">RU</a>
+            <a href="?lang=en" class="<%= typeof lang !== 'undefined' && lang === 'en' ? 'active' : '' %>">EN</a>
+        </div>
+    </div>
+
+    <div class="wizard-steps">
+        <div class="wizard-step-chip <%= step === 'scenario' ? 'active' : 'done' %>"><%= typeof t !== 'undefined' ? t('wizard.stepScenario') : 'Deployment' %></div>
+        <div class="wizard-step-chip <%= step === 'self-host' ? 'active' : (step === 'progress' ? 'done' : '') %>"><%= typeof t !== 'undefined' ? t('wizard.stepNodes') : 'Infrastructure' %></div>
+        <div class="wizard-step-chip <%= step === 'progress' ? 'active' : '' %>"><%= typeof t !== 'undefined' ? t('wizard.stepFinish') : 'Provisioning' %></div>
+    </div>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert alert-error" style="margin-bottom: 20px;"><i class="ti ti-alert-circle"></i> <%= error %></div>
+    <% } %>
+
+    <% if (step === 'scenario') { %>
+
+    <div class="onboarding-section" style="margin-bottom: 22px;">
+        <div class="onboarding-section-title">
+            <i class="ti ti-sparkles"></i>
+            <%= typeof t !== 'undefined' ? t('wizard.scenarioTitle') : 'Choose a starting point' %>
+        </div>
+        <div class="onboarding-section-copy">
+            <%= typeof t !== 'undefined' ? t('wizard.scenarioHint') : 'Select the deployment model that best matches your infrastructure. This only prepares the initial layout, and you can change or extend it later.' %>
+        </div>
+    </div>
+
+    <form method="POST" action="/panel/wizard/scenario" id="scenario-form">
+        <div class="scenario-cards">
+
+            <label class="choice-card" id="card-selfhost" for="radio-selfhost">
+                <input type="radio" name="scenario" value="self-host" id="radio-selfhost">
+                <span class="choice-icon"><i class="ti ti-server-bolt"></i></span>
+                <div class="choice-title">
+                    <%= typeof t !== 'undefined' ? t('wizard.selfHostTitle') : 'Deploy on this server' %>
+                </div>
+                <div class="choice-desc">
+                    <%= typeof t !== 'undefined' ? t('wizard.selfHostDesc') : 'Install Hysteria 2 and / or Xray on the same server as the panel and let the wizard prepare the starter access bundle.' %>
+                </div>
+            </label>
+
+            <label class="choice-card" id="card-remote" for="radio-remote">
+                <input type="radio" name="scenario" value="remote" id="radio-remote">
+                <span class="choice-icon"><i class="ti ti-topology-star-3"></i></span>
+                <div class="choice-title">
+                    <%= typeof t !== 'undefined' ? t('wizard.remoteTitle') : 'Manage remote nodes' %>
+                </div>
+                <div class="choice-desc">
+                    <%= typeof t !== 'undefined' ? t('wizard.remoteDesc') : 'Use the panel as a control plane for proxy nodes running on separate VPS or dedicated servers.' %>
+                </div>
+            </label>
+
+        </div>
+
+        <div class="onboarding-actions">
+            <button type="submit" class="btn btn-primary" id="scenario-submit" disabled>
+                <%= typeof t !== 'undefined' ? t('wizard.continue') : 'Continue' %> &rarr;
+            </button>
+        </div>
+    </form>
+
+    <div class="wizard-skip">
+        <form method="POST" action="/panel/wizard/skip" style="display:inline;">
+            <%= typeof t !== 'undefined' ? t('wizard.skipPrompt') : 'Want to configure everything manually?' %>
+            <button type="submit" style="background:none;border:none;padding:0;cursor:pointer;color:var(--text-secondary);text-decoration:underline;text-underline-offset:2px;font:inherit;">
+                <%= typeof t !== 'undefined' ? t('wizard.skipLink') : 'Skip wizard' %>
+            </button>
+        </form>
+    </div>
+
+    <% } else if (step === 'self-host') { %>
+
+    <div class="onboarding-section" style="margin-bottom: 22px;">
+        <div class="onboarding-section-title">
+            <i class="ti ti-settings-cog"></i>
+            <%= typeof t !== 'undefined' ? t('wizard.selfHostTitle') : 'Deploy on this server' %>
+        </div>
+        <div class="onboarding-section-copy">
+            <%= typeof t !== 'undefined' ? t('wizard.selfHostHint') : 'Choose the protocols to deploy, provide SSH access to the target server, and the wizard will prepare the first group and starter user automatically.' %>
+        </div>
+    </div>
+
+    <form method="POST" action="/panel/wizard/self-host" id="selfhost-form" class="onboarding-stack">
+
+        <div class="onboarding-section">
+            <div class="onboarding-section-title">
+                <i class="ti ti-layers-subtract"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.protocols') : 'Protocols to install' %>
+            </div>
+
+            <div class="protocol-choices">
+                <label class="protocol-choice">
+                    <input type="checkbox" name="installHysteria" id="chk-hy" checked>
+                    <div>
+                        <div class="protocol-choice-label">Hysteria 2</div>
+                        <div class="protocol-choice-sub"><%= typeof t !== 'undefined' ? t('wizard.hysteriaChoiceDesc') : 'High-performance UDP transport with QUIC and port hopping support.' %></div>
+                    </div>
+                </label>
+                <label class="protocol-choice">
+                    <input type="checkbox" name="installXray" id="chk-xray">
+                    <div>
+                        <div class="protocol-choice-label">Xray VLESS</div>
+                        <div class="protocol-choice-sub"><%= typeof t !== 'undefined' ? t('wizard.xrayChoiceDesc') : 'TCP transport with REALITY camouflage and managed runtime updates through the agent.' %></div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div class="onboarding-section">
+            <div class="onboarding-section-title">
+                <i class="ti ti-users-group"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.starterBundleTitle') : 'Starter access bundle' %>
+            </div>
+            <div class="onboarding-section-copy">
+                <%= typeof t !== 'undefined' ? t('wizard.starterBundleDesc') : 'The wizard will create a starter server group, attach the new nodes to it, and prepare the first VPN user admin so the subscription layout is ready immediately after deployment.' %>
+            </div>
+        </div>
+
+        <div class="onboarding-section collapsible-section" id="hy-settings" style="display:block;">
+            <div class="onboarding-section-title">
+                <i class="ti ti-bolt"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.hysteriaSettings') : 'Hysteria 2 Settings' %>
+            </div>
+            <div class="wizard-grid">
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.port') : 'Port' %> (UDP)</label>
+                    <input type="number" name="hy.port" value="<%= defaults.hyPort %>" min="1" max="65535">
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:16px; margin-bottom:0;">
+                <label><%= typeof t !== 'undefined' ? t('nodes.domain') : 'Domain' %></label>
+                <input type="text" name="hy.domain" value="<%= defaults.hyDomain %>" placeholder="panel.example.com">
+                <small style="color:var(--text-secondary);">
+                    <%= typeof t !== 'undefined' ? t('wizard.hyDomainHint') : 'Uses the panel domain. Hysteria shares the panel TLS certificate.' %>
+                </small>
+            </div>
+        </div>
+
+        <div class="onboarding-section collapsible-section" id="xray-settings">
+            <div class="onboarding-section-title">
+                <i class="ti ti-shield-lock"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.xraySettings') : 'Xray Settings' %>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label><%= typeof t !== 'undefined' ? t('nodes.port') : 'Port' %> (TCP)</label>
+                <input type="number" name="xray.port" value="<%= defaults.xrayPort %>" min="1" max="65535">
+                <small>
+                    <i class="ti ti-alert-triangle" style="color:var(--warning);"></i>
+                    <%= typeof t !== 'undefined' ? t('wizard.xrayPortHint') : 'Port 443/tcp is used by the panel (Caddy). Xray defaults to 8443.' %>
+                </small>
+            </div>
+            <div class="wizard-grid" style="margin-bottom:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.xrayTransport') : 'Transport' %></label>
+                    <select name="xray.transport" id="wizXrayTransport" onchange="updateWizardXrayFlow()">
+                        <option value="tcp" selected>TCP</option>
+                        <option value="ws">WebSocket</option>
+                        <option value="grpc">gRPC</option>
+                        <option value="xhttp">XHTTP (SplitHTTP)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.xrayFingerprint') : 'TLS Fingerprint' %></label>
+                    <select name="xray.fingerprint">
+                        <option value="chrome" selected>Chrome</option>
+                        <option value="firefox">Firefox</option>
+                        <option value="safari">Safari</option>
+                        <option value="ios">iOS</option>
+                        <option value="android">Android</option>
+                        <option value="edge">Edge</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" id="wizXrayFlowGroup" style="margin-bottom:16px;">
+                <label><%= typeof t !== 'undefined' ? t('nodes.xrayFlow') : 'Flow (XTLS)' %></label>
+                <input type="text" name="xray.flow" value="xtls-rprx-vision" placeholder="xtls-rprx-vision">
+                <small><%= typeof t !== 'undefined' ? t('nodes.xrayFlowHint') : 'Only for TCP + Reality/TLS. Leave empty for WebSocket/gRPC/XHTTP.' %></small>
+            </div>
+            <div class="wizard-grid" style="margin-bottom:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.xrayRealityDest') : 'Reality Destination' %></label>
+                    <input type="text" name="xray.realityDest" value="www.google.com:443" placeholder="www.google.com:443">
+                    <small><%= typeof t !== 'undefined' ? t('nodes.xrayRealityDestHint') : 'TLS 1.3 + H2 website to impersonate (host:port)' %></small>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.xrayRealitySni') : 'Reality SNI (serverNames)' %></label>
+                    <input type="text" name="xray.realitySni" value="www.google.com" placeholder="www.google.com">
+                    <small><%= typeof t !== 'undefined' ? t('nodes.xrayRealitySniHint') : 'Comma-separated. Must match destination certificate' %></small>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label><%= typeof t !== 'undefined' ? t('nodes.xrayShortIds') : 'Short IDs' %></label>
+                <input type="text" name="xray.realityShortIds" value="" placeholder=", 0123456789abcdef">
+                <small><%= typeof t !== 'undefined' ? t('nodes.xrayShortIdsHint') : 'Comma-separated hex strings (0-16 chars). Empty string is valid.' %></small>
+            </div>
+        </div>
+
+        <div class="onboarding-section">
+            <div class="onboarding-section-title">
+                <i class="ti ti-terminal-2"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.sshAccess') : 'SSH access to the target server' %>
+            </div>
+            <div class="onboarding-section-copy" style="margin-bottom: 16px;">
+                <%= typeof t !== 'undefined' ? t('wizard.sshAccessHint') : 'Use an address that the panel can reach over SSH. Root access is recommended for unattended installation.' %>
+            </div>
+
+            <div class="wizard-grid" style="grid-template-columns: 2fr 1fr;">
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('wizard.sshIp') : 'Target server address' %></label>
+                    <input type="text" name="ssh.ip" value="<%= panelDomain %>" placeholder="panel.example.com" required>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label><%= typeof t !== 'undefined' ? t('nodes.sshPort') : 'SSH Port' %></label>
+                    <input type="number" name="ssh.port" value="22" min="1" max="65535">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top:16px;">
+                <label><%= typeof t !== 'undefined' ? t('nodes.sshUsername') : 'Username' %></label>
+                <input type="text" name="ssh.username" value="root">
+            </div>
+
+            <div class="onboarding-section-title" style="margin-top: 8px; margin-bottom: 12px;">
+                <%= typeof t !== 'undefined' ? t('wizard.sshAuth') : 'Authentication' %>
+            </div>
+
+            <div class="ssh-auth-tabs">
+                <button type="button" class="ssh-tab active" id="tab-password" onclick="switchSshTab('password')">
+                    <%= typeof t !== 'undefined' ? t('wizard.sshPassword') : 'Password' %>
+                </button>
+                <button type="button" class="ssh-tab" id="tab-key" onclick="switchSshTab('key')">
+                    <%= typeof t !== 'undefined' ? t('wizard.sshPrivateKey') : 'Private Key' %>
+                </button>
+            </div>
+
+            <div id="ssh-password-section">
+                <div class="form-group" style="margin-bottom:0;">
+                    <input type="password" name="ssh.password" placeholder="<%= typeof t !== 'undefined' ? t('wizard.sshPasswordPlaceholder') : 'SSH password' %>">
+                </div>
+            </div>
+            <div id="ssh-key-section" style="display:none;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <textarea name="ssh.privateKey" rows="5"
+                        placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                        style="font-family: 'JetBrains Mono', monospace; font-size: 11px; resize: vertical;"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="onboarding-actions">
+            <a href="/panel/wizard" class="btn btn-secondary" style="flex: 0 0 auto;">
+                &larr; <%= typeof t !== 'undefined' ? t('common.back') : 'Back' %>
+            </a>
+            <button type="submit" class="btn btn-primary" id="install-btn">
+                <i class="ti ti-rocket"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.install') : 'Install & Continue' %>
+            </button>
+        </div>
+    </form>
+
+    <% } else if (step === 'progress') { %>
+
+    <div class="onboarding-progress-meta">
+        <p id="progress-status">
+            <span class="progress-spinner"></span>
+            <%= typeof t !== 'undefined' ? t('wizard.installing') : 'Provisioning nodes, preparing starter access, and validating services. Please wait...' %>
+        </p>
+    </div>
+
+    <div class="progress-log" id="progress-log"></div>
+
+    <div class="credentials-card" id="starter-subscription-card">
+        <h3><%= typeof t !== 'undefined' ? t('wizard.credentialsTitle') : 'Starter credentials' %></h3>
+        <p><%= typeof t !== 'undefined' ? t('wizard.credentialsDesc') : 'Use this subscription link for the automatically prepared admin access bundle.' %></p>
+        <div class="credentials-grid">
+            <div class="credentials-item">
+                <label><%= typeof t !== 'undefined' ? t('wizard.credentialsUserLabel') : 'User ID' %></label>
+                <code id="starter-user-id">admin</code>
+            </div>
+            <div class="credentials-item">
+                <label><%= typeof t !== 'undefined' ? t('wizard.credentialsPasswordLabel') : 'Subscription link' %></label>
+                <code id="starter-subscription-url"></code>
+            </div>
+        </div>
+        <div class="onboarding-actions" style="margin-top: 16px;">
+            <button type="button" class="btn btn-secondary" id="copy-starter-subscription">
+                <i class="ti ti-copy"></i>
+                <%= typeof t !== 'undefined' ? t('wizard.copyCredentials') : 'Copy subscription link' %>
+            </button>
+        </div>
+    </div>
+
+    <div id="progress-actions" style="display:none; margin-top: 20px;">
+        <a href="/panel" class="btn btn-primary btn-block" id="btn-dashboard" style="display:none;">
+            <%= typeof t !== 'undefined' ? t('wizard.goToDashboard') : 'Go to Dashboard' %>
+        </a>
+        <a href="/panel/nodes" class="btn btn-secondary btn-block" id="btn-nodes" style="display:none; margin-top:8px;">
+            <%= typeof t !== 'undefined' ? t('wizard.goToNodes') : 'View Nodes' %>
+        </a>
+        <form method="POST" action="/panel/wizard/skip" id="btn-manual-form" style="display:none; margin-top:8px;">
+            <button type="submit" class="btn btn-secondary btn-block">
+                <%= typeof t !== 'undefined' ? t('wizard.continueManual') : 'Continue manually' %>
+            </button>
+        </form>
+    </div>
+
+    <% } %>
+
+</div>
+</div>
+
+<script>
+(function () {
+
+    // ── Step 1: scenario card selection ──────────────────────────────────────
+    const scenarioForm = document.getElementById('scenario-form');
+    if (scenarioForm) {
+        const radios  = scenarioForm.querySelectorAll('input[type="radio"]');
+        const submitBtn = document.getElementById('scenario-submit');
+        const cards   = scenarioForm.querySelectorAll('.choice-card');
+
+        radios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                cards.forEach(c => c.classList.remove('selected'));
+                if (radio.checked) {
+                    radio.closest('.choice-card').classList.add('selected');
+                    submitBtn.disabled = false;
+                }
+            });
+        });
+    }
+
+    // ── Step 2: protocol checkboxes toggle sections ───────────────────────────
+    const chkHy   = document.getElementById('chk-hy');
+    const chkXray = document.getElementById('chk-xray');
+    const hySettings   = document.getElementById('hy-settings');
+    const xraySettings = document.getElementById('xray-settings');
+
+    function updateSections() {
+        if (hySettings)   hySettings.style.display   = chkHy   && chkHy.checked   ? 'block' : 'none';
+        if (xraySettings) xraySettings.style.display = chkXray && chkXray.checked ? 'block' : 'none';
+    }
+
+    if (chkHy)   chkHy.addEventListener('change', updateSections);
+    if (chkXray) chkXray.addEventListener('change', updateSections);
+    updateSections();
+
+    window.updateWizardXrayFlow = function () {
+        var sel = document.getElementById('wizXrayTransport');
+        var flowGrp = document.getElementById('wizXrayFlowGroup');
+        if (sel && flowGrp) flowGrp.style.display = sel.value === 'tcp' ? '' : 'none';
+    };
+
+    // Prevent submitting with no protocols selected
+    const selfhostForm = document.getElementById('selfhost-form');
+    if (selfhostForm) {
+        selfhostForm.addEventListener('submit', function (e) {
+            if (chkHy && chkXray && !chkHy.checked && !chkXray.checked) {
+                e.preventDefault();
+                alert('<%= typeof t !== "undefined" ? t("wizard.noProtocolSelected") : "Please select at least one protocol." %>');
+            }
+        });
+    }
+
+    // ── SSH auth tabs ─────────────────────────────────────────────────────────
+    window.switchSshTab = function (tab) {
+        const pwdSection = document.getElementById('ssh-password-section');
+        const keySection = document.getElementById('ssh-key-section');
+        const tabPwd     = document.getElementById('tab-password');
+        const tabKey     = document.getElementById('tab-key');
+
+        if (!pwdSection || !keySection) return;
+
+        if (tab === 'password') {
+            pwdSection.style.display = '';
+            keySection.style.display = 'none';
+            tabPwd.classList.add('active');
+            tabKey.classList.remove('active');
+        } else {
+            pwdSection.style.display = 'none';
+            keySection.style.display = '';
+            tabPwd.classList.remove('active');
+            tabKey.classList.add('active');
+        }
+    };
+
+    // ── Step 3: SSE progress stream ───────────────────────────────────────────
+    const logEl      = document.getElementById('progress-log');
+    const statusEl   = document.getElementById('progress-status');
+    const actionsEl  = document.getElementById('progress-actions');
+    const btnDash    = document.getElementById('btn-dashboard');
+    const btnNodes   = document.getElementById('btn-nodes');
+    const btnManual  = document.getElementById('btn-manual-form');
+    const credsCard  = document.getElementById('starter-subscription-card');
+    const credsUser  = document.getElementById('starter-user-id');
+    const credsUrl   = document.getElementById('starter-subscription-url');
+    const copyCredsBtn = document.getElementById('copy-starter-subscription');
+    const taskId     = '<%= typeof taskId !== "undefined" ? taskId : "" %>';
+
+    if (logEl && taskId) {
+        const es = new EventSource('/panel/wizard/progress/' + taskId + '/stream');
+
+        es.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'log') {
+                const msg = data.message || '';
+                const line = document.createElement('span');
+
+                if (msg.startsWith('[OK]') || msg.includes('completed') || msg.includes('Done')) {
+                    line.className = 'log-ok';
+                } else if (msg.startsWith('[FAIL]') || msg.includes('[Error]') || msg.includes('ERROR')) {
+                    line.className = 'log-fail';
+                } else if (msg.startsWith('---') || msg.startsWith('[Done]')) {
+                    line.className = 'log-info';
+                }
+                line.textContent = msg + '\n';
+                logEl.appendChild(line);
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            if (data.type === 'done') {
+                es.close();
+                if (statusEl) {
+                    statusEl.innerHTML = data.success
+                        ? '<i class="ti ti-circle-check" style="color:var(--success);"></i> <%= typeof t !== "undefined" ? t("wizard.installSuccess") : "Installation complete!" %>'
+                        : '<i class="ti ti-alert-circle" style="color:var(--warning);"></i> <%= typeof t !== "undefined" ? t("wizard.installPartial") : "Finished with some errors. Check the log above." %>';
+                }
+                if (data.starterSubscription && credsCard && credsUser && credsUrl) {
+                    credsUser.textContent = data.starterSubscription.userId || 'admin';
+                    credsUrl.textContent = data.starterSubscription.url || '';
+                    credsCard.style.display = 'block';
+                }
+                if (actionsEl) actionsEl.classList.add('is-visible');
+                if (data.success) {
+                    if (btnDash)   btnDash.style.display = 'block';
+                    if (btnNodes)  btnNodes.style.display = 'block';
+                } else {
+                    if (btnManual) btnManual.style.display = 'block';
+                }
+            }
+
+            if (data.type === 'error') {
+                es.close();
+                if (statusEl) statusEl.innerHTML = '<i class="ti ti-alert-circle" style="color:var(--danger);"></i> ' + (data.message || 'Error');
+            }
+        };
+
+        es.onerror = function () {
+            es.close();
+            if (statusEl) statusEl.innerHTML = '<i class="ti ti-wifi-off" style="color:var(--danger);"></i> <%= typeof t !== "undefined" ? t("wizard.streamError") : "Connection lost. Refresh to check status." %>';
+        };
+    }
+
+    if (copyCredsBtn && credsUrl) {
+        copyCredsBtn.addEventListener('click', async function () {
+            const value = credsUrl.textContent || '';
+            if (!value) return;
+            try {
+                await navigator.clipboard.writeText(value);
+                copyCredsBtn.innerHTML = '<i class="ti ti-check"></i> <%= typeof t !== "undefined" ? t("common.copied") : "Copied" %>';
+            } catch (_) {}
+        });
+    }
+})();
+</script>
+</body>
+</html>

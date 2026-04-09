@@ -10,6 +10,9 @@
                     <label for="ip"><%= t('nodes.ipAddress') %></label>
                     <input type="text" id="ip" name="ip" value="<%= node?.ip || '' %>"
                            placeholder="123.45.67.89" required>
+                    <div id="siblingNodeHint" class="alert alert-info" style="display:none;margin-top:6px;font-size:13px;padding:7px 10px;">
+                        <i class="ti ti-link"></i> <span id="siblingNodeHintText"></span>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="flag"><%= t('nodes.flag') %></label>

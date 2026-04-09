@@ -341,6 +341,8 @@ class NodeSSH {
             
             const script = `
 # Clear old rules
+iptables -D INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT 2>/dev/null || true
+ip6tables -D INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT 2>/dev/null || true
 iptables -t nat -D PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 ip6tables -t nat -D PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
@@ -350,9 +352,13 @@ for iface in eth0 eth1 ens3 ens5 enp0s3 eno1; do
     ip6tables -t nat -D PREROUTING -i $iface -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 done
 
+# Open hop range in firewall before redirecting it
+iptables -C INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT
+ip6tables -C INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p udp --dport ${startPort}:${endPort} -j ACCEPT 2>/dev/null || true
+
 # Add new rules (no interface binding)
-iptables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort}
-ip6tables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort}
+iptables -t nat -C PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort}
+ip6tables -t nat -C PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || ip6tables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
 # Open ports in UFW
 if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
@@ -535,7 +541,9 @@ fi
     async getSystemStats() {
         try {
             const result = await this.exec(`
-echo "===CPU==="
+echo "===CPUSAMPLE==="
+head -1 /proc/stat
+echo "===LOADAVG==="
 cat /proc/loadavg
 echo "===CORES==="
 nproc
@@ -550,20 +558,29 @@ cat /proc/uptime | cut -d' ' -f1
             const output = result.stdout || '';
             const lines = output.split('\n');
             
-            let cpu = { load1: 0, load5: 0, load15: 0, cores: 1 };
+            let cpu = { percent: 0, load1: 0, load5: 0, load15: 0, cores: 1 };
             let mem = { total: 0, used: 0, free: 0, percent: 0 };
             let disk = { total: 0, used: 0, free: 0, percent: 0 };
             let uptime = 0;
-            
+
+            let curSample = null;
             let section = '';
             for (const line of lines) {
-                if (line.includes('===CPU===')) { section = 'cpu'; continue; }
+                if (line.includes('===CPUSAMPLE===')) { section = 'cpusample'; continue; }
+                if (line.includes('===LOADAVG===')) { section = 'loadavg'; continue; }
                 if (line.includes('===CORES===')) { section = 'cores'; continue; }
                 if (line.includes('===MEM===')) { section = 'mem'; continue; }
                 if (line.includes('===DISK===')) { section = 'disk'; continue; }
                 if (line.includes('===UPTIME===')) { section = 'uptime'; continue; }
-                
-                if (section === 'cpu' && line.trim()) {
+
+                if (section === 'cpusample' && line.startsWith('cpu ')) {
+                    const parts = line.trim().split(/\s+/).slice(1).map(Number);
+                    const idle = (parts[3] || 0) + (parts[4] || 0);
+                    const total = parts.reduce((a, b) => a + b, 0);
+                    curSample = { idle, total };
+                }
+
+                if (section === 'loadavg' && line.trim()) {
                     const parts = line.trim().split(/\s+/);
                     cpu.load1 = parseFloat(parts[0]) || 0;
                     cpu.load5 = parseFloat(parts[1]) || 0;
@@ -607,6 +624,17 @@ cat /proc/uptime | cut -d' ' -f1
                 }
             }
             
+            const nodeKey = this.node._id?.toString() || this.node.ip;
+            const prev = NodeSSH._cpuSamples.get(nodeKey);
+            if (curSample && prev) {
+                const dIdle = curSample.idle - prev.idle;
+                const dTotal = curSample.total - prev.total;
+                cpu.percent = dTotal > 0 ? Math.min(Math.round((1 - dIdle / dTotal) * 100), 100) : 0;
+            } else {
+                cpu.percent = Math.min(Math.round((cpu.load1 / cpu.cores) * 100), 100);
+            }
+            if (curSample) NodeSSH._cpuSamples.set(nodeKey, curSample);
+
             return { success: true, cpu, mem, disk, uptime };
         } catch (error) {
             logger.error(`[SSH] System stats error on ${this.node.name}: ${error.message}`);
@@ -614,5 +642,7 @@ cat /proc/uptime | cut -d' ' -f1
         }
     }
 }
+
+NodeSSH._cpuSamples = new Map();
 
 module.exports = NodeSSH;

@@ -137,9 +137,18 @@ router.post('/', async (req, res) => {
         
         if (password) {
             const expectedPassword = cryptoService.generatePassword(userId);
-            if (password !== expectedPassword && password !== user.password) {
-                logger.warn(`[Auth] Invalid password: ${userId} (${addr})`);
-                return res.json({ ok: false });
+            if (password !== expectedPassword) {
+                // Cached user may not have password field (stripped for security).
+                // Fall back to DB lookup before rejecting.
+                let dbPassword = user.password;
+                if (dbPassword === undefined || dbPassword === null) {
+                    const dbUser = await HyUser.findOne({ userId }, 'password').lean();
+                    dbPassword = dbUser?.password;
+                }
+                if (password !== dbPassword) {
+                    logger.warn(`[Auth] Invalid password: ${userId} (${addr})`);
+                    return res.json({ ok: false });
+                }
             }
         }
         

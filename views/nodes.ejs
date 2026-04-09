@@ -108,6 +108,9 @@
                                     <% } else { %>
                                     <img src="/img/hysteria.svg" alt="Hysteria" title="Hysteria 2" style="width:16px;height:16px;vertical-align:middle;margin-left:6px;opacity:0.7;">
                                     <% } %>
+                                    <% if ((ipProtocolCount || {})[node.ip] > 1) { %>
+                                    <span class="badge-cascade relay" title="<%= t('nodes.dualProtocol') %>"><i class="ti ti-layers-subtract" style="font-size:10px;"></i> dual</span>
+                                    <% } %>
                                     <% if (node.cascadeRole && node.cascadeRole !== 'standalone') { %>
                                     <span class="badge-cascade <%= node.cascadeRole %>"><%= node.cascadeRole.toUpperCase() %></span>
                                     <% } %>
@@ -170,6 +173,9 @@
                                 <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>" <%= !node.ssh?.password ? 'disabled' : '' %>><i class="ti ti-refresh"></i></button>
                                 <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>" <%= !node.ssh?.password ? 'style="pointer-events:none;opacity:0.5"' : '' %>><i class="ti ti-terminal-2"></i></a>
                                 <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.edit') %>"><i class="ti ti-pencil"></i></a>
+                                <% if ((ipProtocolCount || {})[node.ip] < 2) { %>
+                                <a href="/panel/nodes/add?cloneFrom=<%= node._id %>" class="btn-icon" title="<%= t('nodes.addPairedProtocol') %>"><i class="ti ti-plug-connected"></i></a>
+                                <% } %>
                                 <button class="btn-icon btn-icon-danger" onclick="deleteNode('<%= node._id %>')" title="<%= t('common.delete') %>"><i class="ti ti-trash"></i></button>
                             </div>
                         </td>

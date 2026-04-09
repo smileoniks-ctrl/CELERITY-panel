@@ -18,7 +18,7 @@ const configGenerator = require('./configGenerator');
  * @returns {boolean} true if node appears to be on the same server as the panel
  */
 function isSameVpsAsPanel(node) {
-    const panelDomain = config.PANEL_DOMAIN;
+    const panelDomain = (config.PANEL_DOMAIN || '').toLowerCase().trim();
     
     // 1. Domain match - most reliable indicator
     if (node.domain && node.domain === panelDomain) {
@@ -28,6 +28,10 @@ function isSameVpsAsPanel(node) {
     
     // 2. Localhost / loopback detection
     const nodeIp = (node.ip || '').toLowerCase().trim();
+    if (panelDomain && nodeIp === panelDomain) {
+        logger.debug(`[NodeSetup] Same VPS detected: node IP/host matches panel domain (${nodeIp})`);
+        return true;
+    }
     if (nodeIp === 'localhost' || nodeIp === '127.0.0.1' || nodeIp === '::1') {
         logger.debug(`[NodeSetup] Same VPS detected: localhost IP (${nodeIp})`);
         return true;
@@ -96,6 +100,21 @@ function getPanelCertificates(domain) {
         return null;
     }
 }
+
+// Reusable shell snippet: persist iptables rules across reboots
+const IPTABLES_SAVE_SNIPPET = `
+if command -v netfilter-persistent &> /dev/null; then
+    netfilter-persistent save 2>/dev/null
+    echo "Done: Rules saved with netfilter-persistent"
+elif [ -f /etc/debian_version ]; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y netfilter-persistent iptables-persistent 2>/dev/null || true
+    netfilter-persistent save 2>/dev/null || true
+elif command -v iptables-save &> /dev/null; then
+    mkdir -p /etc/iptables
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+    echo "Done: Rules saved with iptables-save"
+fi`;
 
 const INSTALL_SCRIPT = `#!/bin/bash
 set -e
@@ -223,6 +242,8 @@ function getPortHoppingScript(portRange, mainPort) {
 echo "=== [4/5] Setting up port hopping ${start}-${end} -> ${mainPort} ==="
 
 # Clear old rules
+iptables -D INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
+ip6tables -D INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
 iptables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 ip6tables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
@@ -232,9 +253,14 @@ for iface in eth0 eth1 ens3 ens5 enp0s3 eno1; do
     ip6tables -t nat -D PREROUTING -i $iface -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 done
 
+# Open hop range in firewall before redirecting it
+iptables -C INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport ${start}:${end} -j ACCEPT
+ip6tables -C INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p udp --dport ${start}:${end} -j ACCEPT 2>/dev/null || true
+echo "Done: INPUT rules added"
+
 # Add new rules (no interface binding)
-iptables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
-ip6tables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
+iptables -t nat -C PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
+ip6tables -t nat -C PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || ip6tables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 echo "Done: iptables NAT rules added"
 
 # Open ports in firewall (ufw)
@@ -248,7 +274,7 @@ if command -v netfilter-persistent &> /dev/null; then
     netfilter-persistent save 2>/dev/null
     echo "Done: Rules saved with netfilter-persistent"
 elif [ -f /etc/debian_version ]; then
-    apt-get install -y iptables-persistent 2>/dev/null || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y netfilter-persistent 2>/dev/null || true
     netfilter-persistent save 2>/dev/null || true
 elif command -v iptables-save &> /dev/null; then
     mkdir -p /etc/iptables
@@ -525,6 +551,8 @@ if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     echo "Done: Port 80 opened in ufw"
 fi
 
+${IPTABLES_SAVE_SNIPPET}
+
 if ss -tlnp | grep -q ':80 '; then
     echo "⚠️  Warning: Port 80 is already in use (likely by the panel):"
     ss -tlnp | grep ':80 '
@@ -549,16 +577,20 @@ echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
         logs.push('--- End config ---');
         
         if (setupPortHopping && node.portRange) {
-            log(`Setting up port hopping (${node.portRange})...`);
-            const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
-            if (portHoppingScript) {
-                const hopResult = await execSSH(conn, portHoppingScript);
-                logs.push(hopResult.output);
-                
-                if (!hopResult.success) {
-                    log(`Port hopping setup warning: ${hopResult.error}`);
-                } else {
-                    log('Port hopping configured');
+            if (isSameVpsAsPanel(node)) {
+                log('Skipping port hopping for self-hosted node (incompatible with Docker networking)');
+            } else {
+                log(`Setting up port hopping (${node.portRange})...`);
+                const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
+                if (portHoppingScript) {
+                    const hopResult = await execSSH(conn, portHoppingScript);
+                    logs.push(hopResult.output);
+
+                    if (!hopResult.success) {
+                        log(`Port hopping setup warning: ${hopResult.error}`);
+                    } else {
+                        log('Port hopping configured');
+                    }
                 }
             }
         }
@@ -582,6 +614,8 @@ if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     ufw allow ${statsPort}/tcp 2>/dev/null || true
     echo "Done: Ports ${mainPort}, ${statsPort} opened in ufw"
 fi
+
+${IPTABLES_SAVE_SNIPPET}
 
 echo "Done: Firewall configured"
         `);
@@ -856,6 +890,7 @@ if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: acti
     ufw allow ${mainPort}/udp 2>/dev/null || true
     echo "Done: UFW rules added"
 fi
+${IPTABLES_SAVE_SNIPPET}
 echo "Done: Firewall configured"
         `);
         logs.push(firewallResult.output);
@@ -941,23 +976,70 @@ function generateAgentToken() {
 }
 
 /**
+ * Ensure the Xray node has a persisted agent token in MongoDB.
+ * MongoDB remains the source of truth; the installer only consumes the saved token.
+ *
+ * @param {Object} node - Node document
+ * @returns {{ node: Object, token: string, created: boolean }}
+ */
+async function ensureXrayAgentToken(node) {
+    if (node.type !== 'xray') {
+        throw new Error(`Node ${node.name} is not an Xray node`);
+    }
+
+    const existingToken = (node.xray || {}).agentToken;
+    if (existingToken) {
+        return { node, token: existingToken, created: false };
+    }
+
+    const HyNode = require('../models/hyNodeModel');
+    const generatedToken = generateAgentToken();
+
+    const updatedNode = await HyNode.findOneAndUpdate(
+        {
+            _id: node._id,
+            $or: [
+                { 'xray.agentToken': { $exists: false } },
+                { 'xray.agentToken': '' },
+            ],
+        },
+        { $set: { 'xray.agentToken': generatedToken } },
+        { new: true }
+    );
+
+    const freshNode = updatedNode || await HyNode.findById(node._id);
+    const token = freshNode?.xray?.agentToken || '';
+
+    if (!token) {
+        throw new Error(`Could not persist agent token for node ${node.name}`);
+    }
+
+    return {
+        node: freshNode,
+        token,
+        created: !!updatedNode,
+    };
+}
+
+/**
  * Install and configure cc-agent on an Xray node via SSH.
  *
  * Flow:
  *  1. Download binary from GitHub releases (or fallback URL)
  *  2. Write /etc/cc-agent/config.json with token + TLS settings
  *  3. If TLS: generate self-signed cert with openssl
- *  4. Open port in firewall only for the panel's IP
+ *  4. Open port in firewall for the panel source or local Docker networks
  *  5. Install & start cc-agent.service
  *
  * @param {Object} conn  - Active ssh2 connection
  * @param {Object} node  - Node document
  * @param {string} token - Pre-generated agent token
- * @param {string} panelIp - Panel's outbound IP (for firewall whitelist)
+ * @param {string} panelSource - Panel firewall source (IP/host hint for remote nodes)
+ * @param {boolean} sameVps - Whether the node is on the same VPS as the panel
  * @param {Function} log - Logging callback
  * @returns {{ success, agentVersion }}
  */
-async function installCCAgent(conn, node, token, panelIp, log) {
+async function installCCAgent(conn, node, token, panelSource, sameVps, log) {
     const agentPort = (node.xray || {}).agentPort || 62080;
     const useTls = (node.xray || {}).agentTls !== false;
     const apiPort = (node.xray || {}).apiPort || 61000;
@@ -978,75 +1060,95 @@ async function installCCAgent(conn, node, token, panelIp, log) {
 
     const configJson = JSON.stringify(agentConfig, null, 2);
 
-    // TLS setup: generate self-signed certificate with openssl
-    const tlsSetupScript = useTls ? `
-echo "=== Generating self-signed TLS cert for cc-agent ==="
-openssl req -x509 -nodes -newkey rsa:2048 \\
-    -keyout /etc/cc-agent/key.pem \\
-    -out /etc/cc-agent/cert.pem \\
-    -subj "/CN=cc-agent" -days 36500 2>&1
-chmod 600 /etc/cc-agent/key.pem /etc/cc-agent/cert.pem
-echo "Done: TLS cert generated"
-` : `
-echo "TLS disabled, skipping cert generation"
-`;
+    // Build firewall rules based on setup type
+    let firewallRules = '';
+    if (sameVps) {
+        firewallRules = `
+echo "Same-VPS setup: allowing loopback and Docker networks"
+if command -v iptables &> /dev/null; then
+    iptables -I INPUT -p tcp -s 127.0.0.1/32 --dport ${agentPort} -j ACCEPT 2>/dev/null || true
+    iptables -I INPUT -p tcp -s 172.16.0.0/12 --dport ${agentPort} -j ACCEPT 2>/dev/null || true
+    iptables -I INPUT -p tcp -s 192.168.0.0/16 --dport ${agentPort} -j ACCEPT 2>/dev/null || true
+    echo "Done: iptables rules added"
+fi
+if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow from 127.0.0.1 to any port ${agentPort} proto tcp 2>/dev/null || true
+    ufw allow from 172.16.0.0/12 to any port ${agentPort} proto tcp 2>/dev/null || true
+    ufw allow from 192.168.0.0/16 to any port ${agentPort} proto tcp 2>/dev/null || true
+    echo "Done: ufw rules added"
+fi`;
+    } else if (panelSource) {
+        firewallRules = `
+echo "Remote setup: allowing panel source ${panelSource}"
+if command -v iptables &> /dev/null; then
+    iptables -I INPUT -p tcp -s ${panelSource} --dport ${agentPort} -j ACCEPT 2>/dev/null || true
+    echo "Done: iptables rule added"
+fi
+if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow from ${panelSource} to any port ${agentPort} proto tcp 2>/dev/null || true
+    echo "Done: ufw rule added"
+fi`;
+    } else {
+        firewallRules = 'echo "WARNING: Panel source unknown, skipping firewall rules"';
+    }
 
-    const AGENT_INSTALL = `#!/bin/bash
-# NOTE: set -e is intentionally NOT used here so agent install failure
-# doesn't break the rest of the script (Xray is already set up).
+    // Persist iptables rules across reboots
+    if (firewallRules && !firewallRules.includes('WARNING')) {
+        firewallRules += '\n' + IPTABLES_SAVE_SNIPPET;
+    }
 
-echo "=== [1/5] Downloading CC Agent ==="
+    // Step 1: Download binary
+    log('Downloading cc-agent binary...');
+    const downloadResult = await execSSH(conn, `
+rm -f /usr/local/bin/cc-agent
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-    BIN_NAME="cc-agent-linux-arm64"
+    BIN="cc-agent-linux-arm64"
 else
-    BIN_NAME="cc-agent-linux-amd64"
+    BIN="cc-agent-linux-amd64"
 fi
-
-GITHUB_URL="https://github.com/ClickDevTech/CELERITY-panel/releases/latest/download/$BIN_NAME"
-
-# Clean up any previous broken/stale binary before downloading
-rm -f /usr/local/bin/cc-agent
-
-DOWNLOADED=0
-
-# Primary source: GitHub releases (curl -f exits with code 22 on HTTP errors)
-if curl -fsSL --max-time 60 "$GITHUB_URL" -o /usr/local/bin/cc-agent 2>/dev/null && [ -s /usr/local/bin/cc-agent ]; then
-    chmod +x /usr/local/bin/cc-agent
-    echo "Done: cc-agent downloaded from GitHub"
-    DOWNLOADED=1
+URL="https://github.com/ClickDevTech/CELERITY-panel/releases/latest/download/$BIN"
+echo "Downloading $URL ..."
+curl -fsSL --max-time 120 "$URL" -o /usr/local/bin/cc-agent
+if [ ! -s /usr/local/bin/cc-agent ]; then
+    echo "ERROR: Download failed or file is empty"
+    exit 1
 fi
+chmod +x /usr/local/bin/cc-agent
+echo "OK: cc-agent binary ready"
+ls -la /usr/local/bin/cc-agent
+`);
 
-# Validate the downloaded file is a real ELF binary, not an error page
-if [ "$DOWNLOADED" = "1" ]; then
-    if command -v file &>/dev/null && ! file /usr/local/bin/cc-agent 2>/dev/null | grep -q "ELF"; then
-        echo "WARNING: Downloaded file does not appear to be a valid binary (got: $(file /usr/local/bin/cc-agent 2>/dev/null || echo 'unknown'))"
-        rm -f /usr/local/bin/cc-agent
-        DOWNLOADED=0
-    fi
-fi
+    if (!downloadResult.success) {
+        log(`Binary download failed: ${downloadResult.output}`);
+        return { success: false, agentVersion: '', output: downloadResult.output };
+    }
+    log('Binary downloaded');
 
-if [ "$DOWNLOADED" = "0" ]; then
-    echo "WARNING: Could not download cc-agent binary."
-    echo "Place the binary at /usr/local/bin/cc-agent and restart cc-agent.service"
-    echo "Continuing with Xray setup (agent will be missing)..."
-    exit 0
-fi
+    // Step 2: Write config
+    log('Writing agent config...');
+    await execSSH(conn, 'mkdir -p /etc/cc-agent /var/lib/cc-agent');
+    await uploadFile(conn, configJson, '/etc/cc-agent/config.json');
+    await execSSH(conn, 'chmod 600 /etc/cc-agent/config.json');
+    log('Config written');
 
-echo "=== [2/5] Creating directories ==="
-mkdir -p /etc/cc-agent /var/lib/cc-agent
+    // Step 3: Generate TLS cert if needed
+    if (useTls) {
+        log('Generating TLS certificate...');
+        await execSSH(conn, `
+openssl req -x509 -nodes -newkey rsa:2048 \
+    -keyout /etc/cc-agent/key.pem \
+    -out /etc/cc-agent/cert.pem \
+    -subj "/CN=cc-agent" -days 36500 2>&1
+chmod 600 /etc/cc-agent/key.pem /etc/cc-agent/cert.pem
+echo "OK: TLS cert generated"
+`);
+        log('TLS certificate ready');
+    }
 
-echo "=== [3/5] Writing config ==="
-cat > /etc/cc-agent/config.json << 'EOFCONFIG'
-${configJson}
-EOFCONFIG
-echo "Done: config written"
-
-${tlsSetupScript}
-
-echo "=== [4/5] Installing systemd service ==="
-cat > /etc/systemd/system/cc-agent.service << 'EOFSVC'
-[Unit]
+    // Step 4: Install systemd service
+    log('Installing systemd service...');
+    const serviceUnit = `[Unit]
 Description=CC Xray Agent
 After=network.target xray.service
 
@@ -1060,30 +1162,32 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOFSVC
+`;
+    await uploadFile(conn, serviceUnit, '/etc/systemd/system/cc-agent.service');
+    log('Service unit installed');
 
-echo "=== [5/5] Opening firewall for panel IP ${panelIp} ==="
-if command -v iptables &> /dev/null; then
-    iptables -I INPUT -p tcp -s ${panelIp} --dport ${agentPort} -j ACCEPT 2>/dev/null || true
-    echo "Done: iptables rule added"
-fi
-if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-    ufw allow from ${panelIp} to any port ${agentPort} proto tcp 2>/dev/null || true
-    echo "Done: ufw rule added"
-fi
-
-echo "=== Starting cc-agent ==="
+    // Step 5: Firewall + start service
+    log('Configuring firewall and starting service...');
+    const startResult = await execSSH(conn, `
+${firewallRules}
 systemctl daemon-reload
 systemctl enable cc-agent
 systemctl restart cc-agent
 sleep 2
-systemctl is-active cc-agent && echo "cc-agent: running" || echo "cc-agent: check logs with: journalctl -u cc-agent -n 30"
-echo "Done: cc-agent installed"
-`;
+if systemctl is-active cc-agent > /dev/null 2>&1; then
+    echo "OK: cc-agent running"
+    /usr/local/bin/cc-agent -version 2>/dev/null || true
+else
+    echo "ERROR: cc-agent failed to start"
+    journalctl -u cc-agent -n 10 --no-pager 2>/dev/null || true
+fi
+`);
 
-    const result = await execSSH(conn, AGENT_INSTALL);
-    const agentVersion = result.output.match(/cc-agent[:\s]+(v[\d.]+)/)?.[1] || 'installed';
-    return { success: result.success, agentVersion, output: result.output };
+    const allOutput = [downloadResult.output, startResult.output].join('\n');
+    const agentVersion = allOutput.match(/cc-agent[:\s]+(v[\d.]+)/)?.[1] || 'installed';
+    const isRunning = startResult.output.includes('OK: cc-agent running');
+
+    return { success: isRunning, agentVersion, output: allOutput };
 }
 
 /**
@@ -1091,7 +1195,20 @@ echo "Done: cc-agent installed"
  * Extends setupXrayNode to also install the agent.
  */
 async function setupXrayNodeWithAgent(node, options = {}) {
-    const result = await setupXrayNode(node, options);
+    let preparedNode = node;
+    let agentToken = '';
+
+    try {
+        const ensured = await ensureXrayAgentToken(node);
+        preparedNode = ensured.node;
+        agentToken = ensured.token;
+    } catch (error) {
+        const line = `[${new Date().toISOString()}] Agent token error: ${error.message}`;
+        logger.error(`[AgentSetup] ${error.message}`);
+        return { success: false, error: error.message, logs: [line] };
+    }
+
+    const result = await setupXrayNode(preparedNode, options);
 
     if (!result.success) {
         return result;
@@ -1105,40 +1222,41 @@ async function setupXrayNodeWithAgent(node, options = {}) {
 
     let conn;
     try {
-        log('Connecting via SSH for agent installation...');
-        conn = await connectSSH(node);
-
-        // Generate agent token if not set
-        let agentToken = (node.xray || {}).agentToken;
-        if (!agentToken) {
-            agentToken = generateAgentToken();
-            log(`Generated agent token: ${agentToken.substring(0, 8)}...`);
+        if ((node.xray || {}).agentToken !== agentToken) {
+            log('Agent token ensured in database');
         }
 
-        // Determine panel IP from config (the IP the node can reach the panel from)
-        const panelIpRaw = config.BASE_URL || '';
-        const panelIp = panelIpRaw.replace(/^https?:\/\//, '').split(':')[0].split('/')[0] || '0.0.0.0';
-        log(`Panel IP for firewall: ${panelIp}`);
+        log('Connecting via SSH for agent installation...');
+        conn = await connectSSH(preparedNode);
+
+        // Same-VPS setups must allow Docker bridge traffic to reach the host agent.
+        const sameVps = isSameVpsAsPanel(preparedNode);
+        const panelSourceRaw = process.env.PANEL_IP || config.BASE_URL || '';
+        const panelSource = panelSourceRaw.replace(/^https?:\/\//, '').split(':')[0].split('/')[0];
+        log(`Agent firewall mode: ${sameVps ? 'same-vps' : 'remote'}`);
+        if (!sameVps) {
+            log(`Panel source for firewall: ${panelSource || 'not provided'}`);
+        }
 
         log('Installing CC Agent...');
-        const agentResult = await installCCAgent(conn, node, agentToken, panelIp, log);
-        result.logs.push(agentResult.output);
-
-        if (!agentResult.success) {
-            log(`Agent install warning: may have failed, check logs above`);
-        } else {
-            log(`Agent installed: ${agentResult.agentVersion}`);
+        const agentResult = await installCCAgent(conn, preparedNode, agentToken, panelSource, sameVps, log);
+        if (agentResult.output) {
+            result.logs.push(agentResult.output);
         }
 
-        // Persist agent token and version to DB
+        if (!agentResult.success) {
+            throw new Error('CC Agent installation failed');
+        }
+        log(`Agent installed: ${agentResult.agentVersion}`);
+
         const HyNode = require('../models/hyNodeModel');
         const updates = {
             'xray.agentToken': agentToken,
             agentVersion: agentResult.agentVersion,
             agentStatus: 'unknown', // will be updated on first health check
         };
-        await HyNode.updateOne({ _id: node._id }, { $set: updates });
-        log('Agent token saved to database');
+        await HyNode.updateOne({ _id: preparedNode._id }, { $set: updates });
+        log('Agent metadata saved to database');
 
         result.agentToken = agentToken;
 
@@ -1146,7 +1264,7 @@ async function setupXrayNodeWithAgent(node, options = {}) {
         const line = `[${new Date().toISOString()}] Agent install error: ${error.message}`;
         result.logs.push(line);
         logger.error(`[AgentSetup] ${error.message}`);
-        // Don't fail the whole setup if agent install fails
+        return { ...result, success: false, error: error.message };
     } finally {
         if (conn) conn.end();
     }
@@ -1165,6 +1283,7 @@ module.exports = {
     setupXrayNodeWithAgent,
     installCCAgent,
     generateAgentToken,
+    ensureXrayAgentToken,
     generateX25519Keys,
     checkXrayNodeStatus,
     getXrayNodeLogs,

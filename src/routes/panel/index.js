@@ -6,9 +6,10 @@
 const express = require('express');
 const router = express.Router();
 
-const { checkIpWhitelist, requireAuth } = require('./helpers');
+const { checkIpWhitelist, requireAuth, requireOnboarding } = require('./helpers');
 
 const authRoutes = require('./auth');
+const wizardRoutes = require('./wizard');
 const nodesRoutes = require('./nodes');
 const usersRoutes = require('./users');
 const settingsRoutes = require('./settings');
@@ -20,10 +21,13 @@ router.use(checkIpWhitelist);
 // Auth routes are public (login, setup, totp, logout)
 router.use('/', authRoutes);
 
-// All other routes require authentication
-router.use('/', requireAuth, nodesRoutes);
-router.use('/', requireAuth, usersRoutes);
-router.use('/', requireAuth, settingsRoutes);
-router.use('/', requireAuth, systemRoutes);
+// Wizard routes require auth but bypass requireOnboarding (they ARE the onboarding)
+router.use('/', requireAuth, wizardRoutes);
+
+// All other routes require authentication and completed onboarding
+router.use('/', requireAuth, requireOnboarding, nodesRoutes);
+router.use('/', requireAuth, requireOnboarding, usersRoutes);
+router.use('/', requireAuth, requireOnboarding, settingsRoutes);
+router.use('/', requireAuth, requireOnboarding, systemRoutes);
 
 module.exports = router;

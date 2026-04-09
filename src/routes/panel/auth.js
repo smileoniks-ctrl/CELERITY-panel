@@ -17,6 +17,14 @@ const {
     redirectSettingsSecurity,
 } = require('./helpers');
 
+function renderSetupPage(res, { error = null, enableTotp = false, formData = {} } = {}) {
+    return res.render('setup', {
+        error,
+        enableTotp,
+        formData,
+    });
+}
+
 // GET /panel/login
 router.get('/login', async (req, res) => {
     try {
@@ -47,7 +55,7 @@ router.get('/login', async (req, res) => {
 
             clearPanelTotpPending(req);
             clearPanelLoginTotpLockout(req);
-            return res.render('setup', { error: null, enableTotp: false });
+            return renderSetupPage(res, { error: null, enableTotp: false });
         }
 
         if (pending && pending.type !== 'login') {
@@ -71,15 +79,30 @@ router.post('/setup', async (req, res) => {
         }
 
         const { username, password, passwordConfirm, enableTotp } = req.body;
+        const setupFormData = {
+            username: typeof username === 'string' ? username.trim() : '',
+        };
 
         if (!username || username.length < 3) {
-            return res.render('setup', { error: 'Логин должен быть минимум 3 символа', enableTotp: enableTotp === 'on' });
+            return renderSetupPage(res, {
+                error: res.locals.t?.('setup.usernameTooShort') || 'Username must be at least 3 characters',
+                enableTotp: enableTotp === 'on',
+                formData: setupFormData,
+            });
         }
         if (!password || password.length < 6) {
-            return res.render('setup', { error: 'Пароль должен быть минимум 6 символов', enableTotp: enableTotp === 'on' });
+            return renderSetupPage(res, {
+                error: res.locals.t?.('setup.passwordTooShort') || 'Password must be at least 6 characters',
+                enableTotp: enableTotp === 'on',
+                formData: setupFormData,
+            });
         }
         if (password !== passwordConfirm) {
-            return res.render('setup', { error: 'Пароли не совпадают', enableTotp: enableTotp === 'on' });
+            return renderSetupPage(res, {
+                error: res.locals.t?.('setup.passwordsMismatch') || 'Passwords do not match',
+                enableTotp: enableTotp === 'on',
+                formData: setupFormData,
+            });
         }
 
         const normalizedUsername = username.toLowerCase().trim();
@@ -112,7 +135,13 @@ router.post('/setup', async (req, res) => {
         return res.redirect('/panel/totp');
     } catch (error) {
         logger.error('[Panel] Admin creation error:', error.message);
-        return res.render('setup', { error: `${res.locals.t?.('common.error') || 'Error'}: ${error.message}`, enableTotp: req.body.enableTotp === 'on' });
+        return renderSetupPage(res, {
+            error: `${res.locals.t?.('common.error') || 'Error'}: ${error.message}`,
+            enableTotp: req.body.enableTotp === 'on',
+            formData: {
+                username: typeof req.body.username === 'string' ? req.body.username.trim() : '',
+            },
+        });
     }
 });
 

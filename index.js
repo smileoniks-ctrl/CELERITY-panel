@@ -469,6 +469,14 @@ async function startServer() {
         initSessionMiddleware();
         logger.info('[Redis] Session store initialized');
 
+        // Migration: drop legacy unique index on ip (replaced by compound {ip, type} index)
+        try {
+            await mongoose.connection.collection('hynodes').dropIndex('ip_1');
+            logger.info('[Migration] Dropped legacy ip_1 unique index from hynodes');
+        } catch (_e) {
+            // Index already dropped or never existed — safe to ignore
+        }
+
         // Migration: ensure all users have xrayUuid (for Xray VLESS support)
         const usersWithoutUuid = await HyUser.find({
             $or: [{ xrayUuid: { $exists: false } }, { xrayUuid: null }, { xrayUuid: '' }]
@@ -483,6 +491,22 @@ async function startServer() {
             }));
             await HyUser.bulkWrite(bulkOps, { ordered: false });
             logger.info(`[Migration] Generated xrayUuid for ${usersWithoutUuid.length} existing users`);
+        }
+
+        // Migration: mark onboarding as completed for existing installations
+        // Prevents the wizard from showing to users who already have nodes set up
+        try {
+            const Settings = require('./src/models/settingsModel');
+            const existingSettings = await Settings.get();
+            if (!existingSettings.deployment?.completed) {
+                const existingNodeCount = await HyNode.countDocuments();
+                if (existingNodeCount > 0) {
+                    await Settings.update({ 'deployment.completed': true, 'deployment.completedAt': new Date() });
+                    logger.info('[Migration] Marked onboarding as completed (existing installation detected)');
+                }
+            }
+        } catch (migErr) {
+            logger.warn(`[Migration] Deployment migration warning: ${migErr.message}`);
         }
 
         await reloadSettings();

@@ -1,5 +1,5 @@
 <%# ========== Xray Node Info (edit only) ========== %>
-<% if (node && node.type === 'xray') { %>
+<% if (node?._id && node.type === 'xray') { %>
 <div class="card mt-3" id="xrayNodeInfoCard">
     <div class="card-header">
         <h2><img src="/img/xray.svg" alt="Xray" style="width:18px;height:18px;vertical-align:middle;margin-right:8px;"><%= t('nodes.nodeInfo') %></h2>
@@ -46,7 +46,7 @@
 <% } %>
 
 <%# ========== Cascade Links (edit only, xray) ========== %>
-<% if (node && node.type === 'xray') { %>
+<% if (node?._id && node.type === 'xray') { %>
 <div class="card mt-3">
     <div class="card-header">
         <h2><i class="ti ti-topology-star-3" style="margin-right:6px"></i> <%= t('nodes.cascadeLinks') %></h2>
@@ -202,7 +202,7 @@
 <% } %>
 
 <%# ========== Config Preview (Hysteria, edit only) ========== %>
-<% if (node && node.type !== 'xray') { %>
+<% if (node?._id && node.type !== 'xray') { %>
 <div class="card mt-3">
     <div class="card-header">
         <h2><%= t('nodes.nodeConfig') %></h2>

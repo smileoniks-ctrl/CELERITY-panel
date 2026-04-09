@@ -1401,6 +1401,266 @@ html {
     line-height: 1.35;
 }
 
+/* Onboarding Pages */
+.onboarding-page {
+    min-height: 100vh;
+    padding: 32px 16px 48px;
+    background:
+        radial-gradient(circle at top, rgba(99, 102, 241, 0.16) 0%, transparent 32%),
+        linear-gradient(135deg, #09090b 0%, #0f1020 48%, #111113 100%);
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.onboarding-page::before,
+.onboarding-page::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.onboarding-page::before {
+    inset: -35vmax;
+    background: conic-gradient(
+        from 0deg,
+        rgba(99, 102, 241, 0.18),
+        rgba(168, 85, 247, 0.14),
+        rgba(14, 165, 233, 0.12),
+        rgba(99, 102, 241, 0.18)
+    );
+    filter: blur(96px);
+    opacity: 0.9;
+    transform-origin: center;
+    animation: onboardingRotate 42s linear infinite;
+}
+
+.onboarding-page::after {
+    background:
+        radial-gradient(circle at 18% 18%, rgba(99, 102, 241, 0.18), transparent 26%),
+        radial-gradient(circle at 82% 16%, rgba(168, 85, 247, 0.16), transparent 28%),
+        radial-gradient(circle at 50% 82%, rgba(56, 189, 248, 0.12), transparent 24%);
+    animation: onboardingFloat 18s ease-in-out infinite alternate;
+}
+
+@keyframes onboardingRotate {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes onboardingFloat {
+    to { transform: translate3d(0, 18px, 0) scale(1.04); }
+}
+
+.onboarding-shell {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 760px);
+    margin: 0 auto;
+}
+
+.onboarding-card {
+    position: relative;
+    background: rgba(17, 17, 19, 0.86);
+    border: 1px solid rgba(63, 63, 70, 0.78);
+    border-radius: 24px;
+    padding: clamp(24px, 4vw, 46px);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+}
+
+.onboarding-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 28%);
+    pointer-events: none;
+}
+
+.onboarding-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.onboarding-header .logo-icon {
+    font-size: 48px;
+    display: inline-block;
+    filter: drop-shadow(0 0 18px var(--accent-glow));
+}
+
+.onboarding-header h1 {
+    margin-top: 16px;
+    font-size: clamp(28px, 4vw, 36px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.onboarding-brand {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.onboarding-subtitle {
+    max-width: 620px;
+    margin: 12px auto 0;
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+.onboarding-lang-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    margin: 0 auto 28px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+}
+
+.onboarding-lang-switch a {
+    min-width: 48px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.onboarding-lang-switch a:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.onboarding-lang-switch a.active {
+    color: white;
+    background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+    box-shadow: 0 10px 24px rgba(99, 102, 241, 0.25);
+}
+
+.onboarding-stack > * + * {
+    margin-top: 18px;
+}
+
+.onboarding-section {
+    position: relative;
+    border: 1px solid rgba(63, 63, 70, 0.9);
+    border-radius: 18px;
+    padding: 20px;
+    background: rgba(24, 24, 27, 0.74);
+}
+
+.onboarding-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.onboarding-section-title i {
+    font-size: 16px;
+    color: var(--accent);
+}
+
+.onboarding-section-copy {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.onboarding-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+.onboarding-feature-card {
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(63, 63, 70, 0.9);
+    background: rgba(24, 24, 27, 0.72);
+}
+
+.onboarding-feature-card strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.onboarding-feature-card span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.onboarding-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.onboarding-actions .btn {
+    flex: 1 1 0;
+}
+
+.onboarding-progress-meta {
+    text-align: center;
+    margin-bottom: 22px;
+}
+
+.onboarding-progress-meta p {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+@media (max-width: 800px) {
+    .onboarding-feature-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .onboarding-page {
+        padding: 18px 12px 28px;
+    }
+
+    .onboarding-card {
+        border-radius: 20px;
+        padding: 20px 18px;
+    }
+
+    .onboarding-header {
+        margin-bottom: 24px;
+    }
+
+    .onboarding-actions {
+        flex-direction: column;
+    }
+}
+
 /* Login Page */
 .login-page {
     display: flex;

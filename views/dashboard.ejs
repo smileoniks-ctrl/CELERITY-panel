@@ -666,7 +666,7 @@ async function loadSystemStats() {
 async function loadNodesStats(onlyIds) {
     const renderStats = (data, desktopEl, mobileEl) => {
         if (data.success) {
-            const cpuPercent = Math.min(Math.round((data.cpu.load1 / data.cpu.cores) * 100), 100);
+            const cpuPercent = data.cpu.percent != null ? data.cpu.percent : Math.min(Math.round((data.cpu.load1 / data.cpu.cores) * 100), 100);
             const memPercent = data.mem.percent;
             
             let cpuColor = 'var(--text-primary)';

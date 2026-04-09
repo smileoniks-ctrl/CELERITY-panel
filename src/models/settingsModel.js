@@ -97,6 +97,12 @@ const settingsSchema = new mongoose.Schema({
         },
     },
 
+    deployment: {
+        completed:   { type: Boolean, default: false },
+        profile:     { type: String, enum: ['', 'self-host', 'remote'], default: '' },
+        completedAt: { type: Date, default: null },
+    },
+
     routing: {
         enabled: { type: Boolean, default: false },
         rules: {

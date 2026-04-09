@@ -224,14 +224,26 @@ async function manageNode(args, emit) {
     switch (action) {
         case 'create': {
             if (!data.name || !data.ip) throw new Error('name and ip are required for create');
-            const existing = await HyNode.findOne({ ip: data.ip });
-            if (existing) return { error: 'Node with this IP already exists', code: 409 };
+            const nodeType = data.type || 'hysteria';
+            const existing = await HyNode.findOne({ ip: data.ip, type: nodeType });
+            if (existing) return { error: `A ${nodeType} node with this IP already exists`, code: 409 };
 
             const statsSecret = cryptoService.generateNodeSecret();
+
+            // Resolve SSH: use caller-provided credentials, or inherit from sibling node on same IP
+            const rawSsh = data.ssh || {};
+            let resolvedSsh;
+            if (rawSsh.password || rawSsh.privateKey) {
+                resolvedSsh = cryptoService.encryptSshCredentials(rawSsh);
+            } else {
+                const sibling = await HyNode.findOne({ ip: data.ip, type: { $ne: nodeType } }).select('ssh').lean();
+                resolvedSsh = sibling?.ssh || cryptoService.encryptSshCredentials({});
+            }
+
             const nodeData = {
                 name: data.name,
                 ip: data.ip,
-                type: data.type || 'hysteria',
+                type: nodeType,
                 domain: data.domain || '',
                 sni: data.sni || '',
                 port: data.port || 443,
@@ -239,7 +251,7 @@ async function manageNode(args, emit) {
                 statsPort: 9999,
                 statsSecret,
                 groups: data.groups || [],
-                ssh: cryptoService.encryptSshCredentials(data.ssh || {}),
+                ssh: resolvedSsh,
                 active: true,
                 status: 'offline',
                 cascadeRole: data.cascadeRole || 'standalone',

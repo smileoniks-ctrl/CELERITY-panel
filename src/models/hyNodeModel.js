@@ -157,7 +157,7 @@ const hyNodeSchema = new mongoose.Schema({
 
     name: { type: String, required: true },
     flag: { type: String, default: '' },
-    ip: { type: String, required: true, unique: true },
+    ip: { type: String, required: true },
     domain: { type: String, default: '' },
     sni: { type: String, default: '' },
     port: { type: Number, default: 443 },
@@ -246,6 +246,8 @@ const hyNodeSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
+// One IP may host at most one node per protocol type
+hyNodeSchema.index({ ip: 1, type: 1 }, { unique: true });
 hyNodeSchema.index({ active: 1 });
 hyNodeSchema.index({ groups: 1 });
 hyNodeSchema.index({ status: 1 });

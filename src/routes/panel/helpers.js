@@ -758,6 +758,37 @@ const sniScanLimiter = rateLimit({
     },
 });
 
+// ─── Onboarding Middleware ────────────────────────────────────────────────────
+
+// In-memory cache for deployment.completed — avoids a Mongo round-trip on every request.
+// Reset whenever the wizard marks onboarding as completed.
+let _onboardingCompleted = null;
+
+function invalidateOnboardingCache() {
+    _onboardingCompleted = null;
+}
+
+const requireOnboarding = async (req, res, next) => {
+    try {
+        // Skip wizard-related paths so they are never redirected
+        if (req.path.startsWith('/wizard')) return next();
+
+        if (_onboardingCompleted === null) {
+            const Settings = require('../../models/settingsModel');
+            const settings = await Settings.get();
+            _onboardingCompleted = settings.deployment?.completed === true;
+        }
+
+        if (_onboardingCompleted) return next();
+
+        return res.redirect('/panel/wizard');
+    } catch (err) {
+        // On error, let the request through — fail-safe
+        logger.warn(`[Onboarding] Middleware error, allowing request: ${err.message}`);
+        return next();
+    }
+};
+
 module.exports = {
     backupUpload,
     buildSshKeyFilename,
@@ -770,6 +801,8 @@ module.exports = {
     validateHysteriaFormFields,
     checkIpWhitelist,
     requireAuth,
+    requireOnboarding,
+    invalidateOnboardingCache,
     render,
     loginLimiter,
     totpVerifyLimiter,
