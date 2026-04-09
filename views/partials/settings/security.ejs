@@ -165,7 +165,7 @@
                             <td><code style="font-size:12px;"><%= key.keyPrefix %>...</code></td>
                             <td>
                                 <% (key.scopes || []).forEach(scope => { %>
-                                <span class="badge" style="font-size:10px; margin:1px; background: var(--primary-dim, rgba(99,102,241,0.15)); color: var(--primary); border-radius:4px; padding:2px 6px;"><%= scope %></span>
+                                <span class="badge" style="font-size:10px; margin:1px; background: rgba(99,102,241,0.15); color: var(--accent); border-radius:4px; padding:2px 6px;"><%= scope %></span>
                                 <% }) %>
                                 <% if (!key.scopes || key.scopes.length === 0) { %>
                                 <span style="color:var(--text-muted); font-size:12px;">—</span>

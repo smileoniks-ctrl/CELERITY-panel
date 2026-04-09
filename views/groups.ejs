@@ -87,6 +87,7 @@
     display: flex;
     gap: 0.75rem;
     align-items: flex-end;
+    flex-wrap: wrap;
 }
 .form-inline .form-group {
     margin: 0;
@@ -98,15 +99,36 @@
     border-radius: 6px;
     cursor: pointer;
 }
+@media (max-width: 768px) {
+    .form-inline .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .form-inline .form-group {
+        flex: 1 1 100% !important;
+    }
+    .form-inline .form-row > .btn {
+        width: 100%;
+    }
+    .form-row-inline {
+        flex-direction: column;
+    }
+    .group-devices {
+        width: 100% !important;
+    }
+    .groups-grid {
+        grid-template-columns: 1fr;
+    }
+}
 .groups-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 1rem;
 }
 .group-card {
-    background: var(--card-bg);
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 1rem;
     position: relative;
 }
@@ -122,12 +144,12 @@
     background: transparent;
     border: none;
     border-bottom: 1px solid var(--border);
-    color: var(--text);
+    color: var(--text-primary);
     padding: 0.25rem 0;
 }
 .group-name-input:focus {
     outline: none;
-    border-color: var(--primary);
+    border-color: var(--accent);
 }
 .color-picker {
     width: 32px;
@@ -142,7 +164,7 @@
     gap: 1rem;
     margin-bottom: 0.75rem;
     font-size: 0.9rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 .form-row-inline {
     display: flex;
@@ -151,10 +173,10 @@
 }
 .group-description, .group-devices {
     padding: 0.5rem;
-    background: var(--input-bg);
+    background: var(--bg-primary);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
     font-size: 0.9rem;
 }
 .group-devices {
@@ -178,6 +200,6 @@
 .empty-state {
     text-align: center;
     padding: 2rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 </style>

@@ -51,40 +51,6 @@
         </div>
     </div>
     
-    <style>
-    .login-lang-switcher {
-        display: flex;
-        justify-content: center;
-        gap: 8px;
-        margin-bottom: 20px;
-    }
-    .login-lang-switcher .lang-btn {
-        padding: 6px 16px;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--text-secondary);
-        text-decoration: none;
-        border-radius: 6px;
-        background: var(--bg-tertiary);
-        transition: 0.15s ease;
-    }
-    .login-lang-switcher .lang-btn:hover {
-        color: var(--text-primary);
-        background: var(--bg-hover);
-    }
-    .login-lang-switcher .lang-btn.active {
-        color: var(--text-primary);
-        background: var(--accent);
-    }
-    .lockout-alert {
-        margin-bottom: 16px;
-    }
-    .lockout-meta {
-        margin-top: 6px;
-        font-size: 12px;
-        opacity: 0.9;
-    }
-    </style>
     <script>
     (() => {
         const lockoutAlert = document.getElementById('login-lockout-alert');

@@ -45,7 +45,7 @@
         %>
         <div class="stat-value"><%= formatTraffic(totalGB) %></div>
         <div class="stat-label" title="<%= t('common.upload') || 'Upload' %> <%= formatTraffic(txGB) %> / <%= t('common.download') || 'Download' %> <%= formatTraffic(rxGB) %>">
-            <i class="ti ti-arrow-up" style="color:#22c55e"></i> <%= formatTraffic(txGB) %> / <i class="ti ti-arrow-down" style="color:#3b82f6"></i> <%= formatTraffic(rxGB) %>
+            <i class="ti ti-arrow-up" style="color:var(--success)"></i> <%= formatTraffic(txGB) %> / <i class="ti ti-arrow-down" style="color:var(--info)"></i> <%= formatTraffic(rxGB) %>
         </div>
     </div>
 </div>
@@ -354,22 +354,22 @@
 }
 .progress-bar {
     height: 100%;
-    background: var(--primary);
+    background: var(--accent);
     border-radius: 3px;
     transition: width 0.3s;
 }
-.progress-bar.high { background: #ef4444; }
-.progress-bar.medium { background: #f59e0b; }
+.progress-bar.high { background: var(--danger); }
+.progress-bar.medium { background: var(--warning); }
 .node-load {
     font-size: 0.8rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 .node-load .cpu, .node-load .mem {
     display: block;
 }
 .node-speed {
     font-size: 0.8rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 .node-speed .speed-up, .node-speed .speed-down {
     display: flex;
@@ -377,13 +377,13 @@
     gap: 4px;
 }
 .node-speed .speed-up {
-    color: #22c55e;
+    color: var(--success);
 }
 .node-speed .speed-down {
-    color: #3b82f6;
+    color: var(--info);
 }
 .load-placeholder {
-    color: var(--muted);
+    color: var(--text-muted);
 }
 .online-limit {
     color: var(--text-muted);
@@ -744,8 +744,8 @@ async function loadNodesSpeed(onlyIds) {
             }
             if (mobileEl) {
                 mobileEl.innerHTML = `
-                    <span style="color: #22c55e; font-size: 12px;"><i class="ti ti-arrow-up"></i> ${txSpeed}</span><br>
-                    <span style="color: #3b82f6; font-size: 12px;"><i class="ti ti-arrow-down"></i> ${rxSpeed}</span>
+                    <span style="color: var(--success); font-size: 12px;"><i class="ti ti-arrow-up"></i> ${txSpeed}</span><br>
+                    <span style="color: var(--info); font-size: 12px;"><i class="ti ti-arrow-down"></i> ${rxSpeed}</span>
                 `;
             }
         } else {

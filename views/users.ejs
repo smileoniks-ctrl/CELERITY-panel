@@ -303,8 +303,8 @@ function applyFilters() {
 
 // Toggle user (optimistic update)
 async function toggleUser(userId, enabled) {
-    const row = document.querySelector(`tr[data-userid="${userId}"]`);
-    const toggle = row.querySelector('.toggle-switch input');
+    const row = document.querySelector(`tr[data-userid="${userId}"], .mobile-user-card[data-userid="${userId}"]`);
+    const toggle = row ? row.querySelector('.toggle-switch input') : null;
     
     try {
     const res = await fetch(`/api/users/${userId}/${enabled ? 'enable' : 'disable'}`, {
@@ -315,7 +315,7 @@ async function toggleUser(userId, enabled) {
         if (!res.ok) throw new Error('Failed');
         showToast(enabled ? i18n.turnedOn : i18n.turnedOff);
     } catch (e) {
-        toggle.checked = !enabled; // Revert
+        if (toggle) toggle.checked = !enabled;
         showToast(i18n.error, 'error');
     }
 }

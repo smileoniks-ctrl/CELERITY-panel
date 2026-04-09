@@ -126,22 +126,22 @@
 
             <style>
             .sub-btn-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; align-items: center; }
-            .icon-pick-btn { display:flex; align-items:center; justify-content:center; width:38px; height:38px; background:var(--bg-secondary,#1a1a2e); border:1px solid var(--border); border-radius:8px; cursor:pointer; color:var(--text); font-size:18px; flex-shrink:0; transition: border-color .15s; }
-            .icon-pick-btn:hover { border-color: var(--primary); }
+            .icon-pick-btn { display:flex; align-items:center; justify-content:center; width:38px; height:38px; background:var(--bg-secondary,#1a1a2e); border:1px solid var(--border); border-radius:8px; cursor:pointer; color:var(--text-primary); font-size:18px; flex-shrink:0; transition: border-color .15s; }
+            .icon-pick-btn:hover { border-color: var(--accent); }
             .icon-picker { position:fixed; z-index:9999; width:280px; background:var(--bg-secondary,#1c1c2e); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.5); padding:10px; display:none; }
             .icon-picker.open { display:block; }
-            .icon-picker-search { width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg,#0a0a0a); color:var(--text); font-size:13px; margin-bottom:8px; outline:none; }
-            .icon-picker-search:focus { border-color: var(--primary); }
+            .icon-picker-search { width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-primary); color:var(--text-primary); font-size:13px; margin-bottom:8px; outline:none; }
+            .icon-picker-search:focus { border-color: var(--accent); }
             .icon-picker-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; max-height:210px; overflow-y:auto; }
             .icon-picker-grid::-webkit-scrollbar { width:4px; }
             .icon-picker-grid::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
             .icon-pick-cell { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:6px; cursor:pointer; font-size:17px; color:var(--text-muted,#aaa); transition: background .1s, color .1s; }
-            .icon-pick-cell:hover { background:var(--primary); color:#fff; }
+            .icon-pick-cell:hover { background:var(--accent); color:#fff; }
             .tpl-dropdown { display:none; position:absolute; left:0; bottom:calc(100% + 4px); min-width:220px; max-height:320px; overflow-y:auto; background:var(--bg-secondary,#1c1c2e); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.4); z-index:100; padding:6px 0; }
             .tpl-dropdown.open { display:block; }
             .tpl-section { padding:6px 14px 4px; font-size:11px; color:var(--text-muted,#888); text-transform:uppercase; letter-spacing:.04em; }
-            .tpl-item { display:flex; align-items:center; gap:8px; padding:7px 14px; font-size:13px; cursor:pointer; color:var(--text); transition: background .1s; }
-            .tpl-item:hover { background:var(--primary); color:#fff; }
+            .tpl-item { display:flex; align-items:center; gap:8px; padding:7px 14px; font-size:13px; cursor:pointer; color:var(--text-primary); transition: background .1s; }
+            .tpl-item:hover { background:var(--accent); color:#fff; }
             .tpl-item i { font-size:16px; width:20px; text-align:center; }
             </style>
 

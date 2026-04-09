@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= typeof t !== 'undefined' ? t('auth.totpTitle') : 'Two-factor verification' %> | C³ CELERITY</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="login-page">
@@ -32,14 +32,12 @@
         const shouldShowEnrollment = typeof showEnrollment !== 'undefined' ? Boolean(showEnrollment) : isEnrollmentMode;
         const resolvedCancelHref = typeof cancelHref !== 'undefined' ? cancelHref : null;
     %>
-    <div class="login-container">
+    <div class="login-container<%= shouldShowEnrollment ? ' totp-enrollment' : '' %>">
         <div class="login-box">
             <div class="login-header">
                 <span class="logo-icon large">⚡</span>
                 <h1>C³ CELERITY</h1>
-                <p style="margin-top: 12px; color: var(--text-secondary);">
-                    <%= resolvedTitle %>
-                </p>
+                <p><%= resolvedTitle %></p>
             </div>
 
             <% if (error) { %>
@@ -47,19 +45,19 @@
             <% } %>
 
             <% if (shouldShowEnrollment) { %>
-            <div class="alert alert-info" style="margin-bottom: 1rem;">
+            <div class="alert alert-info">
                 <%= resolvedDescription %>
             </div>
-            <div style="display:flex; justify-content:center; margin-bottom: 1rem;">
-                <img src="<%= qrDataUrl %>" alt="TOTP QR" style="width: 220px; height: 220px; border-radius: 10px; background: #fff; padding: 10px;">
+            <div class="totp-qr-section">
+                <img src="<%= qrDataUrl %>" alt="TOTP QR" class="totp-qr">
             </div>
-            <div class="alert alert-info" style="margin-bottom: 1rem;">
-                <strong><%= typeof t !== 'undefined' ? t('auth.totpManualSecret') : 'Manual secret' %>:</strong>
-                <code style="display:block; margin-top:6px; word-break: break-all;"><%= secret %></code>
-                <small><%= typeof t !== 'undefined' ? t('auth.totpQrHint') : 'If QR does not scan, use this secret manually.' %></small>
+            <div class="totp-secret">
+                <div class="totp-secret-label"><%= typeof t !== 'undefined' ? t('auth.totpManualSecret') : 'Manual secret' %></div>
+                <code class="totp-secret-value"><%= secret %></code>
+                <small class="totp-secret-hint"><%= typeof t !== 'undefined' ? t('auth.totpQrHint') : 'If QR does not scan, use this secret manually.' %></small>
             </div>
             <% } else { %>
-            <div class="alert alert-info" style="margin-bottom: 1rem;">
+            <div class="alert alert-info">
                 <%= resolvedDescription %>
             </div>
             <% } %>
@@ -82,7 +80,7 @@
                 </div>
                 <button type="submit" class="btn btn-primary btn-block"><%= resolvedButtonText %></button>
                 <% if (resolvedCancelHref) { %>
-                <a href="<%= resolvedCancelHref %>" class="btn btn-secondary btn-block" style="margin-top: 0.75rem;"><%= typeof t !== 'undefined' ? t('common.cancel') : 'Cancel' %></a>
+                <a href="<%= resolvedCancelHref %>" class="btn btn-secondary btn-block mt-2"><%= typeof t !== 'undefined' ? t('common.cancel') : 'Cancel' %></a>
                 <% } %>
             </form>
         </div>
