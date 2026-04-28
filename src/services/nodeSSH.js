@@ -435,7 +435,11 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
     }
     
     /**
-     * Check if TLS certificate files exist and are valid on the node
+     * Check if TLS certificate files exist and are valid on the node.
+     * Also detects incomplete chains (CA-issued leaf without intermediates) so
+     * that ensureCertificates() can re-upload from the panel — this self-heals
+     * nodes provisioned before the issue #63 fix where /etc/hysteria/cert.pem
+     * contained only the leaf certificate.
      * @returns {Object} { exists: boolean, valid: boolean, error?: string }
      */
     async checkCertificates() {
@@ -443,11 +447,21 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
             const certPath = this.node.paths?.cert || '/etc/hysteria/cert.pem';
             const keyPath = this.node.paths?.key || '/etc/hysteria/key.pem';
             
+            // Self-signed certs (used when node has no domain) are 1-cert and that's
+            // fine — they're identified by issuer == subject. CA-issued leaf-only
+            // certs are reported as INCOMPLETE_CHAIN so they get re-uploaded.
             const result = await this.exec(`
 if [ -f "${certPath}" ] && [ -s "${certPath}" ] && [ -f "${keyPath}" ] && [ -s "${keyPath}" ]; then
     if openssl x509 -in "${certPath}" -noout 2>/dev/null; then
-        echo "VALID"
-        openssl x509 -in "${certPath}" -noout -enddate 2>/dev/null | grep notAfter
+        CERT_COUNT=$(grep -c "BEGIN CERTIFICATE" "${certPath}" 2>/dev/null || echo 0)
+        SUBJECT=$(openssl x509 -in "${certPath}" -noout -subject 2>/dev/null | sed 's/^subject= *//')
+        ISSUER=$(openssl x509 -in "${certPath}" -noout -issuer 2>/dev/null | sed 's/^issuer= *//')
+        if [ "$CERT_COUNT" -lt 2 ] && [ "$SUBJECT" != "$ISSUER" ]; then
+            echo "INCOMPLETE_CHAIN"
+        else
+            echo "VALID"
+            openssl x509 -in "${certPath}" -noout -enddate 2>/dev/null | grep notAfter
+        fi
     else
         echo "INVALID"
     fi
@@ -458,7 +472,10 @@ fi
             
             const output = result.stdout.trim();
             
-            if (output.includes('VALID')) {
+            if (output.includes('INCOMPLETE_CHAIN')) {
+                logger.warn(`[SSH] ${this.node.name}: TLS chain incomplete (leaf only) — will re-upload from panel`);
+                return { exists: true, valid: false, error: 'Incomplete TLS chain (intermediates missing)' };
+            } else if (output.includes('VALID')) {
                 return { exists: true, valid: true };
             } else if (output.includes('INVALID')) {
                 return { exists: true, valid: false, error: 'Certificate is invalid or corrupted' };

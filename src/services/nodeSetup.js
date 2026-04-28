@@ -71,16 +71,24 @@ function getPanelCertificates(domain) {
         }
         
         // Try Greenlock certificates (when USE_CADDY is not set)
-        // Greenlock stores certs in greenlock.d/live/{domain}/
+        // Greenlock stores certs in greenlock.d/live/{domain}/:
+        //   - cert.pem      : leaf certificate only (1 BEGIN CERTIFICATE)
+        //   - fullchain.pem : leaf + intermediates (the bundle TLS servers must serve)
+        //   - privkey.pem   : private key
+        // We MUST prefer fullchain.pem; otherwise Hysteria serves an incomplete TLS
+        // chain and strict clients (insecure=false) fail with x509: certificate
+        // signed by unknown authority. See issue #63.
         const greenlockDir = path.join(__dirname, '../../greenlock.d/live', domain);
         const certPath = path.join(greenlockDir, 'cert.pem');
         const keyPath = path.join(greenlockDir, 'privkey.pem');
         const fullchainPath = path.join(greenlockDir, 'fullchain.pem');
         
-        if (fs.existsSync(certPath)) {
-            cert = fs.readFileSync(certPath, 'utf8');
-        } else if (fs.existsSync(fullchainPath)) {
+        if (fs.existsSync(fullchainPath)) {
             cert = fs.readFileSync(fullchainPath, 'utf8');
+            logger.info(`[NodeSetup] Using Greenlock fullchain.pem for ${domain}`);
+        } else if (fs.existsSync(certPath)) {
+            cert = fs.readFileSync(certPath, 'utf8');
+            logger.warn(`[NodeSetup] fullchain.pem missing for ${domain}, falling back to cert.pem (TLS chain may be incomplete)`);
         }
         
         if (fs.existsSync(keyPath)) {
