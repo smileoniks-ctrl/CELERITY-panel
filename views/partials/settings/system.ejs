@@ -152,10 +152,25 @@
                     </div>
                     <div class="card-body">
                         <label class="checkbox-label" style="margin-bottom: 0.75rem;">
-                            <input type="checkbox" name="sshPool.enabled" 
+                            <input type="checkbox" name="sshPool.enabled" id="sshPoolEnabledToggle"
                                    <%= settings?.sshPool?.enabled !== false ? 'checked' : '' %>>
                             <span><%= t('settings.sshPoolEnabled') %></span>
                         </label>
+                        <div class="alert alert-warning" id="sshPoolDisableWarning"
+                             style="margin-bottom: 0.75rem; padding: 0.75rem; font-size: 13px; <%= settings?.sshPool?.enabled === false ? '' : 'display: none;' %>">
+                            <i class="ti ti-alert-triangle"></i>
+                            <%= t('settings.sshPoolDisableWarning') %>
+                        </div>
+                        <script>
+                            (function () {
+                                var toggle = document.getElementById('sshPoolEnabledToggle');
+                                var warn = document.getElementById('sshPoolDisableWarning');
+                                if (!toggle || !warn) return;
+                                toggle.addEventListener('change', function () {
+                                    warn.style.display = toggle.checked ? 'none' : '';
+                                });
+                            })();
+                        </script>
                         <div class="settings-grid">
                             <div class="form-group">
                                 <label for="sshPool.maxIdleTime"><%= t('settings.sshPoolIdleTime') %></label>

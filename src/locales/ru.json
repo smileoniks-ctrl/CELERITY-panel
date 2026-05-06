@@ -634,6 +634,7 @@
     "sshPoolKeepaliveHint": "Отправка пакетов keepalive для предотвращения NAT timeout",
     "sshPoolRetries": "Макс. попыток",
     "sshPoolRetriesHint": "Количество попыток переподключения при ошибке",
+    "sshPoolDisableWarning": "Не рекомендуется отключать. Без пула при сетевых сбоях возможна перегрузка CPU из-за потока прямых SSH-подключений. Прямой режим теперь ограничен 3 параллельными подключениями, но пул надёжнее.",
     "nodeAuth": "Node Auth API",
     "nodeAuthInsecure": "Разрешить self-signed сертификаты",
     "nodeAuthInsecureHint": "Включите, если панель использует HTTP или self-signed SSL. Ноды будут принимать любой сертификат при подключении к auth API. Отключите для production с валидным SSL.",

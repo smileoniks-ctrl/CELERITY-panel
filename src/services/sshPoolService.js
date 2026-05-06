@@ -90,69 +90,98 @@ class SSHPool {
         }
         
         const nodeId = node._id?.toString() || node.id;
-        
-        // Check existing connection
         const existing = this.connections.get(nodeId);
         
-        if (existing && existing.client._sock?.writable) {
-            // Connection alive - update lastUsed
+        // 1. Handshake in progress for this node - reuse the same promise
+        //    (issue #70: prevents parallel handshakes during the race window
+        //    between createConnection() and its 'ready' handler).
+        if (existing && existing.connecting && existing.promise) {
+            return existing.promise;
+        }
+        
+        // 2. Alive connection - reuse.
+        if (existing && existing.client && existing.client._sock?.writable) {
             existing.lastUsed = Date.now();
             existing.useCount++;
             return existing.client;
         }
         
-        // Dead connection - remove
+        // 3. Dead connection - cleanup before creating a new one.
         if (existing) {
             this.removeConnection(nodeId, 'dead');
         }
         
-        // Create new
+        // createConnection registers its own placeholder (with client identity)
+        // so all event handlers can verify they are still the active attempt.
         return this.createConnection(node);
     }
     
     /**
-     * Create new SSH connection
+     * Create new SSH connection.
+     *
+     * Registers a placeholder { connecting, client, promise } in this.connections
+     * BEFORE calling .connect(). All event handlers verify that the registered
+     * entry still references THIS specific Client instance before mutating
+     * this.connections — this prevents late 'close'/'end' events from a prior
+     * (already-terminated) connection from clobbering a newly-registered
+     * placeholder for the same nodeId.
      */
-    async createConnection(node, retryCount = 0) {
+    createConnection(node, retryCount = 0) {
         const nodeId = node._id?.toString() || node.id;
         const nodeName = node.name || nodeId;
         
-        return new Promise((resolve, reject) => {
-            const client = new Client();
-            
-            // Connection timeout
-            const timeout = setTimeout(() => {
-                client.end();
-                reject(new Error(`Connection timeout (${this.config.connectTimeout}ms)`));
-            }, this.config.connectTimeout);
-            
-            // SSH configuration
-            const sshConfig = {
-                host: node.ip,
-                port: node.ssh?.port || 22,
-                username: node.ssh?.username || 'root',
-                readyTimeout: this.config.connectTimeout,
-                keepaliveInterval: this.config.keepAliveInterval,
-                keepaliveCountMax: 3,
-            };
-            
-            // Authentication
-            if (node.ssh?.privateKey) {
-                sshConfig.privateKey = cryptoService.decryptPrivateKey(node.ssh.privateKey);
-            } else if (node.ssh?.password) {
-                sshConfig.password = cryptoService.decryptSafe(node.ssh.password);
-            } else {
+        let resolveOuter;
+        let rejectOuter;
+        const outerPromise = new Promise((resolve, reject) => {
+            resolveOuter = resolve;
+            rejectOuter = reject;
+        });
+        
+        const client = new Client();
+        
+        // Connection timeout (covers cases where ssh2 emits no error event)
+        const timeout = setTimeout(() => {
+            try { client.end(); } catch (e) {}
+            rejectOuter(new Error(`Connection timeout (${this.config.connectTimeout}ms)`));
+        }, this.config.connectTimeout);
+        
+        const sshConfig = {
+            host: node.ip,
+            port: node.ssh?.port || 22,
+            username: node.ssh?.username || 'root',
+            readyTimeout: this.config.connectTimeout,
+            keepaliveInterval: this.config.keepAliveInterval,
+            keepaliveCountMax: 3,
+        };
+        
+        if (node.ssh?.privateKey) {
+            sshConfig.privateKey = cryptoService.decryptPrivateKey(node.ssh.privateKey);
+        } else if (node.ssh?.password) {
+            sshConfig.password = cryptoService.decryptSafe(node.ssh.password);
+        } else {
+            clearTimeout(timeout);
+            rejectOuter(new Error('SSH: no key or password'));
+            return outerPromise;
+        }
+        
+        // Register placeholder with client identity so every handler
+        // can verify ownership before mutating this.connections.
+        this.connections.set(nodeId, {
+            connecting: true,
+            client,
+            promise: outerPromise,
+            lastUsed: Date.now(),
+        });
+        
+        client
+            .on('ready', () => {
                 clearTimeout(timeout);
-                reject(new Error('SSH: no key or password'));
-                return;
-            }
-            
-            client
-                .on('ready', () => {
-                    clearTimeout(timeout);
-                    
-                    // Save to pool
-                    const meta = {
+                
+                // Promote placeholder to full meta only if WE are still
+                // the registered attempt for this nodeId.
+                const cur = this.connections.get(nodeId);
+                if (!cur || cur.client === client) {
+                    this.connections.set(nodeId, {
                         client,
                         nodeId,
                         nodeName,
@@ -160,43 +189,68 @@ class SSHPool {
                         createdAt: Date.now(),
                         lastUsed: Date.now(),
                         useCount: 1,
-                    };
-                    
-                    this.connections.set(nodeId, meta);
-                    
-                    logger.info(`[SSHPool] ✓ Connected: ${nodeName} (${node.ip}) [pool: ${this.connections.size}]`);
-                    resolve(client);
-                })
-                .on('error', async (err) => {
-                    clearTimeout(timeout);
+                    });
+                }
+                
+                logger.info(`[SSHPool] ✓ Connected: ${nodeName} (${node.ip}) [pool: ${this.connections.size}]`);
+                resolveOuter(client);
+            })
+            .on('error', async (err) => {
+                clearTimeout(timeout);
+                
+                // Identity-aware delete: never touch another attempt's entry.
+                const cur = this.connections.get(nodeId);
+                if (cur && cur.client === client) {
                     this.connections.delete(nodeId);
+                }
+                
+                if (retryCount < this.config.maxRetries) {
+                    const delay = Math.pow(2, retryCount) * 500;
+                    logger.warn(`[SSHPool] ${nodeName}: retry ${retryCount + 1}/${this.config.maxRetries} in ${delay}ms`);
                     
-                    // Retry logic с exponential backoff
-                    if (retryCount < this.config.maxRetries) {
-                        const delay = Math.pow(2, retryCount) * 500;
-                        logger.warn(`[SSHPool] ${nodeName}: retry ${retryCount + 1}/${this.config.maxRetries} in ${delay}ms`);
-                        
-                        await new Promise(r => setTimeout(r, delay));
-                        
-                        try {
-                            const newClient = await this.createConnection(node, retryCount + 1);
-                            resolve(newClient);
-                        } catch (retryErr) {
-                            reject(retryErr);
-                        }
-                    } else {
-                        logger.error(`[SSHPool] ✗ Failed: ${nodeName} - ${err.message}`);
-                        reject(err);
+                    await new Promise(r => setTimeout(r, delay));
+                    
+                    try {
+                        const newClient = await this.createConnection(node, retryCount + 1);
+                        resolveOuter(newClient);
+                    } catch (retryErr) {
+                        rejectOuter(retryErr);
                     }
-                })
-                .on('close', () => {
+                } else {
+                    logger.error(`[SSHPool] ✗ Failed: ${nodeName} - ${err.message}`);
+                    rejectOuter(err);
+                }
+            })
+            .on('close', () => {
+                // Late 'close' from a terminated connection must not
+                // clobber a newly-registered attempt for the same nodeId.
+                const cur = this.connections.get(nodeId);
+                if (cur && cur.client === client) {
                     this.removeConnection(nodeId, 'closed');
-                })
-                .on('end', () => {
+                }
+            })
+            .on('end', () => {
+                const cur = this.connections.get(nodeId);
+                if (cur && cur.client === client) {
                     this.removeConnection(nodeId, 'ended');
-                })
-                .connect(sshConfig);
-        });
+                }
+            });
+        
+        // ssh2's .connect() can throw synchronously on invalid configs
+        // (bad host, unparseable key). Without this guard the outerPromise
+        // would stay pending and the placeholder would leak until cleanup.
+        try {
+            client.connect(sshConfig);
+        } catch (err) {
+            clearTimeout(timeout);
+            const cur = this.connections.get(nodeId);
+            if (cur && cur.client === client) {
+                this.connections.delete(nodeId);
+            }
+            rejectOuter(err);
+        }
+        
+        return outerPromise;
     }
     
     /**
@@ -209,7 +263,7 @@ class SSHPool {
                 conn.client.end();
             } catch (e) {}
             this.connections.delete(nodeId);
-            logger.debug(`[SSHPool] Removed: ${conn.nodeName} (${reason})`);
+            logger.debug(`[SSHPool] Removed: ${conn.nodeName || nodeId} (${reason})`);
         }
     }
     
@@ -381,12 +435,13 @@ class SSHPool {
         for (const [nodeId, conn] of this.connections) {
             connections.push({
                 nodeId,
-                name: conn.nodeName,
-                host: conn.host,
-                alive: conn.client._sock?.writable || false,
-                idleMs: now - conn.lastUsed,
-                useCount: conn.useCount,
-                uptimeMs: now - conn.createdAt,
+                name: conn.nodeName || nodeId,
+                host: conn.host || '',
+                alive: conn.client?._sock?.writable || false,
+                connecting: !!conn.connecting,
+                idleMs: now - (conn.lastUsed || now),
+                useCount: conn.useCount || 0,
+                uptimeMs: conn.createdAt ? now - conn.createdAt : 0,
             });
         }
         

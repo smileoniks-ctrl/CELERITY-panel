@@ -634,6 +634,7 @@
     "sshPoolKeepaliveHint": "Send keepalive packets to prevent NAT timeout",
     "sshPoolRetries": "Max retries",
     "sshPoolRetriesHint": "Reconnection attempts on failure",
+    "sshPoolDisableWarning": "Disabling is not recommended. Without the pool, network instability can saturate CPU with direct SSH handshakes. Direct mode is now capped at 3 parallel connections, but the pool is more reliable.",
     "nodeAuth": "Node Auth API",
     "nodeAuthInsecure": "Allow self-signed certificates",
     "nodeAuthInsecureHint": "Enable if panel uses HTTP or self-signed SSL. Nodes will accept any certificate when connecting to auth API. Disable for production with valid SSL.",

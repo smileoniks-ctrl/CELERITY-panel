@@ -1,8 +1,27 @@
 /**
  * SSH service for Hysteria node management
- * 
+ *
  * Uses SSHPool for connection reuse.
  * Falls back to direct connection if pool unavailable.
+ *
+ * Direct mode is hardened against avalanches (issue #70):
+ * - Global concurrency cap: at most MAX_CONCURRENT_DIRECT handshakes at once,
+ *   bounding CPU usage from DH key-exchange on weak hardware.
+ * - Bounded retries with exponential backoff (mirrors sshPoolService).
+ *
+ * Configuration:
+ * - readyTimeout / maxRetries are inherited from sshPool settings, so the
+ *   admin tunes both pool and direct paths from one place in the UI.
+ * - MAX_CONCURRENT_DIRECT is an expert-only CPU safety cap, exposed as the
+ *   SSH_DIRECT_MAX_CONCURRENT env var (default 3). Not surfaced in the UI to
+ *   avoid foot-guns: setting it too high re-introduces the avalanche risk.
+ *
+ * Note: We intentionally do NOT share clients across NodeSSH instances via
+ * in-flight dedup. Each instance owns its directClient and ends it on
+ * disconnect(); sharing would let one instance close the socket out from
+ * under another. Same-node parallel SSH is rare in this codebase (cascade
+ * health-check, sync, etc. iterate distinct nodes), and the semaphore alone
+ * is sufficient to prevent the avalanche described in issue #70.
  */
 
 const { Client } = require('ssh2');
@@ -10,11 +29,33 @@ const sshPool = require('./sshPoolService');
 const logger = require('../utils/logger');
 const cryptoService = require('./cryptoService');
 
+// Hard cap to keep CPU usage bounded on weak hardware (1 vCPU).
+// Each SSH handshake involves DH key-exchange which is CPU-heavy on Node.js.
+const MAX_CONCURRENT_DIRECT = (() => {
+    const raw = parseInt(process.env.SSH_DIRECT_MAX_CONCURRENT, 10);
+    return (Number.isFinite(raw) && raw > 0) ? raw : 3;
+})();
+
+// Fallback defaults used only until sshPool.config is populated.
+const FALLBACK_READY_TIMEOUT_MS = 15000;
+const FALLBACK_MAX_RETRIES = 2;
+
+function getDirectReadyTimeoutMs() {
+    // sshPool.config.connectTimeout is stored in milliseconds (defaults 15000).
+    const t = sshPool?.config?.connectTimeout;
+    return (Number.isFinite(t) && t > 0) ? t : FALLBACK_READY_TIMEOUT_MS;
+}
+
+function getDirectMaxRetries() {
+    const r = sshPool?.config?.maxRetries;
+    return (Number.isFinite(r) && r >= 0) ? r : FALLBACK_MAX_RETRIES;
+}
+
 class NodeSSH {
     constructor(node) {
         this.node = node;
-        this.usePool = true;  // Use pool by default
-        this.directClient = null;  // For legacy mode
+        this.usePool = true;
+        this.directClient = null;
     }
 
     /**
@@ -22,34 +63,70 @@ class NodeSSH {
      */
     async connect() {
         if (this.usePool) {
-            // Pool manages connections - just verify we can connect
             try {
                 await sshPool.getConnection(this.node);
                 return;
             } catch (error) {
-                logger.warn(`[SSH] Pool failed for ${this.node.name}, falling back to direct`);
+                if (error && error.message === 'SSH Pool disabled') {
+                    logger.debug(`[SSH] Pool disabled, using direct for ${this.node.name}`);
+                } else {
+                    logger.warn(`[SSH] Pool error for ${this.node.name} (${error?.message || 'unknown'}), falling back to direct`);
+                }
                 this.usePool = false;
             }
         }
-        
-        // Fallback: direct connection
+
         return this.connectDirect();
     }
-    
+
     /**
-     * Direct connection (legacy, for special cases)
+     * Direct connection (used when pool is disabled or temporarily failing).
+     * A global semaphore caps simultaneous handshakes so a burst of callers
+     * cannot saturate CPU during network instability.
      */
     async connectDirect() {
+        await NodeSSH._acquireDirectSlot();
+        try {
+            this.directClient = await this._connectDirectWithRetry();
+        } finally {
+            NodeSSH._releaseDirectSlot();
+        }
+    }
+
+    /**
+     * Open a single SSH client with bounded retries and exponential backoff.
+     * Mirrors the retry pattern in sshPoolService.createConnection.
+     */
+    async _connectDirectWithRetry(attempt = 0) {
+        const maxRetries = getDirectMaxRetries();
+        try {
+            return await this._openDirectClient();
+        } catch (err) {
+            if (attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 500;
+                logger.warn(`[SSH] ${this.node.name}: direct retry ${attempt + 1}/${maxRetries} in ${delay}ms (${err.message})`);
+                await new Promise(r => setTimeout(r, delay));
+                return this._connectDirectWithRetry(attempt + 1);
+            }
+            logger.error(`[SSH] Direct connection failed for ${this.node.name}: ${err.message}`);
+            throw err;
+        }
+    }
+
+    /**
+     * One handshake attempt. Resolves with a ready Client or rejects.
+     */
+    _openDirectClient() {
         return new Promise((resolve, reject) => {
-            this.directClient = new Client();
-            
+            const client = new Client();
+
             const config = {
                 host: this.node.ip,
                 port: this.node.ssh?.port || 22,
                 username: this.node.ssh?.username || 'root',
-                readyTimeout: 30000,
+                readyTimeout: getDirectReadyTimeoutMs(),
             };
-            
+
             if (this.node.ssh?.privateKey) {
                 config.privateKey = cryptoService.decryptPrivateKey(this.node.ssh.privateKey);
             } else if (this.node.ssh?.password) {
@@ -58,18 +135,48 @@ class NodeSSH {
                 reject(new Error('SSH: no key or password provided'));
                 return;
             }
-            
-            this.directClient
+
+            let settled = false;
+            client
                 .on('ready', () => {
+                    if (settled) return;
+                    settled = true;
                     logger.info(`[SSH] Connected (direct) to ${this.node.name} (${this.node.ip})`);
-                    resolve();
+                    resolve(client);
                 })
                 .on('error', (err) => {
-                    logger.error(`[SSH] Connection error to ${this.node.name}: ${err.message}`);
+                    if (settled) return;
+                    settled = true;
+                    try { client.end(); } catch (_) {}
                     reject(err);
                 })
                 .connect(config);
         });
+    }
+
+    /**
+     * Acquire a slot from the global direct-connection semaphore.
+     * Blocks (queues) when MAX_CONCURRENT_DIRECT handshakes are already in flight.
+     */
+    static _acquireDirectSlot() {
+        if (NodeSSH._activeDirect < MAX_CONCURRENT_DIRECT) {
+            NodeSSH._activeDirect++;
+            return Promise.resolve();
+        }
+        return new Promise(resolve => NodeSSH._waitQueue.push(resolve));
+    }
+
+    /**
+     * Release a slot and wake the next waiter, if any.
+     */
+    static _releaseDirectSlot() {
+        const next = NodeSSH._waitQueue.shift();
+        if (next) {
+            // Slot count stays the same: we hand it to the next waiter.
+            next();
+        } else {
+            NodeSSH._activeDirect = Math.max(0, NodeSSH._activeDirect - 1);
+        }
     }
 
     /**
@@ -661,5 +768,11 @@ cat /proc/uptime | cut -d' ' -f1
 }
 
 NodeSSH._cpuSamples = new Map();
+
+// Direct-connection semaphore (issue #70 hardening).
+// _activeDirect: number of handshakes currently in progress.
+// _waitQueue:    resolvers blocked by the semaphore, FIFO.
+NodeSSH._activeDirect = 0;
+NodeSSH._waitQueue = [];
 
 module.exports = NodeSSH;
