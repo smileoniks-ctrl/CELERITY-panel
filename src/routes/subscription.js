@@ -331,8 +331,10 @@ function generateVlessURIForInbound(user, node, inbound) {
     const fingerprint = inbound.fingerprint || 'chrome';
 
     const params = new URLSearchParams();
-    // xhttp → splithttp in URI type parameter
-    params.set('type', transport === 'xhttp' ? 'splithttp' : transport);
+    // Modern Xray-core clients (HAPP, NekoBox, v2rayN, Streisand) expect
+    // `type=xhttp`. The legacy `splithttp` keyword is rejected by some
+    // clients and silently falls back to tcp, breaking the connection.
+    params.set('type', transport);
     params.set('security', security);
 
     if (security === 'reality') {
@@ -744,11 +746,6 @@ function _buildClashVlessProxyForInbound(user, node, inbound) {
     const fingerprint = inbound.fingerprint || 'chrome';
     const name = _xrayInboundName(node, inbound);
 
-    // Clash Meta doesn't support splithttp/xhttp - skip these inbounds
-    if (transport === 'xhttp') {
-        return { name, proxy: null };
-    }
-
     let proxy = `  - name: "${name}"
     type: vless
     server: ${host}
@@ -790,6 +787,13 @@ function _buildClashVlessProxyForInbound(user, node, inbound) {
         proxy += `
     grpc-opts:
       grpc-service-name: "${inbound.grpcServiceName || 'grpc'}"`;
+    } else if (transport === 'xhttp') {
+        // Mihomo (Clash Meta) supports XHTTP since 1.18.x via xhttp-opts
+        proxy += `
+    xhttp-opts:
+      path: "${inbound.xhttpPath || '/'}"
+      mode: "${inbound.xhttpMode || 'auto'}"`;
+        if (inbound.xhttpHost) proxy += `\n      host: "${inbound.xhttpHost}"`;
     }
 
     return { name, proxy };
@@ -797,8 +801,7 @@ function _buildClashVlessProxyForInbound(user, node, inbound) {
 
 /**
  * Build Clash proxies for every published inbound of an Xray node.
- * Returns an array of `{name, proxy}` items; entries with `proxy === null`
- * (e.g. xhttp transport not supported by Clash) are filtered by the caller.
+ * Returns an array of `{name, proxy}` items.
  */
 function _buildClashVlessProxies(user, node) {
     return getXrayPublishedInbounds(node)
@@ -815,7 +818,7 @@ function generateClashYAML(user, nodes, routing) {
             if (!user.xrayUuid) return;
             // One Clash entry per published inbound (main + extras).
             _buildClashVlessProxies(user, node).forEach(({ name, proxy }) => {
-                if (!proxy) return; // xhttp not supported by Clash
+                if (!proxy) return;
                 proxyNames.push(name);
                 proxies.push(proxy);
             });
@@ -879,11 +882,6 @@ function _buildSingboxVlessOutboundForInbound(user, node, inbound) {
     const fingerprint = inbound.fingerprint || 'chrome';
     const tag = _xrayInboundName(node, inbound);
 
-    // Sing-box doesn't support splithttp/xhttp - skip these inbounds
-    if (transport === 'xhttp') {
-        return { tag, outbound: null };
-    }
-
     const outbound = {
         type: 'vless',
         tag,
@@ -929,6 +927,16 @@ function _buildSingboxVlessOutboundForInbound(user, node, inbound) {
             type: 'grpc',
             service_name: inbound.grpcServiceName || 'grpc',
         };
+    } else if (transport === 'xhttp') {
+        // sing-box 1.11+ supports XHTTP via transport.type=xhttp
+        outbound.transport = {
+            type: 'xhttp',
+            path: inbound.xhttpPath || '/',
+            mode: inbound.xhttpMode || 'auto',
+        };
+        if (inbound.xhttpHost) {
+            outbound.transport.host = inbound.xhttpHost;
+        }
     }
 
     return { tag, outbound };
@@ -936,7 +944,6 @@ function _buildSingboxVlessOutboundForInbound(user, node, inbound) {
 
 /**
  * Build sing-box outbounds for every published inbound of an Xray node.
- * Entries with `outbound === null` (xhttp) are skipped by the caller.
  */
 function _buildSingboxVlessOutbounds(user, node) {
     return getXrayPublishedInbounds(node)
@@ -963,7 +970,7 @@ function generateV2rayJSON(user, nodes, routing) {
                 const security = inbound.security || 'reality';
                 const tag = _xrayInboundName(node, inbound);
 
-                const streamSettings = { network: transport === 'xhttp' ? 'splithttp' : transport };
+                const streamSettings = { network: transport };
 
                 if (security === 'reality') {
                     const sni = inbound.realitySni && inbound.realitySni[0] ? inbound.realitySni[0] : '';
@@ -993,7 +1000,11 @@ function generateV2rayJSON(user, nodes, routing) {
                 } else if (transport === 'grpc') {
                     streamSettings.grpcSettings = { serviceName: inbound.grpcServiceName || 'grpc', multiMode: false };
                 } else if (transport === 'xhttp') {
-                    streamSettings.splithttpSettings = { path: inbound.xhttpPath || '/', host: inbound.xhttpHost || '' };
+                    streamSettings.xhttpSettings = {
+                        path: inbound.xhttpPath || '/',
+                        host: inbound.xhttpHost || '',
+                        mode: inbound.xhttpMode || 'auto',
+                    };
                 }
 
                 const vnextUser = { id: user.xrayUuid, encryption: 'none' };
@@ -1100,7 +1111,7 @@ function generateSingboxJSON(user, nodes, routing) {
             if (!user.xrayUuid) return;
             // One sing-box outbound per published inbound (main + extras).
             _buildSingboxVlessOutbounds(user, node).forEach(({ tag, outbound }) => {
-                if (!outbound) return; // xhttp not supported by sing-box
+                if (!outbound) return;
                 tags.push(tag);
                 proxyOutbounds.push(outbound);
             });
