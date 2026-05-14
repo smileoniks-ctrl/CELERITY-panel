@@ -604,8 +604,7 @@ function updateXrayTransportUI() {
     if (flowGroup) flowGroup.style.display = transport === 'tcp' ? '' : 'none';
 }
 
-// True when any inbound on the node (main or extras) uses TLS — drives the
-// shared #xrayTlsConfig block visibility (one cert strategy per node).
+// True if main or any extra inbound uses TLS — drives #xrayTlsConfig visibility.
 function _anyXrayTlsInboundActive() {
     const main = document.getElementById('xraySecurity')?.value || '';
     if (main === 'tls') return true;
@@ -639,8 +638,7 @@ function updateXrayTlsSourceUI() {
     if (manualBlock) manualBlock.style.display = source === 'manual' ? '' : 'none';
     if (selfSignedInfo) selfSignedInfo.style.display = source === 'self-signed' ? '' : 'none';
 
-    // Domain field visibility: hysteria always; xray only when at least one
-    // TLS inbound + manual source.
+    // Domain visibility: hysteria always; xray only when manual TLS source.
     const domainGroup = document.getElementById('domainGroup');
     const domainHintHy = document.getElementById('domainHintHysteria');
     const domainHintXr = document.getElementById('domainHintXrayManual');
@@ -823,7 +821,6 @@ function updateExtraXraySecurityUI(selectEl) {
     const alpn = card.querySelector('.extra-alpn-group');
     if (reality) reality.style.display = security === 'reality' ? '' : 'none';
     if (alpn) alpn.style.display = security === 'tls' ? '' : 'none';
-    // Re-evaluate the shared TLS-source block visibility — extras can flip it.
     if (typeof updateXraySecurityUI === 'function') updateXraySecurityUI();
 }
 

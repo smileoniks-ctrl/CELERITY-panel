@@ -500,10 +500,8 @@ router.get('/nodes/:id', async (req, res) => {
 router.post('/nodes/:id', async (req, res) => {
     const nodeId = req.params.id;
     try {
-        // manualKey is select:false at the schema level — must be explicitly
-        // selected so resolveManualKeyPlaceholder() can preserve the prior
-        // value when the form was submitted with the ***SET*** sentinel.
-        const existingNode = await HyNode.findById(nodeId).select('type xray +xray.manualKey');
+        // Full doc (not partial) — we .save() it below; +manualKey is select:false.
+        const existingNode = await HyNode.findById(nodeId).select('+xray.manualKey');
         if (!existingNode) {
             return res.redirect('/panel/nodes');
         }
@@ -600,9 +598,10 @@ router.post('/nodes/:id', async (req, res) => {
             updates['ssh.privateKey'] = cryptoService.encrypt(rawKey);
         }
 
-        await HyNode.findByIdAndUpdate(nodeId, { $set: updates });
+        // Use doc.save() — $set on subdoc with select:false field hits Mongoose 8 path collision.
+        existingNode.set(updates);
+        await existingNode.save();
 
-        // Auto-push config to the node if any config-affecting field changed.
         syncService.schedulePush(nodeId, updates);
 
         // Sync SSH credentials to sibling node on the same IP (if SSH was part of this update)
