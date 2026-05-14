@@ -55,8 +55,10 @@
                 <% var _tlsSource = node?.xray?.tlsSource || 'panel'; %>
                 <% var _panelDomain = (typeof panelDomain === 'string' ? panelDomain : '') || ''; %>
                 <% var _hasManualKey = !!(node?.xray && (node.xray.manualKeySet === true || node.xray.manualKey)); %>
-                <div class="form-group xray-tls-config" id="xrayTlsConfig" style="<%= node?.xray?.security === 'tls' ? '' : 'display:none' %>">
+                <% var _anyTls = node?.xray?.security === 'tls' || (node?.xray?.extraInbounds || []).some(function(i){ return i && i.security === 'tls'; }); %>
+                <div class="form-group xray-tls-config" id="xrayTlsConfig" style="<%= _anyTls ? '' : 'display:none' %>">
                     <label class="block-label"><i class="ti ti-certificate"></i> <%= t('nodes.xrayTlsSourceLabel') %></label>
+                    <small class="hint" style="display:block;margin-bottom:8px;"><%= t('nodes.xrayTlsSourceScopeHint') %></small>
                     <div class="radio-group" role="radiogroup" aria-label="<%= t('nodes.xrayTlsSourceLabel') %>">
                         <label class="radio-row">
                             <input type="radio" name="xray.tlsSource" value="panel" <%= _tlsSource === 'panel' ? 'checked' : '' %> onchange="updateXrayTlsSourceUI()">

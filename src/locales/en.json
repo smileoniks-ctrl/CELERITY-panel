@@ -452,6 +452,7 @@
     "xrayXhttpMode": "XHTTP Mode",
     "xrayXhttpModeHint": "auto (recommended), packet-up (strict CDN), stream-up (H2/H3), stream-one (single bidirectional stream)",
     "xrayTlsSourceLabel": "TLS certificate source",
+    "xrayTlsSourceScopeHint": "One certificate strategy per node — applies to every TLS inbound (main and extras).",
     "xrayTlsSourcePanel": "Panel domain",
     "xrayTlsSourcePanelHint": "Masquerade under the panel domain — its Let's Encrypt certificate is inlined into the node config and rotated automatically.",
     "xrayTlsSourceManual": "Manual (custom domain + PEM)",

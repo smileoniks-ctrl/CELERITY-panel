@@ -32,7 +32,8 @@
                     and Xray with tlsSource==='manual' (used as serverName/SNI for the
                     operator-supplied certificate). It stays hidden for Xray nodes
                     using panel/self-signed strategies. %>
-                <% var _xrayManualTls = (node?.type === 'xray' && node?.xray?.security === 'tls' && node?.xray?.tlsSource === 'manual'); %>
+                <% var _xrayAnyTls = node?.type === 'xray' && (node?.xray?.security === 'tls' || (node?.xray?.extraInbounds || []).some(function(i){ return i && i.security === 'tls'; })); %>
+                <% var _xrayManualTls = (_xrayAnyTls && node?.xray?.tlsSource === 'manual'); %>
                 <div class="form-group" id="domainGroup" style="<%= (node?.type === 'xray' && !_xrayManualTls) ? 'display:none' : '' %>">
                     <label for="domain"><%= t('nodes.domain') %></label>
                     <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>"

@@ -452,6 +452,7 @@
     "xrayXhttpMode": "XHTTP Mode",
     "xrayXhttpModeHint": "auto (рекомендуется), packet-up (для строгих CDN), stream-up (для H2/H3), stream-one (один двунаправленный поток)",
     "xrayTlsSourceLabel": "Источник TLS-сертификата",
+    "xrayTlsSourceScopeHint": "Одна стратегия на ноду — применяется ко всем TLS-inbound'ам (основному и дополнительным).",
     "xrayTlsSourcePanel": "Домен панели",
     "xrayTlsSourcePanelHint": "Маскироваться под домен панели — её Let's Encrypt сертификат встраивается в конфиг ноды и обновляется автоматически.",
     "xrayTlsSourceManual": "Вручную (свой домен + PEM)",
