@@ -671,7 +671,7 @@
     "hideOverloaded": "Hide overloaded",
     "hideOverloadedHint": "Nodes with online ≥ limit won't be included in subscription",
     "hideOffline": "Hide unreachable",
-    "hideOfflineHint": "Nodes marked offline/error by the health checker won't be served in subscriptions. Prevents HAPP / v2rayTun / sing-box / Clash from stalling on a dead server when one is part of the profile.",
+    "hideOfflineHint": "Nodes marked offline/error by the health checker won't be served in subscriptions.",
     "deviceLimit": "Device Limit",
     "gracePeriod": "Grace period (min)",
     "gracePeriodHint": "How long to remember a client IP after the last Hysteria connection. Larger values smooth WiFi↔LTE switches; smaller values catch sharing faster.",

@@ -671,7 +671,7 @@
     "hideOverloaded": "Скрывать перегруженные",
     "hideOverloadedHint": "Ноды с онлайн ≥ лимиту не будут включены в подписку",
     "hideOffline": "Скрывать недоступные",
-    "hideOfflineHint": "Ноды, помеченные health-чекером как offline/error, не попадут в подписку. Помогает HAPP / v2rayTun / sing-box / Clash, у которых одна мёртвая нода блокирует подключение к живым.",
+    "hideOfflineHint": "Ноды, помеченные health-чекером как offline/error, не попадут в подписку.",
     "deviceLimit": "Лимит устройств",
     "gracePeriod": "Окно учёта IP (мин)",
     "gracePeriodHint": "Сколько помнить IP клиента после последнего Hysteria-коннекта. Больше — мягче к смене WiFi↔LTE, меньше — быстрее ловится шаринг.",
