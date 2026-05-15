@@ -563,20 +563,20 @@ router.post('/settings/homepage/upload', (req, res) => {
             const msg = err.code === 'LIMIT_FILE_SIZE'
                 ? `File too large (max ${homepageService.MAX_CUSTOM_BYTES} bytes)`
                 : err.message;
-            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(msg));
+            return res.redirect('/panel/settings?tab=security&error=' + encodeURIComponent(msg));
         }
         if (!req.file) {
-            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent('No file uploaded'));
+            return res.redirect('/panel/settings?tab=security&error=' + encodeURIComponent('No file uploaded'));
         }
         try {
             await homepageService.setCustom(req.file.buffer);
             await Settings.update({ 'homepage.mode': 'custom' });
             await homepageService.setMode('custom');
             logger.info(`[Panel] Homepage custom HTML uploaded (${req.file.buffer.length} bytes) by ${req.session.adminUsername}`);
-            return res.redirect('/panel/settings?tab=system&message=' + encodeURIComponent('Главная страница обновлена'));
+            return res.redirect('/panel/settings?tab=security&message=' + encodeURIComponent('Главная страница обновлена'));
         } catch (error) {
             logger.error(`[Panel] Homepage upload error: ${error.message}`);
-            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(error.message));
+            return res.redirect('/panel/settings?tab=security&error=' + encodeURIComponent(error.message));
         }
     });
 });
@@ -587,10 +587,10 @@ router.post('/settings/homepage/reset', async (req, res) => {
         await homepageService.clearCustom();
         await Settings.update({ 'homepage.mode': 'nginx' });
         logger.info(`[Panel] Homepage reset to default by ${req.session.adminUsername}`);
-        return res.redirect('/panel/settings?tab=system&message=' + encodeURIComponent('Главная страница сброшена'));
+        return res.redirect('/panel/settings?tab=security&message=' + encodeURIComponent('Главная страница сброшена'));
     } catch (error) {
         logger.error(`[Panel] Homepage reset error: ${error.message}`);
-        return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(error.message));
+        return res.redirect('/panel/settings?tab=security&error=' + encodeURIComponent(error.message));
     }
 });
 
