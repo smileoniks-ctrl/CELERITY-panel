@@ -821,7 +821,8 @@ const checkIpWhitelist = (req, res, next) => {
         : (req.ip || req.connection.remoteAddress || '');
     if (!isIpAllowed(clientIp, whitelist)) {
         logger.warn(`[Panel] Access denied for IP: ${clientIp}`);
-        return res.status(403).send('Access denied. Your IP is not whitelisted.');
+        // Generic response — do not leak that an IP whitelist exists.
+        return res.status(403).type('text/plain').send('Forbidden');
     }
     next();
 };

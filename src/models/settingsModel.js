@@ -120,6 +120,10 @@ const settingsSchema = new mongoose.Schema({
         completedAt: { type: Date, default: null },
     },
 
+    homepage: {
+        mode: { type: String, enum: ['nginx', 'custom'], default: 'nginx' },
+    },
+
     routing: {
         enabled: { type: Boolean, default: false },
         rules: {

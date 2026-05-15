@@ -27,6 +27,7 @@ const statsService = require('./src/services/statsService');
 const HyUser = require('./src/models/hyUserModel');
 const HyNode = require('./src/models/hyNodeModel');
 const backupService = require('./src/services/backupService');
+const homepageService = require('./src/services/homepageService');
 
 const usersRoutes = require('./src/routes/users');
 const nodesRoutes = require('./src/routes/nodes');
@@ -414,9 +415,10 @@ if (config.API_DOCS_ENABLED) {
 
 app.use('/panel', panelRoutes);
 
-app.get('/', (req, res) => {
-    res.redirect('/panel');
-});
+// Public root: serves a configurable decoy/landing page (see homepageService).
+// Hot path is in-memory only; no DB/disk reads per request.
+app.get('/', (req, res) => homepageService.respond(req, res));
+app.head('/', (req, res) => homepageService.respond(req, res));
 
 // ==================== ERROR HANDLING ====================
 
@@ -546,6 +548,7 @@ async function startServer() {
         require('./src/models/userDeviceModel');
 
         await reloadSettings();
+        await homepageService.init();
         
         const PORT = process.env.PORT || 3000;
         const useCaddy = process.env.USE_CADDY === 'true';

@@ -4,6 +4,7 @@
 
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
 
 const HyUser = require('../../models/hyUserModel');
 const HyNode = require('../../models/hyNodeModel');
@@ -15,6 +16,7 @@ const totpService = require('../../services/totpService');
 const webhookService = require('../../services/webhookService');
 const cache = require('../../services/cacheService');
 const hwidDeviceService = require('../../services/hwidDeviceService');
+const homepageService = require('../../services/homepageService');
 const { invalidateSettingsCache } = require('../../utils/helpers');
 const config = require('../../../config');
 const logger = require('../../utils/logger');
@@ -78,6 +80,13 @@ router.get('/settings', async (req, res) => {
             logger.warn(`[Panel] topHwidUsers: ${e.message}`);
         }
 
+        const homepageInfo = {
+            mode: homepageService.getMode(),
+            hasCustom: homepageService.hasCustom(),
+            customSize: homepageService.getCustomSize(),
+            maxBytes: homepageService.MAX_CUSTOM_BYTES,
+        };
+
         render(res, 'settings', {
             title: res.locals.locales.settings.title,
             page: 'settings',
@@ -88,6 +97,7 @@ router.get('/settings', async (req, res) => {
             validScopes: ApiKey.VALID_SCOPES,
             webhookEvents: Object.values(webhookService.EVENTS),
             topHwidUsers,
+            homepageInfo,
             message: req.query.message || null,
             error: req.query.error || null,
         });
@@ -234,6 +244,16 @@ router.post('/settings', async (req, res) => {
             }
         }
 
+        // Homepage mode (decoy/custom). File upload has its own endpoint.
+        let homepageModeChanged = null;
+        if (req.body['_homepageSettings'] !== undefined) {
+            const VALID_MODES = ['nginx', 'custom'];
+            const mode = String(req.body['homepage.mode'] || 'nginx');
+            const safeMode = VALID_MODES.includes(mode) ? mode : 'nginx';
+            updates['homepage.mode'] = safeMode;
+            homepageModeChanged = safeMode;
+        }
+
         // Routing settings
         if (req.body['_routingSettings'] !== undefined) {
             updates['routing.enabled'] = req.body['routing.enabled'] === 'on';
@@ -292,7 +312,11 @@ router.post('/settings', async (req, res) => {
         
         const sshPool = require('../../services/sshPoolService');
         await sshPool.reloadSettings();
-        
+
+        if (homepageModeChanged) {
+            await homepageService.setMode(homepageModeChanged);
+        }
+
         logger.info(`[Panel] Settings updated`);
         
         res.redirect('/panel/settings?message=' + encodeURIComponent('Настройки сохранены'));
@@ -521,6 +545,52 @@ router.post('/settings/reset-stats', async (req, res) => {
     } catch (error) {
         logger.error('[Panel] Stats reset error:', error.message);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==================== HOMEPAGE ====================
+
+// In-memory upload (one small file). Disk write is handled atomically by homepageService.
+const homepageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: homepageService.MAX_CUSTOM_BYTES, files: 1 },
+});
+
+// POST /settings/homepage/upload - replace custom homepage HTML
+router.post('/settings/homepage/upload', (req, res) => {
+    homepageUpload.single('file')(req, res, async (err) => {
+        if (err) {
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? `File too large (max ${homepageService.MAX_CUSTOM_BYTES} bytes)`
+                : err.message;
+            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(msg));
+        }
+        if (!req.file) {
+            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent('No file uploaded'));
+        }
+        try {
+            await homepageService.setCustom(req.file.buffer);
+            await Settings.update({ 'homepage.mode': 'custom' });
+            await homepageService.setMode('custom');
+            logger.info(`[Panel] Homepage custom HTML uploaded (${req.file.buffer.length} bytes) by ${req.session.adminUsername}`);
+            return res.redirect('/panel/settings?tab=system&message=' + encodeURIComponent('Главная страница обновлена'));
+        } catch (error) {
+            logger.error(`[Panel] Homepage upload error: ${error.message}`);
+            return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(error.message));
+        }
+    });
+});
+
+// POST /settings/homepage/reset - drop custom HTML, revert to fake nginx
+router.post('/settings/homepage/reset', async (req, res) => {
+    try {
+        await homepageService.clearCustom();
+        await Settings.update({ 'homepage.mode': 'nginx' });
+        logger.info(`[Panel] Homepage reset to default by ${req.session.adminUsername}`);
+        return res.redirect('/panel/settings?tab=system&message=' + encodeURIComponent('Главная страница сброшена'));
+    } catch (error) {
+        logger.error(`[Panel] Homepage reset error: ${error.message}`);
+        return res.redirect('/panel/settings?tab=system&error=' + encodeURIComponent(error.message));
     }
 });
 
