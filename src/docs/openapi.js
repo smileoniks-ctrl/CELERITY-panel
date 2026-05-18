@@ -1,3 +1,455 @@
+function applyReferenceDocsEnhancements(target) {
+    addCommonSchemas(target);
+    addCommonExamples(target);
+    enhanceOperations(target);
+}
+
+function addCommonSchemas(target) {
+    const schemas = target.components.schemas;
+    Object.assign(schemas, {
+        ApiError: schemas.Error,
+        Traffic: {
+            type: 'object',
+            description: 'Traffic counters in bytes.',
+            properties: {
+                tx: { type: 'integer', example: 1048576, description: 'Uploaded bytes' },
+                rx: { type: 'integer', example: 2097152, description: 'Downloaded bytes' },
+                used: { type: 'integer', example: 3145728, description: 'Total used bytes' },
+                limit: { type: 'integer', example: 10737418240, description: 'Traffic limit in bytes, 0 = unlimited' },
+            },
+        },
+        RateLimitError: {
+            type: 'object',
+            description: 'Rate-limit error response.',
+            properties: {
+                error: { type: 'string', example: 'Too many attempts. Try again in 15 minutes.' },
+            },
+        },
+        NodeCreate: {
+            type: 'object',
+            required: ['name', 'ip'],
+            description: 'Payload for creating a Hysteria or Xray node.',
+            properties: {
+                name: { type: 'string', example: 'Germany 1', description: 'Display name shown in panel and subscriptions.' },
+                ip: { type: 'string', example: '203.0.113.10', description: 'Server IP address.' },
+                type: { type: 'string', enum: ['hysteria', 'xray'], default: 'hysteria', description: 'Node protocol family.' },
+                domain: { type: 'string', example: 'de.example.com', description: 'Public domain for TLS/SNI.' },
+                sni: { type: 'string', example: 'de.example.com', description: 'Optional SNI override.' },
+                port: { type: 'integer', example: 443, description: 'Main service port.' },
+                portRange: { type: 'string', example: '20000-50000', description: 'UDP port hopping range.' },
+                statsPort: { type: 'integer', example: 9999, description: 'Hysteria stats API port.' },
+                groups: { type: 'array', items: { type: 'string' }, example: ['64a1b2c3d4e5f6a7b8c9d0e1'], description: 'Server group ObjectIds.' },
+                maxOnlineUsers: { type: 'integer', example: 0, description: '0 = unlimited.' },
+                ssh: { type: 'object', description: 'SSH credentials. Password or privateKey can be provided.' },
+                xray: { type: 'object', description: 'Xray-specific settings when `type=xray`.' },
+                cascadeRole: { type: 'string', enum: ['standalone', 'portal', 'bridge'], default: 'standalone' },
+                country: { type: 'string', example: 'DE' },
+                rankingCoefficient: { type: 'number', example: 1 },
+            },
+        },
+        NodeUpdate: {
+            type: 'object',
+            description: 'Partial node update payload. Any omitted field is left unchanged.',
+            properties: {
+                name: { type: 'string' },
+                domain: { type: 'string' },
+                sni: { type: 'string' },
+                port: { type: 'integer' },
+                portRange: { type: 'string' },
+                statsPort: { type: 'integer' },
+                groups: { type: 'array', items: { type: 'string' } },
+                ssh: { type: 'object' },
+                paths: { type: 'object' },
+                settings: { type: 'object' },
+                active: { type: 'boolean' },
+                rankingCoefficient: { type: 'number' },
+                type: { type: 'string', enum: ['hysteria', 'xray'] },
+                xray: { type: 'object' },
+                cascadeRole: { type: 'string' },
+                country: { type: 'string' },
+                initScript: { type: 'string' },
+            },
+        },
+        CascadeLinkCreate: {
+            type: 'object',
+            required: ['name', 'portalNodeId', 'bridgeNodeId'],
+            description: 'Payload for creating a cascade tunnel between two Xray nodes.',
+            properties: {
+                name: { type: 'string', example: 'DE portal to NL bridge' },
+                portalNodeId: { type: 'string', example: '64a1b2c3d4e5f6a7b8c9d0e1' },
+                bridgeNodeId: { type: 'string', example: '64a1b2c3d4e5f6a7b8c9d0e2' },
+                mode: { type: 'string', enum: ['reverse', 'forward'], default: 'reverse' },
+                tunnelPort: { type: 'integer', example: 10086 },
+                tunnelProtocol: { type: 'string', enum: ['vless', 'vmess'], default: 'vless' },
+                tunnelSecurity: { type: 'string', enum: ['none', 'tls', 'reality'], default: 'none' },
+                tunnelTransport: { type: 'string', enum: ['tcp', 'ws', 'grpc', 'xhttp', 'splithttp'], default: 'tcp' },
+                autoDeploy: { type: 'boolean', example: false, description: 'Deploy the chain after creating the link.' },
+            },
+        },
+        CascadeLinkUpdate: {
+            type: 'object',
+            description: 'Partial cascade link update payload.',
+            properties: {
+                name: { type: 'string' },
+                mode: { type: 'string', enum: ['reverse', 'forward'] },
+                tunnelPort: { type: 'integer' },
+                tunnelDomain: { type: 'string' },
+                tunnelProtocol: { type: 'string', enum: ['vless', 'vmess'] },
+                tunnelSecurity: { type: 'string', enum: ['none', 'tls', 'reality'] },
+                tunnelTransport: { type: 'string', enum: ['tcp', 'ws', 'grpc', 'xhttp', 'splithttp'] },
+                active: { type: 'boolean' },
+                priority: { type: 'integer' },
+                autoRedeploy: { type: 'boolean' },
+            },
+        },
+        McpToolListResponse: {
+            type: 'object',
+            properties: {
+                tools: { type: 'array', items: { type: 'object' } },
+            },
+        },
+        McpPromptListResponse: {
+            type: 'object',
+            properties: {
+                prompts: { type: 'array', items: { type: 'object' } },
+            },
+        },
+    });
+
+    schemas.User.properties.traffic = { $ref: '#/components/schemas/Traffic' };
+    schemas.SubscriptionInfo.properties.traffic = { $ref: '#/components/schemas/Traffic' };
+}
+
+function addCommonExamples(target) {
+    target.components.examples = {
+        ErrorAuth: {
+            summary: 'Authentication error',
+            value: { error: 'Authentication required' },
+        },
+        ErrorScope: {
+            summary: 'Scope error',
+            value: { error: 'Insufficient permissions', required: 'users:write' },
+        },
+        ErrorRateLimit: {
+            summary: 'Rate limit error',
+            value: { error: 'Too many attempts. Try again in 15 minutes.' },
+        },
+        LoginRequest: {
+            summary: 'Admin login request',
+            value: { username: 'admin', password: 'change-me' },
+        },
+        TotpRequest: {
+            summary: 'TOTP verification request',
+            value: { token: '123456' },
+        },
+        LoginResponse: {
+            summary: 'Admin login response',
+            value: { success: true, username: 'admin', message: 'Authentication successful. Use cookies for subsequent requests.' },
+        },
+        UserCreateRequest: {
+            summary: 'Create an enabled user',
+            value: {
+                userId: '123456789',
+                username: 'JohnDoe',
+                enabled: true,
+                groups: ['64a1b2c3d4e5f6a7b8c9d0e1'],
+                trafficLimit: 10737418240,
+                expireAt: '2026-12-31T23:59:59.000Z',
+            },
+        },
+        UserResponse: {
+            summary: 'User response',
+            value: {
+                _id: '64a1b2c3d4e5f6a7b8c9d0e9',
+                userId: '123456789',
+                username: 'JohnDoe',
+                enabled: true,
+                groups: [{ _id: '64a1b2c3d4e5f6a7b8c9d0e1', name: 'Default', color: '#6366f1' }],
+                nodes: [],
+                trafficLimit: 10737418240,
+                maxDevices: 3,
+                hwidMode: 'inherit',
+                subscriptionToken: 'abc123def456',
+                traffic: { tx: 0, rx: 0 },
+                expireAt: '2026-12-31T23:59:59.000Z',
+                createdAt: '2026-05-18T17:00:00.000Z',
+                updatedAt: '2026-05-18T17:00:00.000Z',
+            },
+        },
+        NodeCreateRequest: {
+            summary: 'Create a Hysteria node',
+            value: {
+                name: 'Germany 1',
+                ip: '203.0.113.10',
+                type: 'hysteria',
+                domain: 'de.example.com',
+                port: 443,
+                portRange: '20000-50000',
+                groups: ['64a1b2c3d4e5f6a7b8c9d0e1'],
+            },
+        },
+        NodeResponse: {
+            summary: 'Node response',
+            value: {
+                _id: '64a1b2c3d4e5f6a7b8c9d0e2',
+                name: 'Germany 1',
+                ip: '203.0.113.10',
+                type: 'hysteria',
+                domain: 'de.example.com',
+                port: 443,
+                portRange: '20000-50000',
+                active: true,
+                status: 'online',
+                onlineUsers: 12,
+                traffic: { tx: 1048576, rx: 2097152 },
+            },
+        },
+        CascadeLinkRequest: {
+            summary: 'Create a cascade link',
+            value: {
+                name: 'DE portal to NL bridge',
+                portalNodeId: '64a1b2c3d4e5f6a7b8c9d0e2',
+                bridgeNodeId: '64a1b2c3d4e5f6a7b8c9d0e3',
+                mode: 'reverse',
+                tunnelPort: 10086,
+                tunnelProtocol: 'vless',
+                tunnelTransport: 'tcp',
+            },
+        },
+        CascadeLinkResponse: {
+            summary: 'Cascade link response',
+            value: {
+                _id: '64a1b2c3d4e5f6a7b8c9d0e4',
+                name: 'DE portal to NL bridge',
+                mode: 'reverse',
+                tunnelPort: 10086,
+                tunnelProtocol: 'vless',
+                tunnelTransport: 'tcp',
+                active: true,
+                status: 'pending',
+            },
+        },
+        StatsResponse: {
+            summary: 'Panel stats',
+            value: {
+                users: { total: 1234, enabled: 987 },
+                nodes: { total: 9, online: 8 },
+                onlineUsers: 639,
+                nodesList: [{ name: 'Germany 1', online: 42 }],
+                lastSync: '2026-05-18T17:00:00.000Z',
+            },
+        },
+        SuccessResponse: {
+            summary: 'Success',
+            value: { success: true, message: 'Operation completed' },
+        },
+        JsonRpcToolsListRequest: {
+            summary: 'List MCP tools',
+            value: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        },
+        JsonRpcResponse: {
+            summary: 'JSON-RPC response',
+            value: { jsonrpc: '2.0', id: 1, result: {} },
+        },
+        GenericResponse: {
+            summary: 'Generic JSON response',
+            value: { success: true },
+        },
+    };
+}
+
+const OPERATION_METADATA = {
+    'POST /login': { public: true, rateLimit: '10 attempts per 15 minutes', requestExample: 'LoginRequest', responseExample: 'LoginResponse' },
+    'POST /login/totp': { public: true, rateLimit: '8 attempts per 10 minutes', requestExample: 'TotpRequest', responseExample: 'LoginResponse' },
+    'POST /logout': { public: true, responseExample: 'SuccessResponse' },
+    'POST /auth': { public: true, responseExample: 'SuccessResponse' },
+    'GET /files/{token}': { public: true, rateLimit: 'Configured by subscription rate limit settings' },
+    'GET /info/{token}': { public: true, rateLimit: 'Configured by subscription rate limit settings' },
+    'GET /stats': { scopes: ['stats:read'], responseExample: 'StatsResponse' },
+    'GET /groups': { scopes: ['stats:read'] },
+    'GET /users': { scopes: ['users:read'], responseExample: 'UserResponse' },
+    'POST /users': { scopes: ['users:write'], requestExample: 'UserCreateRequest', responseExample: 'UserResponse' },
+    'GET /users/{userId}': { scopes: ['users:read'], responseExample: 'UserResponse' },
+    'PUT /users/{userId}': { scopes: ['users:write'], requestExample: 'UserCreateRequest', responseExample: 'UserResponse' },
+    'DELETE /users/{userId}': { scopes: ['users:write'], responseExample: 'SuccessResponse' },
+    'GET /users/{userId}/devices': { scopes: ['users:read'] },
+    'DELETE /users/{userId}/devices': { scopes: ['users:write'], responseExample: 'SuccessResponse' },
+    'DELETE /users/{userId}/devices/{hwid}': { scopes: ['users:write'], responseExample: 'SuccessResponse' },
+    'POST /users/{userId}/enable': { scopes: ['users:write'], responseExample: 'UserResponse' },
+    'POST /users/{userId}/disable': { scopes: ['users:write'], responseExample: 'UserResponse' },
+    'POST /users/{userId}/groups': { scopes: ['users:write'], responseExample: 'UserResponse' },
+    'DELETE /users/{userId}/groups/{groupId}': { scopes: ['users:write'], responseExample: 'UserResponse' },
+    'POST /users/sync-from-main': { scopes: ['users:write'] },
+    'GET /nodes': { scopes: ['nodes:read'], responseExample: 'NodeResponse' },
+    'POST /nodes': { scopes: ['nodes:write'], requestExample: 'NodeCreateRequest', responseExample: 'NodeResponse' },
+    'GET /nodes/check-ip': { scopes: ['nodes:read'] },
+    'GET /nodes/{id}': { scopes: ['nodes:read'], responseExample: 'NodeResponse' },
+    'PUT /nodes/{id}': { scopes: ['nodes:write'], requestExample: 'NodeCreateRequest', responseExample: 'NodeResponse' },
+    'DELETE /nodes/{id}': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'GET /nodes/{id}/status': { scopes: ['nodes:read'] },
+    'POST /nodes/{id}/reset-status': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'GET /nodes/{id}/agent-info': { scopes: ['nodes:read'] },
+    'POST /nodes/{id}/sync': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'POST /nodes/{id}/setup': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'GET /nodes/{id}/config': { scopes: ['nodes:read'] },
+    'GET /nodes/{id}/users': { scopes: ['nodes:read'], responseExample: 'UserResponse' },
+    'POST /nodes/{id}/groups': { scopes: ['nodes:write'], responseExample: 'NodeResponse' },
+    'DELETE /nodes/{id}/groups/{groupId}': { scopes: ['nodes:write'], responseExample: 'NodeResponse' },
+    'POST /nodes/{id}/setup-port-hopping': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'POST /nodes/{id}/update-config': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'POST /nodes/{id}/generate-xray-keys': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'GET /cascade/links': { scopes: ['nodes:read'], responseExample: 'CascadeLinkResponse' },
+    'POST /cascade/links': { scopes: ['nodes:write'], requestExample: 'CascadeLinkRequest', responseExample: 'CascadeLinkResponse' },
+    'GET /cascade/links/{id}': { scopes: ['nodes:read'], responseExample: 'CascadeLinkResponse' },
+    'PUT /cascade/links/{id}': { scopes: ['nodes:write'], requestExample: 'CascadeLinkRequest', responseExample: 'CascadeLinkResponse' },
+    'PATCH /cascade/links/{id}/reconnect': { scopes: ['nodes:write'], responseExample: 'CascadeLinkResponse' },
+    'DELETE /cascade/links/{id}': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'POST /cascade/links/{id}/deploy': { scopes: ['nodes:write'], rateLimit: '10 deploy requests per minute', responseExample: 'SuccessResponse' },
+    'POST /cascade/links/{id}/undeploy': { scopes: ['nodes:write'], rateLimit: '10 deploy requests per minute', responseExample: 'SuccessResponse' },
+    'POST /cascade/chain/deploy': { scopes: ['nodes:write'], rateLimit: '10 deploy requests per minute', responseExample: 'SuccessResponse' },
+    'GET /cascade/links/{id}/health': { scopes: ['nodes:read'] },
+    'GET /cascade/topology': { scopes: ['nodes:read'] },
+    'POST /cascade/topology/positions': { scopes: ['nodes:write'], responseExample: 'SuccessResponse' },
+    'POST /mcp': { scopes: ['mcp:enabled'], requestExample: 'JsonRpcToolsListRequest', responseExample: 'JsonRpcResponse' },
+    'GET /mcp/sse': { scopes: ['mcp:enabled'] },
+    'POST /mcp/messages': { scopes: ['mcp:enabled'], requestExample: 'JsonRpcToolsListRequest' },
+    'GET /mcp/tools': { scopes: ['mcp:enabled'] },
+    'GET /mcp/prompts': { scopes: ['mcp:enabled'] },
+    'POST /sync': { scopes: ['sync:write'], responseExample: 'SuccessResponse' },
+    'POST /kick/{userId}': { scopes: ['sync:write'], responseExample: 'SuccessResponse' },
+};
+
+function enhanceOperations(target) {
+    for (const [path, pathItem] of Object.entries(target.paths)) {
+        for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
+            const op = pathItem[method];
+            if (!op) continue;
+
+            const key = `${method.toUpperCase()} ${path}`;
+            const meta = OPERATION_METADATA[key] || {};
+            applySecurity(op, meta);
+            applyDescriptions(op, key, meta);
+            applyRequestExample(op, meta);
+            applyResponseExamples(op, meta);
+            applyCodeSamples(op, method, path, meta);
+        }
+    }
+}
+
+function applySecurity(op, meta) {
+    if (meta.public || Array.isArray(op.security) && op.security.length === 0) {
+        op.security = [];
+        return;
+    }
+    op.security = [{ ApiKeyHeader: [] }, { BearerToken: [] }, { CookieSession: [] }];
+    if (meta.scopes) {
+        op['x-requiredScopes'] = meta.scopes;
+    }
+}
+
+function applyDescriptions(op, key, meta) {
+    if (!op.description) {
+        const scopeText = meta.scopes ? ` Requires scope: \`${meta.scopes.join('` or `')}\`.` : '';
+        op.description = `${op.summary}.${scopeText}`.trim();
+    } else if (meta.scopes && !op.description.includes('Requires scope:')) {
+        op.description = `${op.description}\n\nRequires scope: \`${meta.scopes.join('` or `')}\`.`;
+    }
+    if (meta.rateLimit) {
+        op['x-rateLimit'] = meta.rateLimit;
+        if (!op.description.includes('Rate limit:')) {
+            op.description = `${op.description}\n\nRate limit: ${meta.rateLimit}.`;
+        }
+    }
+    op.operationId = op.operationId || operationIdFromKey(key);
+}
+
+function applyRequestExample(op, meta) {
+    const media = op.requestBody?.content?.['application/json'];
+    if (!media) return;
+    const exampleName = meta.requestExample;
+    if (exampleName && spec.components.examples[exampleName]) {
+        media.examples = { [exampleName]: { $ref: `#/components/examples/${exampleName}` } };
+    } else if (!media.example && !media.examples) {
+        media.example = {};
+    }
+}
+
+function applyResponseExamples(op, meta) {
+    for (const [status, response] of Object.entries(op.responses || {})) {
+        if (String(status).startsWith('2') && !response.content && !/text\/plain|text\/event-stream/.test(JSON.stringify(response))) {
+            response.content = {
+                'application/json': {
+                    schema: { $ref: '#/components/schemas/Success' },
+                    examples: { GenericResponse: { $ref: '#/components/examples/GenericResponse' } },
+                },
+            };
+        }
+
+        const json = response.content?.['application/json'];
+        if (!json) continue;
+        if (String(status).startsWith('2')) {
+            const exampleName = meta.responseExample;
+            if (exampleName && spec.components.examples[exampleName]) {
+                json.examples = { [exampleName]: { $ref: `#/components/examples/${exampleName}` } };
+            } else if (!json.examples && json.example === undefined) {
+                json.examples = { GenericResponse: { $ref: '#/components/examples/GenericResponse' } };
+            }
+        }
+    }
+}
+
+function applyCodeSamples(op, method, path, meta) {
+    const publicEndpoint = meta.public || Array.isArray(op.security) && op.security.length === 0;
+    const fullPath = `/api${path}`.replace(/\{([^}]+)\}/g, (_, name) => examplePathValue(name));
+    const authHeader = publicEndpoint ? '' : " \\\n  -H 'X-API-Key: ck_your_key_here'";
+    const body = op.requestBody ? " \\\n  -H 'Content-Type: application/json' \\\n  -d '{}'" : '';
+    op['x-codeSamples'] = [
+        {
+            lang: 'cURL',
+            label: 'cURL',
+            source: `curl -X ${method.toUpperCase()} 'https://your-domain${fullPath}'${authHeader}${body}`,
+        },
+        {
+            lang: 'JavaScript',
+            label: 'Node.js',
+            source: buildNodeSample(method, fullPath, publicEndpoint, !!op.requestBody),
+        },
+    ];
+}
+
+function buildNodeSample(method, path, publicEndpoint, hasBody) {
+    const lines = [
+        `const res = await fetch('https://your-domain${path}', {`,
+        `  method: '${method.toUpperCase()}',`,
+        '  headers: {',
+    ];
+    if (!publicEndpoint) lines.push("    'X-API-Key': 'ck_your_key_here',");
+    if (hasBody) lines.push("    'Content-Type': 'application/json',");
+    lines.push('  },');
+    if (hasBody) lines.push('  body: JSON.stringify({}),');
+    lines.push('});', 'const data = await res.json();');
+    return lines.join('\n');
+}
+
+function examplePathValue(name) {
+    if (name === 'token') return 'abc123def456';
+    if (name === 'userId') return '123456789';
+    if (name === 'hwid') return 'device-hwid';
+    if (name === 'groupId') return '64a1b2c3d4e5f6a7b8c9d0e1';
+    return '64a1b2c3d4e5f6a7b8c9d0e2';
+}
+
+function operationIdFromKey(key) {
+    return key
+        .toLowerCase()
+        .replace(/[^a-z0-9{}]+/g, ' ')
+        .replace(/\{([^}]+)\}/g, '$1')
+        .trim()
+        .split(/\s+/)
+        .map((part, index) => index === 0 ? part : part[0].toUpperCase() + part.slice(1))
+        .join('');
+}
+
 /**
  * OpenAPI 3.0 specification for C³ CELERITY API
  *
@@ -15,6 +467,15 @@ const spec = {
         version,
         description: `
 Management API for [C³ CELERITY](https://github.com/ClickDevTech/hysteria-panel) — Hysteria 2 panel by Click Connect.
+
+## Common Use Cases
+
+1. Create a user with \`POST /users\`, then return \`subscriptionToken\` as \`https://your-domain/api/files/{token}\`.
+2. Add a node with \`POST /nodes\`, then provision it with \`POST /nodes/{id}/setup\`.
+3. Read panel totals with \`GET /stats\` and node health with \`GET /nodes/{id}/status\`.
+4. Disable an expired user with \`POST /users/{userId}/disable\` and clear devices with \`DELETE /users/{userId}/devices\`.
+5. Build multi-hop routing with \`POST /cascade/links\`, then deploy with \`POST /cascade/chain/deploy\`.
+6. Automate panel actions through MCP using \`POST /mcp\` and \`tools/list\`.
 
 ## Authentication
 
@@ -44,6 +505,24 @@ Authorization: Bearer ck_your_key_here
 | \`mcp:enabled\` | MCP JSON-RPC endpoint |
 
 Admin sessions (cookie) bypass scope checks entirely.
+
+## Rate Limits
+
+- API keys have their own per-minute limit configured when the key is created (default: 60/min).
+- \`POST /login\`: 10 attempts per 15 minutes.
+- \`POST /login/totp\`: 8 attempts per 10 minutes.
+- \`/files/{token}\` and \`/info/{token}\`: controlled by subscription rate limit settings.
+- Cascade deploy operations: 10 deploy requests per minute.
+
+## Errors
+
+Errors use JSON whenever the endpoint is JSON-based:
+
+\`\`\`json
+{ "error": "Authentication required" }
+\`\`\`
+
+Common status codes: \`400\` invalid input, \`401\` unauthenticated, \`403\` missing scope or blocked IP, \`404\` not found, \`409\` conflict, \`429\` rate-limited, \`500\` internal failure.
         `.trim(),
         contact: {
             name: 'Click Connect',
@@ -71,6 +550,12 @@ Admin sessions (cookie) bypass scope checks entirely.
                 type: 'http',
                 scheme: 'bearer',
                 description: 'API key as Bearer token',
+            },
+            CookieSession: {
+                type: 'apiKey',
+                in: 'cookie',
+                name: 'connect.sid',
+                description: 'Admin session cookie returned by `/api/login`',
             },
         },
 
@@ -1630,6 +2115,8 @@ Set your HTTP client timeout to at least **3 minutes**.
         },
     },
 };
+
+applyReferenceDocsEnhancements(spec);
 
 /**
  * Apply i18n translations to the spec.
