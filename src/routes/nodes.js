@@ -96,7 +96,7 @@ router.post('/', requireScope('nodes:write'), async (req, res) => {
         const {
             name, ip, domain, sni, port, portRange, statsPort,
             groups, ssh, paths, settings, rankingCoefficient,
-            type, xray, cascadeRole, country,
+            type, xray, cascadeRole, country, comment,
             hopInterval, acme, masquerade, bandwidth,
             ignoreClientBandwidth, speedTest, disableUDP,
             udpIdleTimeout, sniff, quic, resolver, acl,
@@ -151,6 +151,7 @@ router.post('/', requireScope('nodes:write'), async (req, res) => {
             rankingCoefficient: rankingCoefficient || 1.0,
             cascadeRole: cascadeRole || 'standalone',
             country: country || '',
+            comment: typeof comment === 'string' ? comment.trim().slice(0, 500) : '',
             initScript: req.body.initScript || '',
             active: true,
             status: 'offline',
@@ -189,7 +190,7 @@ router.put('/:id', requireScope('nodes:write'), async (req, res) => {
         const allowedUpdates = [
             'name', 'domain', 'sni', 'port', 'portRange', 'statsPort',
             'groups', 'ssh', 'paths', 'settings', 'active', 'rankingCoefficient',
-            'type', 'xray', 'cascadeRole', 'country',
+            'type', 'xray', 'cascadeRole', 'country', 'comment',
             'hopInterval', 'acme', 'masquerade', 'bandwidth',
             'ignoreClientBandwidth', 'speedTest', 'disableUDP',
             'udpIdleTimeout', 'sniff', 'quic', 'resolver', 'acl',
@@ -199,9 +200,15 @@ router.put('/:id', requireScope('nodes:write'), async (req, res) => {
         const updates = {};
         for (const key of allowedUpdates) {
             if (req.body[key] !== undefined) {
-                updates[key] = key === 'ssh'
-                    ? cryptoService.encryptSshCredentials(req.body[key])
-                    : req.body[key];
+                if (key === 'ssh') {
+                    updates[key] = cryptoService.encryptSshCredentials(req.body[key]);
+                } else if (key === 'comment') {
+                    updates[key] = typeof req.body[key] === 'string'
+                        ? req.body[key].trim().slice(0, 500)
+                        : '';
+                } else {
+                    updates[key] = req.body[key];
+                }
             }
         }
         

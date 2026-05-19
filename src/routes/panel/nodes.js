@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
         const { usersTotal, usersEnabled, nodesTotal, nodesOnline, trafficStats } = counts;
         
         const nodes = await HyNode.find({ active: true })
-            .select('name ip status onlineUsers maxOnlineUsers groups traffic type flag rankingCoefficient')
+            .select('name ip status onlineUsers maxOnlineUsers groups traffic type flag rankingCoefficient comment')
             .populate('groups', 'name color')
             .sort({ rankingCoefficient: 1, name: 1 });
         
@@ -300,6 +300,9 @@ router.post('/nodes', async (req, res) => {
             customConfig: req.body.customConfig || '',
             cascadeRole: req.body.cascadeRole || 'standalone',
             country: req.body.country || '',
+            comment: typeof req.body.comment === 'string'
+                ? req.body.comment.trim().slice(0, 500)
+                : '',
             initScript: req.body.initScript || '',
             obfs: {
                 type: req.body['obfs.type'] || '',
@@ -541,6 +544,9 @@ router.post('/nodes/:id', async (req, res) => {
             flag: req.body.flag || '',
             cascadeRole: req.body.cascadeRole || 'standalone',
             country: req.body.country || '',
+            comment: typeof req.body.comment === 'string'
+                ? req.body.comment.trim().slice(0, 500)
+                : '',
             initScript: req.body.initScript || '',
             'ssh.port': parseInt(req.body['ssh.port']) || 22,
             'ssh.username': req.body['ssh.username'] || 'root',

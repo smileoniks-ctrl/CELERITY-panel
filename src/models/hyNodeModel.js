@@ -215,6 +215,9 @@ const hyNodeSchema = new mongoose.Schema({
 
     name: { type: String, required: true },
     flag: { type: String, default: '' },
+    // Free-form operator note displayed in the node list and dashboard.
+    // Trimmed and capped to avoid abuse / excessive payload size.
+    comment: { type: String, default: '', trim: true, maxlength: 500 },
     ip: { type: String, required: true },
     domain: { type: String, default: '' },
     sni: { type: String, default: '' },

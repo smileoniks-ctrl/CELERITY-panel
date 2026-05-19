@@ -22,6 +22,15 @@
                 </div>
             </div>
 
+            <div class="form-group">
+                <label for="comment"><%= t('nodes.comment') %></label>
+                <input type="text" id="comment" name="comment"
+                       value="<%= node?.comment || '' %>"
+                       placeholder="<%= t('nodes.commentPlaceholder') %>"
+                       maxlength="500" autocomplete="off">
+                <small><%= t('nodes.commentHint') %></small>
+            </div>
+
             <%# ========== 1b. Cascade Role & Country (Xray only) ========== %>
             <div class="form-section xray-only" id="cascadeRoleSection" style="<%= node?.type === 'xray' ? '' : 'display:none' %>">
                 <h3><i class="ti ti-topology-star-3"></i> <%= t('nodes.cascadeRole') %></h3>

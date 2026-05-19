@@ -44,6 +44,7 @@ function addCommonSchemas(target) {
                 xray: { type: 'object', description: 'Xray-specific settings when `type=xray`.' },
                 cascadeRole: { type: 'string', enum: ['standalone', 'portal', 'bridge'], default: 'standalone' },
                 country: { type: 'string', example: 'DE' },
+                comment: { type: 'string', maxLength: 500, example: 'Hetzner FSN1 — backup node', description: 'Free-form operator note shown in panel UI.' },
                 rankingCoefficient: { type: 'number', example: 1 },
             },
         },
@@ -67,6 +68,7 @@ function addCommonSchemas(target) {
                 xray: { type: 'object' },
                 cascadeRole: { type: 'string' },
                 country: { type: 'string' },
+                comment: { type: 'string', maxLength: 500 },
                 initScript: { type: 'string' },
             },
         },
@@ -858,6 +860,7 @@ These endpoints are not under \`/api\` and are not part of this specification:
                 properties: {
                     _id:           { type: 'string', example: '64a1b2c3d4e5f6a7b8c9d0e1' },
                     name:          { type: 'string', example: 'Germany' },
+                    comment:       { type: 'string', example: 'Hetzner FSN1 — backup node', description: 'Free-form operator note shown in panel UI.' },
                     ip:            { type: 'string', example: '1.2.3.4' },
                     domain:        { type: 'string', example: 'de.example.com' },
                     port:          { type: 'integer', example: 443 },
