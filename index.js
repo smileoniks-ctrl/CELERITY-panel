@@ -22,6 +22,7 @@ const { requireScope } = requireAuth;
 const { i18nMiddleware } = require('./src/middleware/i18n');
 const { countRequest } = require('./src/middleware/rpsCounter');
 const syncService = require('./src/services/syncService');
+const expireScheduler = require('./src/services/expireScheduler');
 const cacheService = require('./src/services/cacheService');
 const statsService = require('./src/services/statsService');
 const HyUser = require('./src/models/hyUserModel');
@@ -549,6 +550,10 @@ async function startServer() {
 
         await reloadSettings();
         await homepageService.init();
+
+        // Boot catchup + arm next-fire-time timer for subscription expiry.
+        // Also sweeps over-traffic users one time (migration of dirty state).
+        await expireScheduler.init();
         
         const PORT = process.env.PORT || 3000;
         const useCaddy = process.env.USE_CADDY === 'true';
@@ -862,11 +867,21 @@ function setupCronJobs() {
     // Detects fresh LE cert on disk (Caddy/Greenlock) and re-pushes config.json
     // to every Xray node that masquerades under the panel domain so the inline
     // PEM stays in sync. No-op for setups without a panel domain.
+    // Also runs the expire-scheduler watchdog as a safety net in case the
+    // in-process timer was dropped by an unexpected fault.
     cron.schedule('*/5 * * * *', async () => {
         try {
             await syncService.checkPanelCertRotation();
         } catch (error) {
             logger.error(`[Cron] Panel cert rotation watcher failed: ${error.message}`);
+        }
+        try {
+            await expireScheduler.processExpired();
+            // Re-arm in case the in-process timer was lost (e.g. unhandled
+            // crash, missed save without notify). Cheap: single index-covered findOne.
+            await expireScheduler.scheduleNext();
+        } catch (error) {
+            logger.error(`[Cron] Expire watchdog failed: ${error.message}`);
         }
     });
     

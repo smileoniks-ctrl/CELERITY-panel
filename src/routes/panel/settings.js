@@ -17,6 +17,7 @@ const webhookService = require('../../services/webhookService');
 const cache = require('../../services/cacheService');
 const hwidDeviceService = require('../../services/hwidDeviceService');
 const homepageService = require('../../services/homepageService');
+const syncService = require('../../services/syncService');
 const { invalidateSettingsCache } = require('../../utils/helpers');
 const config = require('../../../config');
 const logger = require('../../utils/logger');
@@ -485,19 +486,52 @@ router.post('/settings/totp/disable', async (req, res) => {
 // POST /settings/reset-traffic - Reset traffic counters for all users
 router.post('/settings/reset-traffic', async (req, res) => {
     try {
+        const now = new Date();
         const result = await HyUser.updateMany(
             {},
             {
                 $set: {
                     'traffic.tx': 0,
                     'traffic.rx': 0,
-                    'traffic.lastUpdate': new Date()
+                    'traffic.lastUpdate': now,
                 }
             }
         );
-        
+
         logger.warn(`[Panel] Traffic reset for ${result.modifiedCount} users by admin: ${req.session.adminUsername}`);
-        
+
+        // Renewal-by-reset: bring back users whose only reason to be disabled
+        // was hitting their traffic limit. Filter `enabled:false, !expired,
+        // trafficLimit>0` — those are the over-traffic auto-disabled set
+        // (after the reset above their counter is 0, so they're under-limit).
+        const reenableCandidates = await HyUser.find(
+            {
+                enabled: false,
+                trafficLimit: { $gt: 0 },
+                $or: [
+                    { expireAt: null },
+                    { expireAt: { $exists: false } },
+                    { expireAt: { $gt: now } },
+                ],
+            },
+            { userId: 1, subscriptionToken: 1, xrayUuid: 1, nodes: 1, groups: 1 }
+        ).lean();
+
+        let reenabledCount = 0;
+        if (reenableCandidates.length > 0) {
+            const ids = reenableCandidates.map(u => u._id);
+            const flip = await HyUser.updateMany(
+                { _id: { $in: ids }, enabled: false },
+                { $set: { enabled: true } }
+            );
+            reenabledCount = flip.modifiedCount;
+
+            for (const u of reenableCandidates) {
+                syncService.addUserToAllXrayNodes(u).catch(() => {});
+                webhookService.emit(webhookService.EVENTS.USER_ENABLED, { userId: u.userId });
+            }
+        }
+
         const users = await HyUser.find({}).select('userId subscriptionToken').lean();
         const invalidateTasks = users.flatMap((user) => {
             const tasks = [() => cache.invalidateUser(user.userId)];
@@ -511,13 +545,18 @@ router.post('/settings/reset-traffic', async (req, res) => {
         for (let i = 0; i < invalidateTasks.length; i += BATCH_SIZE) {
             await Promise.all(invalidateTasks.slice(i, i + BATCH_SIZE).map((task) => task()));
         }
-        
+
         await cache.invalidateDashboardCounts();
         await cache.invalidateTrafficStats();
-        
-        res.json({ 
-            success: true, 
+
+        if (reenabledCount > 0) {
+            logger.info(`[Panel] Auto-reenabled ${reenabledCount} over-traffic user(s) after bulk reset`);
+        }
+
+        res.json({
+            success: true,
             count: result.modifiedCount,
+            reenabled: reenabledCount,
             message: `Трафик сброшен у ${result.modifiedCount} пользователей`
         });
     } catch (error) {

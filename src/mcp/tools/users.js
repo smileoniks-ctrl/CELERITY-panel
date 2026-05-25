@@ -12,6 +12,8 @@ const cryptoService = require('../../services/cryptoService');
 const cache = require('../../services/cacheService');
 const logger = require('../../utils/logger');
 const webhook = require('../../services/webhookService');
+const expireScheduler = require('../../services/expireScheduler');
+const { recomputeEnabled, isExpired, isOverLimit } = require('../../utils/userActivity');
 
 async function invalidateUserCache(userId, subscriptionToken) {
     await cache.invalidateUser(userId);
@@ -153,6 +155,7 @@ async function manageUser(args, emit) {
             logger.info(`[MCP] Created user ${userId}`);
             webhook.emit(webhook.EVENTS.USER_CREATED, { userId, username: data.username || '', groups: data.groups || [] });
             if (user.enabled) getSyncService().addUserToAllXrayNodes(user.toObject()).catch(() => {});
+            if (user.expireAt) expireScheduler.notify(user.expireAt);
             emit('progress', { message: `User '${userId}' created` });
             return { success: true, user };
         }
@@ -179,6 +182,11 @@ async function manageUser(args, emit) {
                     : null;
             }
 
+            const prevObj = user.toObject();
+            const wasEnabled = user.enabled;
+            updates.enabled = recomputeEnabled(prevObj, updates);
+            const nowEnabled = updates.enabled;
+
             const updated = await HyUser.findOneAndUpdate({ userId }, { $set: updates }, { new: true })
                 .populate('nodes', 'name ip')
                 .populate('groups', 'name color');
@@ -193,6 +201,24 @@ async function manageUser(args, emit) {
             if (limitTouched || modeRelaxed || enforceDelayed) {
                 webhook.clearDeviceLimitNotified(userId);
             }
+
+            // Sync Xray runtime when enabled flips (was previously missing here).
+            if (wasEnabled !== nowEnabled) {
+                const sync = getSyncService();
+                const merged = { ...prevObj, ...updates };
+                if (nowEnabled) {
+                    sync.addUserToAllXrayNodes(merged).catch(() => {});
+                    webhook.emit(webhook.EVENTS.USER_ENABLED, { userId });
+                } else {
+                    sync.removeUserFromAllXrayNodes(merged).catch(() => {});
+                    webhook.emit(webhook.EVENTS.USER_DISABLED, { userId });
+                }
+            }
+
+            if (Object.prototype.hasOwnProperty.call(updates, 'expireAt')) {
+                expireScheduler.notify(updates.expireAt);
+            }
+
             logger.info(`[MCP] Updated user ${userId}`);
             webhook.emit(webhook.EVENTS.USER_UPDATED, { userId, updates });
             return { success: true, user: updated };
@@ -235,14 +261,32 @@ async function manageUser(args, emit) {
 
         case 'reset_traffic': {
             if (!userId) throw new Error('userId is required for reset_traffic');
+            const prev = await HyUser.findOne({ userId });
+            if (!prev) return { error: `User '${userId}' not found`, code: 404 };
+
+            const set = { 'traffic.tx': 0, 'traffic.rx': 0 };
+
+            // Renewal-by-reset: if this user was disabled and the zeroed
+            // counter makes them healthy again, flip enabled back on in the
+            // same write so we don't race with concurrent stats cycles.
+            const merged = { ...prev.toObject(), traffic: { tx: 0, rx: 0 } };
+            const autoEnable = !prev.enabled && !isExpired(merged) && !isOverLimit(merged);
+            if (autoEnable) set.enabled = true;
+
             const user = await HyUser.findOneAndUpdate(
                 { userId },
-                { $set: { 'traffic.tx': 0, 'traffic.rx': 0 } },
+                { $set: set },
                 { new: true }
             );
-            if (!user) return { error: `User '${userId}' not found`, code: 404 };
+
             await invalidateUserCache(userId, user.subscriptionToken);
-            logger.info(`[MCP] Reset traffic for user ${userId}`);
+
+            if (autoEnable) {
+                getSyncService().addUserToAllXrayNodes(user.toObject()).catch(() => {});
+                webhook.emit(webhook.EVENTS.USER_ENABLED, { userId });
+            }
+
+            logger.info(`[MCP] Reset traffic for user ${userId}${autoEnable ? ' (auto-enabled)' : ''}`);
             return { success: true, message: `Traffic reset for '${userId}'`, user };
         }
 

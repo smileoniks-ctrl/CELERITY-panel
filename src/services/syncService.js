@@ -18,7 +18,7 @@ const Settings = require('../models/settingsModel');
 const NodeSSH = require('./nodeSSH');
 const configGenerator = require('./configGenerator');
 const cache = require('./cacheService');
-const { invalidateNodesCache } = require('../utils/helpers');
+const { invalidateNodesCache, invalidateUserCache } = require('../utils/helpers');
 const logger = require('../utils/logger');
 const axios = require('axios');
 const https = require('https');
@@ -225,10 +225,6 @@ class SyncService {
     constructor() {
         this.isSyncing = false;
         this.lastSyncTime = null;
-        // Track which users have already received a traffic/expiry webhook in this
-        // process lifetime to avoid spamming the same event every stats cycle.
-        this._notifiedTraffic = new Set();
-        this._notifiedExpired = new Set();
     }
 
     /**
@@ -662,7 +658,7 @@ class SyncService {
             if (bulkOps.length > 0) {
                 const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
                 logger.debug(`[Agent Stats] ${node.name}: updated ${result.modifiedCount}/${bulkOps.length} users`);
-                this._checkUserLimits(userEntries.map(([email]) => email)).catch(() => {});
+                this.enforceTrafficLimit(userEntries.map(([email]) => email)).catch(() => {});
             }
 
             // Online = users with non-zero traffic in the last poll interval.
@@ -978,8 +974,8 @@ class SyncService {
                 const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
                 logger.debug(`[Stats] ${node.name}: Bulk updated ${result.modifiedCount}/${bulkOps.length} users`);
 
-                // Check traffic limits and expiry for affected users (fire-and-forget)
-                this._checkUserLimits(Object.keys(stats)).catch(() => {});
+                // Enforce traffic limits on users whose counters just moved (fire-and-forget).
+                this.enforceTrafficLimit(Object.keys(stats)).catch(() => {});
             }
             
             // Update node traffic
@@ -1140,48 +1136,72 @@ class SyncService {
     }
 
     /**
-     * Check traffic limits and expiry for a list of userIds after stats update.
-     * Emits user.traffic_exceeded and user.expired webhooks only ONCE per user
-     * (when they first cross the threshold, not on every subsequent cycle).
+     * Atomically flip an enabled user to disabled, tear down their runtime
+     * presence (Xray clients, Hysteria sessions), invalidate caches and emit
+     * the appropriate webhook.
      *
-     * Uses a simple in-memory Set to deduplicate across calls within a process lifetime.
-     * The Set is cleared on process restart, which is acceptable — one extra notification
-     * on redeploy is not a problem.
+     * Compare-and-set on { enabled: true } makes this idempotent: concurrent
+     * scheduler/catchup/stats callers race only on the DB write — the loser
+     * exits early and no side-effect is duplicated.
+     *
+     * @param {object} user   plain user object; must have userId
+     * @param {string} reason 'expired' | 'traffic'
+     * @returns {Promise<boolean>} true if this call actually disabled the user
      */
-    async _checkUserLimits(userIds) {
+    async disableUser(user, reason) {
+        if (!user || !user.userId) return false;
+
+        const result = await HyUser.updateOne(
+            { userId: user.userId, enabled: true },
+            { $set: { enabled: false } }
+        );
+        if (result.modifiedCount === 0) return false;
+
+        // subscriptionToken is needed to invalidate the subscription cache.
+        // Most callers already pass it; fall back to a tiny lookup if missing.
+        let token = user.subscriptionToken;
+        if (!token) {
+            const fresh = await HyUser.findOne(
+                { userId: user.userId },
+                { subscriptionToken: 1 }
+            ).lean();
+            token = fresh?.subscriptionToken;
+        }
+
+        await Promise.allSettled([
+            this.removeUserFromAllXrayNodes(user),
+            this.kickUser(user.userId),
+            invalidateUserCache(user.userId, token),
+        ]);
+
+        const event = reason === 'traffic'
+            ? webhook.EVENTS.USER_TRAFFIC_EXCEEDED
+            : webhook.EVENTS.USER_EXPIRED;
+        webhook.emit(event, { userId: user.userId, reason });
+
+        logger.info(`[Disable] ${user.userId} (${reason})`);
+        return true;
+    }
+
+    /**
+     * Fast-path traffic enforcement triggered right after stats bulkWrite.
+     * Looks only at users whose counters just moved; disables any that
+     * crossed their limit. Full sweep on boot lives in expireScheduler.init.
+     */
+    async enforceTrafficLimit(userIds) {
         if (!userIds || userIds.length === 0) return;
 
         const users = await HyUser.find(
-            { userId: { $in: userIds }, enabled: true },
-            { userId: 1, trafficLimit: 1, 'traffic.tx': 1, 'traffic.rx': 1, expireAt: 1 }
+            { userId: { $in: userIds }, enabled: true, trafficLimit: { $gt: 0 } },
+            { userId: 1, subscriptionToken: 1, trafficLimit: 1, 'traffic.tx': 1, 'traffic.rx': 1, xrayUuid: 1 }
         ).lean();
 
-        const now = new Date();
-        for (const user of users) {
-            // Traffic exceeded — emit only once per user per process lifetime
-            if (user.trafficLimit > 0) {
-                const used = (user.traffic?.tx || 0) + (user.traffic?.rx || 0);
-                if (used >= user.trafficLimit && !this._notifiedTraffic.has(user.userId)) {
-                    this._notifiedTraffic.add(user.userId);
-                    webhook.emit(webhook.EVENTS.USER_TRAFFIC_EXCEEDED, {
-                        userId: user.userId,
-                        used,
-                        limit: user.trafficLimit,
-                    });
-                } else if (used < user.trafficLimit) {
-                    // Traffic was reset — allow future notifications
-                    this._notifiedTraffic.delete(user.userId);
-                }
-            }
-            // Expired — emit only once per user per process lifetime
-            if (user.expireAt && new Date(user.expireAt) < now && !this._notifiedExpired.has(user.userId)) {
-                this._notifiedExpired.add(user.userId);
-                webhook.emit(webhook.EVENTS.USER_EXPIRED, {
-                    userId: user.userId,
-                    expiredAt: user.expireAt,
-                });
-            }
-        }
+        const overLimit = users.filter(u =>
+            (u.traffic?.tx || 0) + (u.traffic?.rx || 0) >= u.trafficLimit
+        );
+        if (overLimit.length === 0) return;
+
+        await Promise.allSettled(overLimit.map(u => this.disableUser(u, 'traffic')));
     }
 
     /**

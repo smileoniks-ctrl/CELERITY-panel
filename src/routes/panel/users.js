@@ -6,10 +6,12 @@ const HyNode = require('../../models/hyNodeModel');
 const ServerGroup = require('../../models/serverGroupModel');
 const cryptoService = require('../../services/cryptoService');
 const syncService = require('../../services/syncService');
+const expireScheduler = require('../../services/expireScheduler');
 const hwidDeviceService = require('../../services/hwidDeviceService');
 const webhookService = require('../../services/webhookService');
 const { render } = require('./helpers');
 const { getActiveGroups, invalidateGroupsCache, getSettings, invalidateUserCache, invalidateNodesCache } = require('../../utils/helpers');
+const { recomputeEnabled } = require('../../utils/userActivity');
 const logger = require('../../utils/logger');
 
 // Whether the global HWID feature is enabled (permissive/strict).
@@ -234,6 +236,9 @@ router.post('/users', async (req, res) => {
             });
         }
 
+        // Arm the scheduler on the new expiry if it is the earliest upcoming.
+        if (newUser.expireAt) expireScheduler.notify(newUser.expireAt);
+
         webhookService.emit(webhookService.EVENTS.USER_CREATED, {
             userId,
             username: username || '',
@@ -308,13 +313,18 @@ router.post('/users/:userId', async (req, res) => {
         }
 
         const updates = {
-            enabled: enabled === 'on',
             username: username || '',
             groups,
             trafficLimit,
             expireAt,
             maxDevices: userMaxDevices,
         };
+
+        // Only forward `enabled` when the checkbox state actually differs from
+        // the stored value, so recomputeEnabled can auto-reenable on renewal
+        // when the admin only moved expireAt/trafficLimit.
+        const formEnabled = enabled === 'on';
+        if (formEnabled !== user.enabled) updates.enabled = formEnabled;
 
         const hm = req.body.hwidMode;
         if (['inherit', 'off', 'strict'].includes(String(hm))) {
@@ -328,6 +338,9 @@ router.post('/users/:userId', async (req, res) => {
                 updates.hwidEnforceFrom = Number.isNaN(d.getTime()) ? null : d;
             }
         }
+
+        const prevObj = user.toObject();
+        updates.enabled = recomputeEnabled(prevObj, updates);
 
         const wasEnabled = user.enabled;
         const nowEnabled = updates.enabled;
@@ -344,16 +357,23 @@ router.post('/users/:userId', async (req, res) => {
         }
 
         if (wasEnabled !== nowEnabled) {
-            const updatedUser = { ...user.toObject(), ...updates };
+            const updatedUser = { ...prevObj, ...updates };
             if (nowEnabled) {
                 syncService.addUserToAllXrayNodes(updatedUser).catch(err => {
                     logger.error(`[Panel] Xray addUser error for ${req.params.userId}: ${err.message}`);
                 });
+                webhookService.emit(webhookService.EVENTS.USER_ENABLED, { userId: req.params.userId });
             } else {
                 syncService.removeUserFromAllXrayNodes(updatedUser).catch(err => {
                     logger.error(`[Panel] Xray removeUser error for ${req.params.userId}: ${err.message}`);
                 });
+                webhookService.emit(webhookService.EVENTS.USER_DISABLED, { userId: req.params.userId });
             }
+        }
+
+        // Reschedule the expiry timer if the new expireAt could become the next event.
+        if (Object.prototype.hasOwnProperty.call(updates, 'expireAt')) {
+            expireScheduler.notify(updates.expireAt);
         }
 
         webhookService.emit(webhookService.EVENTS.USER_UPDATED, { userId: req.params.userId, updates });

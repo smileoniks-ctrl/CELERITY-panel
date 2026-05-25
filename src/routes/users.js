@@ -12,6 +12,8 @@ const cryptoService = require('../services/cryptoService');
 const hwidDeviceService = require('../services/hwidDeviceService');
 const logger = require('../utils/logger');
 const { getNodesByGroups, invalidateUserCache, invalidateUsersBulkCache } = require('../utils/helpers');
+const { recomputeEnabled } = require('../utils/userActivity');
+const expireScheduler = require('../services/expireScheduler');
 const { requireScope } = require('../middleware/auth');
 const webhook = require('../services/webhookService');
 
@@ -274,6 +276,9 @@ router.post('/', requireScope('users:write'), async (req, res) => {
         // Add to Xray nodes if user is enabled
         if (user.enabled) xrayAddUser(user.toObject());
 
+        // Arm expiry timer if this user has the earliest upcoming expireAt.
+        if (user.expireAt) expireScheduler.notify(user.expireAt);
+
         res.status(201).json(user);
     } catch (error) {
         logger.error(`[Users API] Create user error: ${error.message}`);
@@ -334,7 +339,12 @@ router.put('/:userId', requireScope('users:write'), async (req, res) => {
                 updates.hwidEnforceFrom = Number.isNaN(d.getTime()) ? null : d;
             }
         }
-        
+
+        const prevObj = user.toObject();
+        const wasEnabled = user.enabled;
+        updates.enabled = recomputeEnabled(prevObj, updates);
+        const nowEnabled = updates.enabled;
+
         const updatedUser = await HyUser.findOneAndUpdate(
             { userId: req.params.userId },
             { $set: updates },
@@ -354,6 +364,22 @@ router.put('/:userId', requireScope('users:write'), async (req, res) => {
         const enforceDelayed = Object.prototype.hasOwnProperty.call(updates, 'hwidEnforceFrom');
         if (limitTouched || modeRelaxed || enforceDelayed) {
             webhook.clearDeviceLimitNotified(req.params.userId);
+        }
+
+        // Sync Xray runtime when enabled flips (was previously missing here).
+        if (wasEnabled !== nowEnabled) {
+            const merged = { ...prevObj, ...updates };
+            if (nowEnabled) {
+                xrayAddUser(merged);
+                webhook.emit(webhook.EVENTS.USER_ENABLED, { userId: req.params.userId });
+            } else {
+                xrayRemoveUser(merged);
+                webhook.emit(webhook.EVENTS.USER_DISABLED, { userId: req.params.userId });
+            }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updates, 'expireAt')) {
+            expireScheduler.notify(updates.expireAt);
         }
 
         logger.info(`[Users API] Updated user ${req.params.userId}`);
@@ -550,6 +576,20 @@ router.post('/sync-from-main', requireScope('users:write'), async (req, res) => 
                         await HyUser.updateOne({ userId }, { $set: updates });
                         changed.push({ userId, subscriptionToken: existing.subscriptionToken });
                         updated++;
+
+                        // When main pushes an enable/disable flip, propagate it
+                        // to Xray runtime too — otherwise sub-panel DB and node
+                        // state desync (Xray has no realtime auth callback).
+                        if (updates.enabled !== undefined) {
+                            const merged = { ...existing.toObject(), ...updates };
+                            if (updates.enabled) {
+                                xrayAddUser(merged);
+                                webhook.emit(webhook.EVENTS.USER_ENABLED, { userId });
+                            } else {
+                                xrayRemoveUser(merged);
+                                webhook.emit(webhook.EVENTS.USER_DISABLED, { userId });
+                            }
+                        }
                     }
                 } else {
                     // Создаём нового
@@ -565,6 +605,11 @@ router.post('/sync-from-main', requireScope('users:write'), async (req, res) => 
                     });
                     changed.push({ userId, subscriptionToken: createdUser.subscriptionToken });
                     created++;
+
+                    // Mirror create-with-enabled into Xray runtime.
+                    if (createdUser.enabled) {
+                        xrayAddUser(createdUser.toObject());
+                    }
                 }
             } catch (err) {
                 logger.error(`[Sync] Error for userId ${userData.userId}: ${err.message}`);
