@@ -1,0 +1,461 @@
+<!-- ==================== TAB: MIGRATION ==================== -->
+<div class="tab-content" id="tab-migration">
+    <style>
+    /* Migration wizard — scoped to #tab-migration so global settings styles
+     * stay untouched. Visual language mirrors the existing setup wizard.    */
+    #tab-migration .mig-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 8px 0 18px; }
+    #tab-migration .mig-step  { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border);
+                                background: rgba(255,255,255,0.03); text-align: center; font-size: 12px;
+                                font-weight: 600; color: var(--text-secondary); transition: all .2s ease; }
+    #tab-migration .mig-step.active { color: #fff; border-color: rgba(99,102,241,.45);
+                                      background: linear-gradient(135deg, rgba(99,102,241,.32), rgba(124,58,237,.28));
+                                      box-shadow: 0 12px 32px rgba(99,102,241,.16); }
+    #tab-migration .mig-step.done   { color: var(--success); border-color: rgba(34,197,94,.3);
+                                      background: rgba(34,197,94,.08); }
+
+    #tab-migration .mig-panel { display: none; }
+    #tab-migration .mig-panel.active { display: block; animation: fadeUp 0.28s ease-out both; }
+
+    #tab-migration .mig-row { display: grid; gap: 6px; margin-bottom: 14px; }
+    #tab-migration .mig-row label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    #tab-migration .mig-row input[type="text"],
+    #tab-migration .mig-row input[type="url"],
+    #tab-migration .mig-row input[type="password"],
+    #tab-migration .mig-row textarea,
+    #tab-migration .mig-row select {
+        width: 100%; padding: 10px 12px; border-radius: 10px;
+        border: 1px solid var(--border); background: rgba(0,0,0,.32);
+        color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px;
+    }
+    #tab-migration .mig-row textarea { min-height: 84px; resize: vertical; }
+    #tab-migration .mig-row .hint { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+    #tab-migration .mig-row.checkbox { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+    #tab-migration .mig-row.checkbox label { margin: 0; font-weight: 500; color: var(--text); font-size: 13px; }
+
+    #tab-migration .mig-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+
+    #tab-migration .mig-progress { height: 10px; border-radius: 999px; background: rgba(0,0,0,.32); overflow: hidden;
+                                   border: 1px solid var(--border); margin-top: 12px; }
+    #tab-migration .mig-progress > span { display: block; height: 100%; width: 0%;
+                                          background: linear-gradient(90deg, rgba(99,102,241,1), rgba(34,197,94,1));
+                                          transition: width .3s ease; }
+
+    #tab-migration .mig-log { margin-top: 14px; max-height: 260px; overflow: auto;
+                              padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+                              background: rgba(0,0,0,.32); font-family: 'JetBrains Mono', ui-monospace, monospace;
+                              font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+    #tab-migration .mig-log .line { white-space: pre-wrap; word-break: break-all; }
+
+    #tab-migration .mig-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    #tab-migration .mig-stat  { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+                                background: rgba(255,255,255,.03); text-align: center; }
+    #tab-migration .mig-stat .v { font-size: 20px; font-weight: 700; color: #fff; }
+    #tab-migration .mig-stat .k { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+    #tab-migration .mig-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #tab-migration .mig-table th, #tab-migration .mig-table td {
+        padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+
+    #tab-migration .mig-state-banner {
+        padding: 12px 16px; border-radius: 12px; margin-bottom: 16px;
+        border: 1px solid rgba(34,197,94,.4); background: rgba(34,197,94,.08); color: #86efac;
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    #tab-migration .mig-state-banner.off { border-color: rgba(63,63,70,.9); background: rgba(255,255,255,.03); color: var(--text-secondary); }
+    </style>
+
+    <% const armed = !!(marzbanCfg && marzbanCfg.enabled); %>
+
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="ti ti-transfer-in"></i> <%= t('settings.tabMigration') %></h2>
+        </div>
+        <div class="card-body">
+            <% if (armed) { %>
+                <div class="mig-state-banner">
+                    <div>
+                        <strong><%= t('migration.armed') %></strong>
+                        <%
+                            const armedTxt = (t('migration.armedDetail') || '')
+                                .replace('{path}', '/' + (marzbanCfg.path || 'sub') + '/')
+                                .replace('{date}', marzbanCfg.completedAt ? new Date(marzbanCfg.completedAt).toLocaleString() : '—')
+                                .replace('{imported}', (marzbanCfg.stats && marzbanCfg.stats.imported) || 0)
+                                .replace('{skipped}',  (marzbanCfg.stats && marzbanCfg.stats.skipped)  || 0)
+                                .replace('{errors}',   (marzbanCfg.stats && marzbanCfg.stats.errors)   || 0);
+                        %>
+                        <span><%= armedTxt %></span>
+                    </div>
+                    <button type="button" class="btn btn-danger" id="migBtnDisable"><%= t('migration.disableBtn') %></button>
+                </div>
+            <% } else { %>
+                <div class="mig-state-banner off">
+                    <div><%= t('migration.off') %></div>
+                </div>
+            <% } %>
+
+            <div class="mig-steps" id="migSteps">
+                <div class="mig-step active" data-step="1"><%= t('migration.step1') %></div>
+                <div class="mig-step"        data-step="2"><%= t('migration.step2') %></div>
+                <div class="mig-step"        data-step="3"><%= t('migration.step3') %></div>
+                <div class="mig-step"        data-step="4"><%= t('migration.step4') %></div>
+            </div>
+
+            <!-- ──────────── Step 1: Connect ──────────── -->
+            <section class="mig-panel active" data-panel="1">
+                <h3 style="margin: 0 0 4px;"><%= t('migration.connectTitle') %></h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 14px;"><%= t('migration.connectDesc') %></p>
+
+                <div class="mig-row">
+                    <label><%= t('migration.marzbanUrl') %></label>
+                    <input type="url" id="mig-baseUrl" placeholder="https://marzban.example.com" autocomplete="off">
+                    <span class="hint"><%= t('migration.marzbanUrlHint') %></span>
+                </div>
+                <div class="mig-row">
+                    <label><%= t('migration.adminUsername') %></label>
+                    <input type="text" id="mig-username" autocomplete="off">
+                </div>
+                <div class="mig-row">
+                    <label><%= t('migration.adminPassword') %></label>
+                    <input type="password" id="mig-password" autocomplete="off">
+                </div>
+
+                <div class="mig-actions">
+                    <button type="button" class="btn btn-secondary" id="migBtnTest"><%= t('migration.testBtn') %></button>
+                    <button type="button" class="btn btn-primary" id="migBtnToConfigure" disabled><%= t('migration.continueBtn') %></button>
+                </div>
+
+                <div class="mig-stats" id="migTestResult" style="display:none;">
+                    <div class="mig-stat"><div class="v" id="migTrTotal">0</div><div class="k"><%= t('migration.marzbanUsers') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migTrAdmins">0</div><div class="k"><%= t('migration.admins') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migTrSudo">—</div><div class="k"><%= t('migration.sudoAccess') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migTrStatus">OK</div><div class="k"><%= t('migration.status') %></div></div>
+                </div>
+            </section>
+
+            <!-- ──────────── Step 2: Configure ──────────── -->
+            <section class="mig-panel" data-panel="2">
+                <h3 style="margin: 0 0 4px;"><%= t('migration.configureTitle') %></h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 14px;"><%= t('migration.configureDesc') %></p>
+
+                <div class="mig-row">
+                    <label><%= t('migration.pathLabel') %></label>
+                    <input type="text" id="mig-path" value="sub" maxlength="32">
+                    <span class="hint"><%= t('migration.pathHint') %></span>
+                </div>
+
+                <div class="mig-row checkbox">
+                    <input type="checkbox" id="mig-acceptSalt">
+                    <label for="mig-acceptSalt"><%= t('migration.acceptSalt') %></label>
+                </div>
+
+                <div class="mig-row">
+                    <label><%= t('migration.jwtSecret') %></label>
+                    <textarea id="mig-jwt" placeholder="<%= t('migration.jwtSecretPlaceholder') %>"></textarea>
+                    <span class="hint"><%= t('migration.jwtSecretHint') %></span>
+                </div>
+
+                <h3 style="margin: 18px 0 4px;"><%= t('migration.mappingTitle') %></h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 12px;"><%= t('migration.mappingDesc') %></p>
+
+                <table class="mig-table" id="migMapTable">
+                    <thead><tr><th><%= t('migration.thAdmin') %></th><th><%= t('migration.thGroup') %></th></tr></thead>
+                    <tbody id="migMapBody"></tbody>
+                </table>
+
+                <div class="mig-row" style="margin-top: 14px;">
+                    <label><%= t('migration.fallbackGroup') %></label>
+                    <select id="mig-defaultGroup">
+                        <option value=""><%= t('migration.fallbackNone') %></option>
+                        <% (migrationGroups || []).forEach(function(g){ %>
+                            <option value="<%= g._id %>"><%= g.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+
+                <div class="mig-row checkbox">
+                    <input type="checkbox" id="mig-onlyActive" checked>
+                    <label for="mig-onlyActive"><%= t('migration.onlyActive') %></label>
+                </div>
+                <div class="mig-row checkbox">
+                    <input type="checkbox" id="mig-importVless" checked>
+                    <label for="mig-importVless"><%= t('migration.importVless') %></label>
+                </div>
+
+                <div class="mig-actions">
+                    <button type="button" class="btn btn-secondary" data-migGo="1"><%= t('migration.backBtn') %></button>
+                    <button type="button" class="btn btn-primary" id="migBtnStart"><%= t('migration.startBtn') %></button>
+                </div>
+            </section>
+
+            <!-- ──────────── Step 3: Run ──────────── -->
+            <section class="mig-panel" data-panel="3">
+                <h3 style="margin: 0 0 4px;"><%= t('migration.runTitle') %></h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 14px;"><%= t('migration.runDesc') %></p>
+
+                <div class="mig-stats">
+                    <div class="mig-stat"><div class="v" id="migPProgress">0</div><div class="k"><%= t('migration.processed') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migPTotal">0</div><div class="k"><%= t('migration.total') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migPImported">0</div><div class="k"><%= t('migration.imported') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migPSkipped">0</div><div class="k"><%= t('migration.skipped') %></div></div>
+                </div>
+
+                <div class="mig-progress"><span id="migPBar"></span></div>
+
+                <div class="mig-log" id="migPLog"></div>
+            </section>
+
+            <!-- ──────────── Step 4: Finalize ──────────── -->
+            <section class="mig-panel" data-panel="4">
+                <h3 style="margin: 0 0 4px;"><%= t('migration.finalizeTitle') %></h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 14px;"><%= t('migration.finalizeDesc') %></p>
+
+                <div class="mig-stats">
+                    <div class="mig-stat"><div class="v" id="migFImported">0</div><div class="k"><%= t('migration.imported') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migFSkipped">0</div><div class="k"><%= t('migration.skipped') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migFErrors">0</div><div class="k"><%= t('migration.errors') %></div></div>
+                    <div class="mig-stat"><div class="v" id="migFConflicts">0</div><div class="k"><%= t('migration.conflicts') %></div></div>
+                </div>
+
+                <div id="migConflictsBox" style="display:none; margin-top:14px;">
+                    <h4 style="margin: 0 0 6px;"><%= t('migration.conflictsTitle') %></h4>
+                    <table class="mig-table">
+                        <thead><tr><th><%= t('migration.thAdmin') %></th><th><%= t('migration.thReason') %></th></tr></thead>
+                        <tbody id="migConflictsBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="mig-actions">
+                    <button type="button" class="btn btn-primary" id="migBtnFinalize"><%= t('migration.activateBtn') %></button>
+                    <button type="button" class="btn btn-secondary" data-migGo="2"><%= t('migration.editOptions') %></button>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    const root = document.getElementById('tab-migration');
+    if (!root || root.dataset.migInit === '1') return;
+    root.dataset.migInit = '1';
+
+    const $  = sel => root.querySelector(sel);
+    const $$ = sel => Array.from(root.querySelectorAll(sel));
+
+    const i18n = {
+        testBtn:        <%- JSON.stringify(t('migration.testBtn')) %>,
+        testing:        <%- JSON.stringify(t('migration.testing')) %>,
+        sudo:           <%- JSON.stringify(t('migration.sudo')) %>,
+        limited:        <%- JSON.stringify(t('migration.limited')) %>,
+        skipUsers:      <%- JSON.stringify(t('migration.skipUsers')) %>,
+        startBtn:       <%- JSON.stringify(t('migration.startBtn')) %>,
+        starting:       <%- JSON.stringify(t('migration.starting')) %>,
+        activateBtn:    <%- JSON.stringify(t('migration.activateBtn')) %>,
+        activating:     <%- JSON.stringify(t('migration.activating')) %>,
+        disableConfirm: <%- JSON.stringify(t('migration.disableConfirm')) %>,
+        startFailed:    <%- JSON.stringify(t('migration.startFailed')) %>,
+        activateFailed: <%- JSON.stringify(t('migration.activateFailed')) %>,
+        activateSuccess:<%- JSON.stringify(t('migration.activateSuccess')) %>,
+        disableFailed:  <%- JSON.stringify(t('migration.disableFailed')) %>,
+    };
+    const groupOptions = <%- JSON.stringify((migrationGroups || []).map(g => ({ id: String(g._id), name: g.name }))) %>;
+
+    const state = { step: 1, admins: [], path: 'sub', taskId: null, result: null };
+
+    function goto(step) {
+        state.step = step;
+        $$('.mig-steps .mig-step').forEach(el => {
+            const n = Number(el.dataset.step);
+            el.classList.toggle('active', n === step);
+            el.classList.toggle('done',   n  <  step);
+        });
+        $$('.mig-panel').forEach(p => p.classList.toggle('active', Number(p.dataset.panel) === step));
+    }
+    $$('[data-migGo]').forEach(b => b.addEventListener('click', () => goto(Number(b.dataset.migGo))));
+
+    async function postJSON(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        return data;
+    }
+
+    // ─── Step 1: Test connection ─────────────────────────────────────────────
+    $('#migBtnTest').addEventListener('click', async () => {
+        const btn = $('#migBtnTest');
+        btn.disabled = true;
+        btn.textContent = i18n.testing;
+        try {
+            const out = await postJSON('/panel/migration/test', {
+                baseUrl:  $('#mig-baseUrl').value.trim(),
+                username: $('#mig-username').value.trim(),
+                password: $('#mig-password').value,
+            });
+            state.admins = Array.isArray(out.admins) ? out.admins : [];
+            $('#migTestResult').style.display = '';
+            $('#migTrTotal').textContent  = out.total || 0;
+            $('#migTrAdmins').textContent = state.admins.length;
+            $('#migTrSudo').textContent   = out.isSudo ? i18n.sudo : i18n.limited;
+            $('#migTrStatus').textContent = 'OK';
+            $('#migBtnToConfigure').disabled = false;
+            renderMapping();
+        } catch (err) {
+            $('#migTestResult').style.display = '';
+            $('#migTrStatus').textContent = err.message;
+            $('#migBtnToConfigure').disabled = true;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = i18n.testBtn;
+        }
+    });
+
+    $('#migBtnToConfigure').addEventListener('click', () => goto(2));
+
+    function renderMapping() {
+        const tbody = $('#migMapBody');
+        tbody.innerHTML = '';
+        const opts = ['<option value="">' + i18n.skipUsers + '</option>']
+            .concat(groupOptions.map(g => '<option value="' + g.id + '">' + g.name + '</option>'))
+            .join('');
+        state.admins.forEach(a => {
+            const tr = document.createElement('tr');
+            const label = a.username + (a.is_sudo ? ' (sudo)' : '');
+            tr.innerHTML = '<td><code>' + label + '</code></td>'
+                + '<td><select data-admin="' + a.username + '">' + opts + '</select></td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ─── Step 2: Start import ────────────────────────────────────────────────
+    $('#migBtnStart').addEventListener('click', async () => {
+        const btn = $('#migBtnStart');
+        btn.disabled = true;
+        btn.textContent = i18n.starting;
+        try {
+            const path = $('#mig-path').value.trim().toLowerCase();
+            state.path = path || 'sub';
+
+            const groupMap = {};
+            $$('#migMapBody select').forEach(sel => {
+                const admin = sel.dataset.admin;
+                const gid   = sel.value;
+                if (admin && gid) groupMap[admin] = gid;
+            });
+
+            const adminNames = Object.keys(groupMap);
+            const groupIds   = adminNames.map(a => groupMap[a]);
+
+            const body = {
+                baseUrl:  $('#mig-baseUrl').value.trim(),
+                username: $('#mig-username').value.trim(),
+                password: $('#mig-password').value,
+                marzban_admin:  adminNames,
+                celerity_group: groupIds,
+                defaultGroupId: $('#mig-defaultGroup').value,
+                onlyActive:     $('#mig-onlyActive').checked,
+                importVlessUuid:$('#mig-importVless').checked,
+            };
+            const out = await postJSON('/panel/migration/start', body);
+            state.taskId = out.taskId;
+            goto(3);
+            streamProgress(out.taskId);
+        } catch (err) {
+            alert(i18n.startFailed.replace('{error}', err.message));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = i18n.startBtn;
+        }
+    });
+
+    // ─── Step 3: SSE progress ────────────────────────────────────────────────
+    function streamProgress(taskId) {
+        const es = new EventSource('/panel/migration/status/' + encodeURIComponent(taskId));
+        const log = $('#migPLog');
+        const bar = $('#migPBar');
+        es.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (_) { return; }
+            if (msg.type === 'log') {
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.textContent = msg.message;
+                log.appendChild(div);
+                log.scrollTop = log.scrollHeight;
+            } else if (msg.type === 'progress') {
+                $('#migPProgress').textContent = msg.progress;
+                $('#migPTotal').textContent    = msg.total;
+                $('#migPImported').textContent = msg.imported;
+                $('#migPSkipped').textContent  = msg.skipped;
+                const pct = msg.total > 0 ? Math.min(100, (msg.progress / msg.total) * 100) : 0;
+                bar.style.width = pct.toFixed(1) + '%';
+            } else if (msg.type === 'done') {
+                state.result = msg;
+                bar.style.width = '100%';
+                $('#migFImported').textContent  = msg.imported  || 0;
+                $('#migFSkipped').textContent   = msg.skipped   || 0;
+                $('#migFErrors').textContent    = msg.errors    || 0;
+                $('#migFConflicts').textContent = (msg.conflicts || []).length;
+                if (msg.conflicts && msg.conflicts.length > 0) {
+                    $('#migConflictsBox').style.display = '';
+                    $('#migConflictsBody').innerHTML = msg.conflicts.map(c =>
+                        '<tr><td><code>' + c.marzbanUsername + '</code></td><td>' + c.reason + '</td></tr>'
+                    ).join('');
+                }
+                es.close();
+                goto(4);
+            } else if (msg.type === 'error') {
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.textContent = '! ' + msg.message;
+                log.appendChild(div);
+            }
+        };
+        es.onerror = () => es.close();
+    }
+
+    // ─── Step 4: Finalize ────────────────────────────────────────────────────
+    $('#migBtnFinalize').addEventListener('click', async () => {
+        const btn = $('#migBtnFinalize');
+        btn.disabled = true;
+        btn.textContent = i18n.activating;
+        try {
+            const r = state.result || {};
+            await postJSON('/panel/migration/finalize', {
+                path:            state.path,
+                jwtSecret:       $('#mig-jwt').value.trim(),
+                acceptUrlSalt:   $('#mig-acceptSalt').checked,
+                'stats.imported': r.imported || 0,
+                'stats.skipped':  r.skipped  || 0,
+                'stats.errors':   r.errors   || 0,
+            });
+            alert(i18n.activateSuccess);
+            window.location.reload();
+        } catch (err) {
+            alert(i18n.activateFailed.replace('{error}', err.message));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = i18n.activateBtn;
+        }
+    });
+
+    // ─── Banner: disable compat ──────────────────────────────────────────────
+    const btnDisable = $('#migBtnDisable');
+    if (btnDisable) {
+        btnDisable.addEventListener('click', async () => {
+            if (!confirm(i18n.disableConfirm)) return;
+            btnDisable.disabled = true;
+            try {
+                await postJSON('/panel/migration/disable', {});
+                window.location.reload();
+            } catch (err) {
+                alert(i18n.disableFailed.replace('{error}', err.message));
+                btnDisable.disabled = false;
+            }
+        });
+    }
+})();
+</script>

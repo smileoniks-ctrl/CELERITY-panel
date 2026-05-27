@@ -15,13 +15,11 @@ const router = require('express').Router();
 const rateLimit = require('express-rate-limit');
 
 const Settings = require('../../models/settingsModel');
-const ServerGroup = require('../../models/serverGroupModel');
 const cacheService = require('../../services/cacheService');
 const cryptoService = require('../../services/cryptoService');
 const migrationService = require('../../services/marzbanMigrationService');
 const logger = require('../../utils/logger');
 const { _isValidPath, PATH_BLACKLIST } = require('../marzbanCompat');
-const { render } = require('./helpers');
 
 // Rate limiter for the credential-bearing endpoints. The wizard sees this UI
 // only after panel auth, but cycling through Marzban passwords from a hijacked
@@ -63,36 +61,8 @@ function _parseGroupMap(body) {
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-
-// GET /panel/migration — wizard shell
-router.get('/migration', async (req, res) => {
-    try {
-        const [settings, groups] = await Promise.all([
-            Settings.get(),
-            ServerGroup.find({ active: true }).select('_id name color').lean(),
-        ]);
-
-        const cfg = settings?.migration?.marzban?.toObject
-            ? settings.migration.marzban.toObject()
-            : (settings?.migration?.marzban || {});
-
-        // Strip the encrypted secret before handing settings to the view —
-        // ciphertext is useless to render and we never want it on the wire.
-        delete cfg.jwtSecretEncrypted;
-
-        render(res, 'migration', {
-            title: 'Marzban Migration',
-            page: 'migration',
-            groups,
-            marzbanCfg: cfg,
-            message: req.query.message || null,
-            error: req.query.error || null,
-        });
-    } catch (err) {
-        logger.error(`[Migration] GET /migration: ${err.message}`);
-        res.status(500).send('Error: ' + err.message);
-    }
-});
+// Note: the wizard UI lives in the Settings page (Migration tab). This module
+// exposes only the JSON / SSE endpoints the tab calls into.
 
 // POST /panel/migration/test — probe Marzban credentials
 router.post('/migration/test', migrationLimiter, async (req, res) => {

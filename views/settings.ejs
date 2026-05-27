@@ -24,6 +24,7 @@
             { id: 'security',     icon: 'ti-shield-lock',     label: t('settings.tabSecurity')     || 'Безопасность',  desc: t('settings.tabSecurityDesc')     || 'Администратор, 2FA, API-ключи, MCP и вебхуки.' },
             { id: 'backup',       icon: 'ti-database-export', label: t('settings.tabBackup')       || 'Бэкапы',        desc: t('settings.tabBackupDesc')       || 'Локальные и S3 бэкапы, расписание, восстановление.' },
             { id: 'maintenance',  icon: 'ti-tool',            label: t('settings.tabMaintenance')  || 'Обслуживание',  desc: t('settings.tabMaintenanceDesc')  || 'Обслуживание, кэш, сброс счётчиков и опасные операции.' },
+            { id: 'migration',    icon: 'ti-transfer-in',     label: t('settings.tabMigration')    || 'Миграция',      desc: t('settings.tabMigrationDesc')    || 'Бесшовный импорт из Marzban — старые ссылки продолжают работать.' },
         ];
     %>
 
@@ -61,6 +62,8 @@
     <%- include('partials/settings/backup') %>
 
     <%- include('partials/settings/maintenance') %>
+
+    <%- include('partials/settings/migration') %>
 </div>
 
 <div id="toast" class="toast"></div>

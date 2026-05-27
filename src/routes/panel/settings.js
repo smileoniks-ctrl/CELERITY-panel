@@ -8,6 +8,7 @@ const multer = require('multer');
 
 const HyUser = require('../../models/hyUserModel');
 const HyNode = require('../../models/hyNodeModel');
+const ServerGroup = require('../../models/serverGroupModel');
 const Settings = require('../../models/settingsModel');
 const Admin = require('../../models/adminModel');
 const ApiKey = require('../../models/apiKeyModel');
@@ -39,10 +40,11 @@ router.get('/settings', async (req, res) => {
             domain: config.PANEL_DOMAIN || null,
         };
 
-        const [admin, settingsDoc, apiKeys] = await Promise.all([
+        const [admin, settingsDoc, apiKeys, migrationGroups] = await Promise.all([
             Admin.findOne({ username: req.session.adminUsername }),
             Settings.get(),
             ApiKey.listKeys(),
+            ServerGroup.find({ active: true }).select('_id name color').lean(),
         ]);
 
         // Convert to plain object before mutating to avoid Mongoose change tracking
@@ -55,6 +57,10 @@ router.get('/settings', async (req, res) => {
         if (settings?.backup?.s3?.secretAccessKey) {
             settings.backup.s3.secretAccessKey = cryptoService.decryptSafe(settings.backup.s3.secretAccessKey);
         }
+
+        // Migration tab data — strip ciphertext (the form never round-trips it).
+        const marzbanCfg = (settings?.migration?.marzban) || {};
+        delete marzbanCfg.jwtSecretEncrypted;
 
         let topHwidUsers = [];
         try {
@@ -99,6 +105,8 @@ router.get('/settings', async (req, res) => {
             webhookEvents: Object.values(webhookService.EVENTS),
             topHwidUsers,
             homepageInfo,
+            migrationGroups,
+            marzbanCfg,
             message: req.query.message || null,
             error: req.query.error || null,
         });
