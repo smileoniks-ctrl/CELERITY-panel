@@ -1,0 +1,448 @@
+<% if (message) { %>
+<div class="alert alert-success"><%= message %></div>
+<% } %>
+<% if (error) { %>
+<div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<style>
+/* Migration wizard — scoped to .mig-page so global panel styles stay untouched.
+ * Card + step pill visuals mirror the existing settings/wizard look, but the
+ * heavy lifting is just CSS variables already exported by style.css.          */
+.mig-page { max-width: 920px; margin: 0 auto; padding-bottom: 64px; }
+.mig-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 8px 0 24px; }
+.mig-step  { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border);
+             background: rgba(255,255,255,0.03); text-align: center; font-size: 12px;
+             font-weight: 600; color: var(--text-secondary); transition: all .2s ease; }
+.mig-step.active { color: #fff; border-color: rgba(99,102,241,.45);
+                   background: linear-gradient(135deg, rgba(99,102,241,.32), rgba(124,58,237,.28));
+                   box-shadow: 0 12px 32px rgba(99,102,241,.16); }
+.mig-step.done   { color: var(--success); border-color: rgba(34,197,94,.3);
+                   background: rgba(34,197,94,.08); }
+
+.mig-card { border: 1px solid var(--border); border-radius: 18px; padding: 22px;
+            background: rgba(24,24,27,.74); margin-bottom: 14px; }
+.mig-card h2 { font-size: 16px; margin: 0 0 4px; }
+.mig-card p.muted { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; }
+
+.mig-row { display: grid; gap: 6px; margin-bottom: 12px; }
+.mig-row label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.mig-row input[type="text"], .mig-row input[type="url"], .mig-row input[type="password"],
+.mig-row textarea, .mig-row select {
+    width: 100%; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: rgba(0,0,0,.32);
+    color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px;
+}
+.mig-row textarea { min-height: 84px; resize: vertical; }
+.mig-row .hint { color: var(--text-secondary); font-size: 12px; }
+.mig-row.checkbox { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.mig-row.checkbox label { margin: 0; font-weight: 500; color: var(--text); }
+
+.mig-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.mig-btn { padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border);
+           background: rgba(255,255,255,.04); color: var(--text); font-size: 13px;
+           font-weight: 600; cursor: pointer; transition: all .15s ease; }
+.mig-btn:hover { border-color: rgba(99,102,241,.45); background: rgba(99,102,241,.08); }
+.mig-btn.primary { background: linear-gradient(135deg, rgba(99,102,241,1), rgba(124,58,237,1));
+                   border-color: transparent; color: #fff; }
+.mig-btn.primary:hover { box-shadow: 0 12px 32px rgba(99,102,241,.28); }
+.mig-btn.danger  { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.4); color: #fca5a5; }
+.mig-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.mig-progress { height: 10px; border-radius: 999px; background: rgba(0,0,0,.32); overflow: hidden;
+                border: 1px solid var(--border); margin-top: 12px; }
+.mig-progress > span { display: block; height: 100%; width: 0%;
+                       background: linear-gradient(90deg, rgba(99,102,241,1), rgba(34,197,94,1));
+                       transition: width .3s ease; }
+
+.mig-log { margin-top: 14px; max-height: 320px; overflow: auto;
+           padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+           background: rgba(0,0,0,.32); font-family: 'JetBrains Mono', ui-monospace, monospace;
+           font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.mig-log .line { white-space: pre-wrap; word-break: break-all; }
+
+.mig-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.mig-stat  { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+             background: rgba(255,255,255,.03); text-align: center; }
+.mig-stat .v { font-size: 20px; font-weight: 700; color: #fff; }
+.mig-stat .k { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+.mig-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mig-table th, .mig-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+
+.mig-state-banner { padding: 12px 16px; border-radius: 12px; margin-bottom: 16px;
+                    border: 1px solid rgba(34,197,94,.4); background: rgba(34,197,94,.08); color: #86efac;
+                    display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mig-state-banner.off { border-color: rgba(63,63,70,.9); background: rgba(255,255,255,.03); color: var(--text-secondary); }
+</style>
+
+<div class="mig-page">
+    <% const armed = !!(marzbanCfg && marzbanCfg.enabled); %>
+    <% if (armed) { %>
+        <div class="mig-state-banner">
+            <div>
+                <strong>Legacy compatibility is ARMED.</strong>
+                Path: <code>/<%= marzbanCfg.path %>/</code> · finalized
+                <%= marzbanCfg.completedAt ? new Date(marzbanCfg.completedAt).toLocaleString() : '—' %>
+                · imported <%= marzbanCfg.stats?.imported || 0 %>, skipped <%= marzbanCfg.stats?.skipped || 0 %>, errors <%= marzbanCfg.stats?.errors || 0 %>
+            </div>
+            <button type="button" class="mig-btn danger" id="btnDisable">Disable compat</button>
+        </div>
+    <% } else { %>
+        <div class="mig-state-banner off">
+            <div>Legacy compatibility is <strong>OFF</strong>. Complete the wizard below to import users and arm the compat route.</div>
+        </div>
+    <% } %>
+
+    <div class="mig-steps" id="migSteps">
+        <div class="mig-step active" data-step="1">1. Connect</div>
+        <div class="mig-step"        data-step="2">2. Configure</div>
+        <div class="mig-step"        data-step="3">3. Import</div>
+        <div class="mig-step"        data-step="4">4. Finalize</div>
+    </div>
+
+    <!-- ──────────── Step 1 ──────────── -->
+    <section class="mig-card" data-panel="1">
+        <h2>Connect to the source Marzban panel</h2>
+        <p class="muted">Provide the panel URL and the credentials of a sudo (or owning) admin. We never store these — they only live in this browser session until the import finishes.</p>
+
+        <div class="mig-row">
+            <label>Marzban URL</label>
+            <input type="url" id="m-baseUrl" placeholder="https://marzban.example.com" autocomplete="off">
+            <span class="hint">Include the protocol. Trailing slashes are stripped automatically.</span>
+        </div>
+        <div class="mig-row">
+            <label>Admin username</label>
+            <input type="text" id="m-username" autocomplete="username">
+        </div>
+        <div class="mig-row">
+            <label>Admin password</label>
+            <input type="password" id="m-password" autocomplete="current-password">
+        </div>
+
+        <div class="mig-actions">
+            <button type="button" class="mig-btn" id="btnTest">Test connection</button>
+            <button type="button" class="mig-btn primary" id="btnNextToConfigure" disabled>Continue</button>
+        </div>
+
+        <div class="mig-stats" id="testResult" style="display:none;">
+            <div class="mig-stat"><div class="v" id="trTotal">0</div><div class="k">Marzban users</div></div>
+            <div class="mig-stat"><div class="v" id="trAdmins">0</div><div class="k">Admins</div></div>
+            <div class="mig-stat"><div class="v" id="trSudo">—</div><div class="k">Sudo access</div></div>
+            <div class="mig-stat"><div class="v" id="trStatus">OK</div><div class="k">Status</div></div>
+        </div>
+    </section>
+
+    <!-- ──────────── Step 2 ──────────── -->
+    <section class="mig-card" data-panel="2" style="display:none;">
+        <h2>Migration options</h2>
+        <p class="muted">Choose which Celerity ServerGroup each Marzban admin's users land in, set the legacy subscription path, and paste the Marzban JWT secret so old links can be verified.</p>
+
+        <div class="mig-row">
+            <label>Subscription path (XRAY_SUBSCRIPTION_PATH)</label>
+            <input type="text" id="m-path" value="sub" maxlength="32">
+            <span class="hint">Must match the source panel's <code>XRAY_SUBSCRIPTION_PATH</code>. Default is <code>sub</code>. Reserved: api, panel, health, sse, docs, public, static.</span>
+        </div>
+
+        <div class="mig-row checkbox">
+            <input type="checkbox" id="m-acceptSalt">
+            <label for="m-acceptSalt">Accept random URL salt (only if Marzban used <code>XRAY_SUBSCRIPTION_URL_PREFIX</code> with a <code>*</code>).</label>
+        </div>
+
+        <div class="mig-row">
+            <label>Marzban JWT secret</label>
+            <textarea id="m-jwt" placeholder="64-char hex string from `SELECT secret_key FROM jwt;`"></textarea>
+            <span class="hint">
+                Get it once per panel with
+                <code>docker exec marzban-master bash -c "sqlite3 /code/db.sqlite3 'SELECT secret_key FROM jwt'"</code>
+                (SQLite) or <code>SELECT secret_key FROM jwt;</code> in MySQL. Stored AES-encrypted in Celerity.
+            </span>
+        </div>
+
+        <h2 style="margin-top:18px;">Admin → ServerGroup mapping</h2>
+        <p class="muted">Each Marzban admin's users join the chosen Celerity ServerGroup. The dropdown lists active groups only.</p>
+
+        <table class="mig-table" id="mapTable">
+            <thead><tr><th>Marzban admin</th><th>Celerity ServerGroup</th></tr></thead>
+            <tbody id="mapBody"></tbody>
+        </table>
+
+        <div class="mig-row">
+            <label>Fallback ServerGroup (for users whose admin is unmapped)</label>
+            <select id="m-defaultGroup">
+                <option value="">— none —</option>
+                <% groups.forEach(function(g){ %>
+                    <option value="<%= g._id %>"><%= g.name %></option>
+                <% }) %>
+            </select>
+        </div>
+
+        <div class="mig-row checkbox">
+            <input type="checkbox" id="m-onlyActive" checked>
+            <label for="m-onlyActive">Import only <code>active</code> / <code>on_hold</code> users (recommended).</label>
+        </div>
+        <div class="mig-row checkbox">
+            <input type="checkbox" id="m-importVless" checked>
+            <label for="m-importVless">Re-use Marzban VLESS UUIDs (keeps Xray identity stable for users who already had VLESS).</label>
+        </div>
+
+        <div class="mig-actions">
+            <button type="button" class="mig-btn" data-go="1">← Back</button>
+            <button type="button" class="mig-btn primary" id="btnStartImport">Start import</button>
+        </div>
+    </section>
+
+    <!-- ──────────── Step 3 ──────────── -->
+    <section class="mig-card" data-panel="3" style="display:none;">
+        <h2>Import in progress</h2>
+        <p class="muted">Do not close this page until the import finishes — the task lives in panel memory and a restart will abort progress.</p>
+
+        <div class="mig-stats">
+            <div class="mig-stat"><div class="v" id="pProgress">0</div><div class="k">processed</div></div>
+            <div class="mig-stat"><div class="v" id="pTotal">0</div><div class="k">total</div></div>
+            <div class="mig-stat"><div class="v" id="pImported">0</div><div class="k">imported</div></div>
+            <div class="mig-stat"><div class="v" id="pSkipped">0</div><div class="k">skipped</div></div>
+        </div>
+
+        <div class="mig-progress"><span id="pBar"></span></div>
+
+        <div class="mig-log" id="pLog"></div>
+    </section>
+
+    <!-- ──────────── Step 4 ──────────── -->
+    <section class="mig-card" data-panel="4" style="display:none;">
+        <h2>Activate legacy compatibility</h2>
+        <p class="muted">Imported users are already in Celerity. The last step enables the <code>/{path}/{token}</code> route so old subscription links keep working.</p>
+
+        <div class="mig-stats">
+            <div class="mig-stat"><div class="v" id="fImported">0</div><div class="k">imported</div></div>
+            <div class="mig-stat"><div class="v" id="fSkipped">0</div><div class="k">skipped</div></div>
+            <div class="mig-stat"><div class="v" id="fErrors">0</div><div class="k">errors</div></div>
+            <div class="mig-stat"><div class="v" id="fConflicts">0</div><div class="k">conflicts</div></div>
+        </div>
+
+        <div id="conflictsBox" style="display:none; margin-top:14px;">
+            <h2 style="font-size:14px; margin: 0 0 6px;">Conflicts (manual review)</h2>
+            <table class="mig-table"><thead><tr><th>Marzban username</th><th>Reason</th></tr></thead><tbody id="conflictsBody"></tbody></table>
+        </div>
+
+        <div class="mig-actions">
+            <button type="button" class="mig-btn primary" id="btnFinalize">Activate compat route</button>
+            <button type="button" class="mig-btn" data-go="2">← Edit options</button>
+        </div>
+    </section>
+</div>
+
+<script>
+(function(){
+    const $  = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    const state = {
+        step: 1,
+        admins: [],
+        path: 'sub',
+        taskId: null,
+        result: null,
+    };
+
+    function goto(step) {
+        state.step = step;
+        $$('.mig-steps .mig-step').forEach(el => {
+            const n = Number(el.dataset.step);
+            el.classList.toggle('active', n === step);
+            el.classList.toggle('done',   n  <  step);
+        });
+        $$('[data-panel]').forEach(p => {
+            p.style.display = (Number(p.dataset.panel) === step) ? '' : 'none';
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    $$('[data-go]').forEach(b => b.addEventListener('click', () => goto(Number(b.dataset.go))));
+
+    async function postJSON(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        return data;
+    }
+
+    // ─── Step 1: Test connection ─────────────────────────────────────────────
+    $('#btnTest').addEventListener('click', async () => {
+        const btn = $('#btnTest');
+        btn.disabled = true;
+        btn.textContent = 'Testing…';
+        try {
+            const out = await postJSON('/panel/migration/test', {
+                baseUrl:  $('#m-baseUrl').value.trim(),
+                username: $('#m-username').value.trim(),
+                password: $('#m-password').value,
+            });
+            state.admins = Array.isArray(out.admins) ? out.admins : [];
+            $('#testResult').style.display = '';
+            $('#trTotal').textContent  = out.total || 0;
+            $('#trAdmins').textContent = state.admins.length;
+            $('#trSudo').textContent   = out.isSudo ? 'sudo' : 'limited';
+            $('#trStatus').textContent = 'OK';
+            $('#btnNextToConfigure').disabled = false;
+            renderMapping();
+        } catch (err) {
+            $('#testResult').style.display = '';
+            $('#trStatus').textContent = err.message;
+            $('#btnNextToConfigure').disabled = true;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Test connection';
+        }
+    });
+
+    $('#btnNextToConfigure').addEventListener('click', () => goto(2));
+
+    // ─── Step 2: Map admins → groups, then start import ──────────────────────
+    function renderMapping() {
+        const tbody = $('#mapBody');
+        tbody.innerHTML = '';
+        const opts = ['<option value="">— skip users of this admin —</option>']
+            .concat(<%- JSON.stringify((groups || []).map(g => ({ id: String(g._id), name: g.name }))) %>
+                .map(g => '<option value="' + g.id + '">' + g.name + '</option>'))
+            .join('');
+        state.admins.forEach(a => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td><code>' + a.username + (a.is_sudo ? ' (sudo)' : '') + '</code></td>'
+                + '<td><select data-admin="' + a.username + '">' + opts + '</select></td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    $('#btnStartImport').addEventListener('click', async () => {
+        const btn = $('#btnStartImport');
+        btn.disabled = true;
+        btn.textContent = 'Starting…';
+        try {
+            const path = $('#m-path').value.trim().toLowerCase();
+            state.path = path || 'sub';
+
+            const groupMap = {};
+            $$('#mapBody select').forEach(sel => {
+                const admin = sel.dataset.admin;
+                const gid   = sel.value;
+                if (admin && gid) groupMap[admin] = gid;
+            });
+
+            const adminNames = Object.keys(groupMap);
+            const groupIds   = adminNames.map(a => groupMap[a]);
+
+            const body = {
+                baseUrl:  $('#m-baseUrl').value.trim(),
+                username: $('#m-username').value.trim(),
+                password: $('#m-password').value,
+                marzban_admin:  adminNames,
+                celerity_group: groupIds,
+                defaultGroupId: $('#m-defaultGroup').value,
+                onlyActive:     $('#m-onlyActive').checked,
+                importVlessUuid:$('#m-importVless').checked,
+            };
+            const out = await postJSON('/panel/migration/start', body);
+            state.taskId = out.taskId;
+            goto(3);
+            streamProgress(out.taskId);
+        } catch (err) {
+            alert('Start failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Start import';
+        }
+    });
+
+    // ─── Step 3: SSE progress ────────────────────────────────────────────────
+    function streamProgress(taskId) {
+        const es = new EventSource('/panel/migration/status/' + encodeURIComponent(taskId));
+        const log = $('#pLog');
+        const bar = $('#pBar');
+        es.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (_) { return; }
+            if (msg.type === 'log') {
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.textContent = msg.message;
+                log.appendChild(div);
+                log.scrollTop = log.scrollHeight;
+            } else if (msg.type === 'progress') {
+                $('#pProgress').textContent = msg.progress;
+                $('#pTotal').textContent    = msg.total;
+                $('#pImported').textContent = msg.imported;
+                $('#pSkipped').textContent  = msg.skipped;
+                const pct = msg.total > 0 ? Math.min(100, (msg.progress / msg.total) * 100) : 0;
+                bar.style.width = pct.toFixed(1) + '%';
+            } else if (msg.type === 'done') {
+                state.result = msg;
+                bar.style.width = '100%';
+                $('#fImported').textContent  = msg.imported || 0;
+                $('#fSkipped').textContent   = msg.skipped  || 0;
+                $('#fErrors').textContent    = msg.errors   || 0;
+                $('#fConflicts').textContent = (msg.conflicts || []).length;
+                if (msg.conflicts && msg.conflicts.length > 0) {
+                    $('#conflictsBox').style.display = '';
+                    $('#conflictsBody').innerHTML = msg.conflicts.map(c =>
+                        '<tr><td><code>' + c.marzbanUsername + '</code></td><td>' + c.reason + '</td></tr>'
+                    ).join('');
+                }
+                es.close();
+                goto(4);
+            } else if (msg.type === 'error') {
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.textContent = '! ' + msg.message;
+                log.appendChild(div);
+            }
+        };
+        es.onerror = () => es.close();
+    }
+
+    // ─── Step 4: Finalize ────────────────────────────────────────────────────
+    $('#btnFinalize').addEventListener('click', async () => {
+        const btn = $('#btnFinalize');
+        btn.disabled = true;
+        btn.textContent = 'Activating…';
+        try {
+            const r = state.result || {};
+            await postJSON('/panel/migration/finalize', {
+                path:           state.path,
+                jwtSecret:      $('#m-jwt').value.trim(),
+                acceptUrlSalt:  $('#m-acceptSalt').checked,
+                'stats.imported': r.imported || 0,
+                'stats.skipped':  r.skipped  || 0,
+                'stats.errors':   r.errors   || 0,
+            });
+            alert('Compat route armed. Old links should resolve now.');
+            window.location.reload();
+        } catch (err) {
+            alert('Activation failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Activate compat route';
+        }
+    });
+
+    // ─── Banner: disable compat ──────────────────────────────────────────────
+    const btnDisable = $('#btnDisable');
+    if (btnDisable) {
+        btnDisable.addEventListener('click', async () => {
+            if (!confirm('Disable the Marzban compat route? Old links stop resolving until re-enabled.')) return;
+            btnDisable.disabled = true;
+            try {
+                await postJSON('/panel/migration/disable', {});
+                window.location.reload();
+            } catch (err) {
+                alert('Failed: ' + err.message);
+                btnDisable.disabled = false;
+            }
+        });
+    }
+})();
+</script>

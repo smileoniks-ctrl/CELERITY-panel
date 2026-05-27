@@ -2194,68 +2194,106 @@ async function runHwidSubscriptionGate(req, res, user, settings, format) {
     return { extraHeaders: extra, aborted: false };
 }
 
+// ==================== SHARED PIPELINE ====================
+
+/**
+ * Render the subscription response for an already-loaded, already-validated
+ * user. Exposed so the Marzban-compat route can reuse the entire HWID/cache/
+ * format/HAPP pipeline without duplicating any of it.
+ *
+ * @param {Object} req     Express request
+ * @param {Object} res     Express response
+ * @param {Object} ctx
+ * @param {Object} ctx.user        Mongoose-populated HyUser document
+ * @param {string} ctx.cacheToken  Key under which the rendered output is cached
+ *                                 in Redis. ALWAYS the user's Celerity
+ *                                 subscriptionToken so legacy/native requests
+ *                                 share a single cache entry.
+ * @param {string} ctx.baseUrl     Absolute URL used to seed the HTML page (QR
+ *                                 code, copy-to-clipboard input). Either the
+ *                                 native /api/files URL or the legacy /sub URL
+ *                                 the user actually visited.
+ */
+async function serveSubscription(req, res, ctx) {
+    const { user, cacheToken, baseUrl } = ctx;
+    const userAgent = req.headers['user-agent'] || 'unknown';
+
+    let format = req.query.format;
+    const browser = isBrowser(req);
+
+    // Browser without ?format — render HTML and bypass cache (no shared state
+    // with apps; humans always see fresh traffic/expiry data).
+    if (browser && !format) {
+        const settings = await getSettings();
+        const nodes = await getActiveNodes(user);
+        if (nodes.length === 0) {
+            return res.status(503).type('text/plain').send('# No servers available');
+        }
+        const html = await generateHTML(user, nodes, cacheToken, baseUrl, settings);
+        return res
+            .type('text/html')
+            .set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            .set('Pragma', 'no-cache')
+            .set('Expires', '0')
+            .send(html);
+    }
+
+    if (!format) {
+        format = detectFormat(userAgent);
+        logger.debug(`[Sub] UA: "${userAgent}" → format: ${format}`);
+    }
+    uaStats.track(cacheToken, userAgent);
+
+    const settings = await getSettings();
+
+    const { extraHeaders: hwidHeaders, aborted: hwidAborted } = await runHwidSubscriptionGate(req, res, user, settings, format);
+    if (hwidAborted) return;
+
+    const cached = await cache.getSubscription(cacheToken, format);
+    if (cached) {
+        logger.debug(`[Sub] Cache HIT: ${cacheToken}:${format}`);
+        return sendCachedSubscription(res, cached, format, userAgent, settings, hwidHeaders);
+    }
+
+    logger.debug(`[Sub] Cache MISS: token=${cacheToken.substring(0,8)}..., format=${format}`);
+
+    const nodes = await getActiveNodes(user);
+    if (nodes.length === 0) {
+        logger.error(`[Sub] NO SERVERS for user ${user.userId}! Check nodes in panel.`);
+        return res.status(503).type('text/plain').send('# No servers available');
+    }
+
+    logger.debug(`[Sub] Serving ${nodes.length} nodes to user ${user.userId}`);
+
+    const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent, settings?.subscription?.happProviderId || '', settings?.routing);
+    await cache.setSubscription(cacheToken, format, subscriptionData);
+    return sendCachedSubscription(res, subscriptionData, format, userAgent, settings, hwidHeaders);
+}
+
+/**
+ * JSON info payload for an already-loaded HyUser.
+ * Exposed for the same reason as serveSubscription.
+ */
+async function serveInfo(req, res, user) {
+    const nodes = await getActiveNodes(user);
+    res.json({
+        enabled: user.enabled,
+        groups: user.groups,
+        traffic: { used: (user.traffic?.tx || 0) + (user.traffic?.rx || 0), limit: user.trafficLimit },
+        expire: user.expireAt,
+        servers: nodes.length,
+    });
+}
+
 // ==================== MAIN ROUTE ====================
 
 /**
- * GET /files/:token - Single route
- * - Browser → HTML
- * - App → subscription
- * 
- * With Redis caching for generated subscriptions
+ * GET /files/:token — native Celerity subscription endpoint.
+ * Browser → HTML page; app → format-detected subscription content.
  */
 router.get('/files/:token', async (req, res) => {
     try {
         const token = req.params.token;
-        const userAgent = req.headers['user-agent'] || 'unknown';
-        
-        // Detect format
-        let format = req.query.format;
-        const browser = isBrowser(req);
-        
-        // Browser without format param — don't cache (serve fresh HTML)
-        if (browser && !format) {
-            // HTML page — not cached, show fresh data
-            const [user, settings] = await Promise.all([
-                getUserByToken(token),
-                getSettings(),
-            ]);
-            
-            if (!user) {
-                logger.warn(`[Sub] User not found for token: ${token}`);
-                return res.status(404).type('text/plain').send('# User not found');
-            }
-            
-            const validation = validateUser(user);
-            if (!validation.valid) {
-                logger.warn(`[Sub] User ${user.userId} invalid: ${validation.error}`);
-                return res.status(403).type('text/plain').send(`# ${validation.error}`);
-            }
-            
-            const nodes = await getActiveNodes(user);
-            if (nodes.length === 0) {
-                return res.status(503).type('text/plain').send('# No servers available');
-            }
-            
-            const baseUrl = `${req.protocol}://${req.get('host')}/api/files/${token}`;
-            const html = await generateHTML(user, nodes, token, baseUrl, settings);
-            return res
-                .type('text/html')
-                .set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-                .set('Pragma', 'no-cache')
-                .set('Expires', '0')
-                .send(html);
-        }
-        
-        // For apps — detect format and cache
-        if (!format) {
-            format = detectFormat(userAgent);
-            logger.debug(`[Sub] UA: "${userAgent}" → format: ${format}`);
-        }
-        uaStats.track(token, userAgent);
-        
-        // Read settings (from Redis cache — fast)
-        const settings = await getSettings();
-
         const user = await getUserByToken(token);
 
         if (!user) {
@@ -2264,42 +2302,13 @@ router.get('/files/:token', async (req, res) => {
         }
 
         const validation = validateUser(user);
-
         if (!validation.valid) {
             logger.warn(`[Sub] User ${user.userId} invalid: ${validation.error}`);
             return res.status(403).type('text/plain').send(`# ${validation.error}`);
         }
 
-        const { extraHeaders: hwidHeaders, aborted: hwidAborted } = await runHwidSubscriptionGate(req, res, user, settings, format);
-        if (hwidAborted) return;
-
-        // Check cache (after HWID gate — limit is enforced per request)
-        const cached = await cache.getSubscription(token, format);
-        if (cached) {
-            logger.debug(`[Sub] Cache HIT: ${token}:${format}`);
-            return sendCachedSubscription(res, cached, format, userAgent, settings, hwidHeaders);
-        }
-        
-        // Cache miss — generate
-        logger.debug(`[Sub] Cache MISS: token=${token.substring(0,8)}..., format=${format}`);
-        
-        const nodes = await getActiveNodes(user);
-        if (nodes.length === 0) {
-            logger.error(`[Sub] NO SERVERS for user ${user.userId}! Check nodes in panel.`);
-            return res.status(503).type('text/plain').send('# No servers available');
-        }
-        
-        logger.debug(`[Sub] Serving ${nodes.length} nodes to user ${user.userId}`);
-        
-        // Generate subscription
-        const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent, settings?.subscription?.happProviderId || '', settings?.routing);
-        
-        // Save to cache
-        await cache.setSubscription(token, format, subscriptionData);
-        
-        // Send response
-        return sendCachedSubscription(res, subscriptionData, format, userAgent, settings, hwidHeaders);
-        
+        const baseUrl = `${req.protocol}://${req.get('host')}/api/files/${token}`;
+        return await serveSubscription(req, res, { user, cacheToken: token, baseUrl });
     } catch (error) {
         logger.error(`[Sub] Error: ${error.message}`);
         res.status(500).type('text/plain').send('# Error');
@@ -2456,19 +2465,16 @@ router.get('/info/:token', async (req, res) => {
     try {
         const user = await getUserByToken(req.params.token);
         if (!user) return res.status(404).json({ error: 'Not found' });
-        
-        const nodes = await getActiveNodes(user);
-        
-        res.json({
-            enabled: user.enabled,
-            groups: user.groups,
-            traffic: { used: (user.traffic?.tx || 0) + (user.traffic?.rx || 0), limit: user.trafficLimit },
-            expire: user.expireAt,
-            servers: nodes.length,
-        });
+        return await serveInfo(req, res, user);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 module.exports = router;
+// Exposed for the Marzban-compat route. Attach AFTER `module.exports = router`
+// so the router instance keeps working as an express handler, and the helpers
+// are reachable as properties on the same exported value.
+module.exports.serveSubscription = serveSubscription;
+module.exports.serveInfo = serveInfo;
+module.exports.validateUser = validateUser;

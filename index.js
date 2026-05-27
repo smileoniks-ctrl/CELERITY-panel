@@ -37,6 +37,8 @@ const subscriptionRoutes = require('./src/routes/subscription');
 const authRoutes = require('./src/routes/auth');
 const panelRoutes = require('./src/routes/panel');
 const mcpRoutes = require('./src/routes/mcp');
+const marzbanCompat = require('./src/routes/marzbanCompat');
+const { subscriptionLimiter, applyRateLimits } = require('./src/utils/rateLimiters');
 
 const helmet = require('helmet');
 const app = express();
@@ -268,39 +270,30 @@ app.post('/api/logout', (req, res) => {
     });
 });
 
-const rateLimitSettings = {
-    subscriptionPerMinute: 100,
-    authPerSecond: 200,
-};
-
-const subscriptionLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: () => rateLimitSettings.subscriptionPerMinute,
-    handler: (req, res) => {
-        logger.warn(`[Sub] Rate limit: ${req.ip}`);
-        res.status(429).type('text/plain').send('# Too many requests');
-    },
-});
-
 async function reloadSettings() {
     const Settings = require('./src/models/settingsModel');
     const hwidDeviceService = require('./src/services/hwidDeviceService');
     const settings = await Settings.get();
-    
+
     cacheService.updateTTL(settings);
     hwidDeviceService.updateFromSettings(settings);
-    
-    if (settings.rateLimit) {
-        rateLimitSettings.subscriptionPerMinute = settings.rateLimit.subscriptionPerMinute || 100;
-        rateLimitSettings.authPerSecond = settings.rateLimit.authPerSecond || 200;
-        logger.info(`[Settings] Rate limits: sub=${rateLimitSettings.subscriptionPerMinute}/min`);
-    }
+    applyRateLimits(settings);
+
+    // Marzban compat regex/secret are cached at module scope and must be
+    // rebuilt whenever Settings.migration.marzban changes (path, secret,
+    // enabled flag, salt mode).
+    marzbanCompat.invalidate();
 }
 module.exports = { reloadSettings };
 
 app.use('/api/files', subscriptionLimiter);
 app.use('/api/info', subscriptionLimiter);
 app.use('/api', subscriptionRoutes);
+
+// Marzban legacy-link compatibility — middleware no-ops when disabled in
+// settings. Mounted BEFORE panel/static handlers but AFTER /api so it never
+// shadows real endpoints; in-handler regex further refuses blacklisted paths.
+app.use(marzbanCompat);
 
 app.use('/api/users', requireAuth, usersRoutes);
 app.use('/api/nodes', requireAuth, nodesRoutes);

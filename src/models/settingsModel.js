@@ -143,7 +143,31 @@ const settingsSchema = new mongoose.Schema({
             remote:   { type: String, default: 'tls://1.1.1.1' },
         },
     },
-    
+
+    // Marzban legacy-link compatibility. When `enabled` is true the compat
+    // middleware accepts incoming requests at /{path}/{token} (or /{salt}/{path}/{token}
+    // when urlSalt is set), verifies the HMAC against jwtSecretEncrypted, and
+    // delegates to the regular subscription pipeline. Stays inert until the
+    // migration wizard finalizes — `enabled:false` is the safe default.
+    migration: {
+        marzban: {
+            enabled:            { type: Boolean, default: false },
+            path:               { type: String,  default: 'sub' },
+            jwtSecretEncrypted: { type: String,  default: '' },
+            // True if the source Marzban panel used XRAY_SUBSCRIPTION_URL_PREFIX
+            // with a `*` placeholder — published URLs then look like
+            // `https://host/<salt>/sub/<token>`. The salt segment is random per
+            // user/link, so the compat regex only checks its shape, not value.
+            acceptUrlSalt:      { type: Boolean, default: false },
+            completedAt:        { type: Date,    default: null },
+            stats: {
+                imported: { type: Number, default: 0 },
+                skipped:  { type: Number, default: 0 },
+                errors:   { type: Number, default: 0 },
+            },
+        },
+    },
+
 }, { timestamps: true });
 
 settingsSchema.statics.get = async function() {

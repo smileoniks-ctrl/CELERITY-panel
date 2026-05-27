@@ -57,6 +57,7 @@
     "users": "Users",
     "groups": "Groups",
     "settings": "Settings",
+    "migration": "Migration",
     "logout": "Logout"
   },
   "auth": {
