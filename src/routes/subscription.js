@@ -1388,14 +1388,20 @@ function generateXrayJSON(user, nodes, routing) {
 
             const outbounds = [];
             const balancerSelector = ['proxy'];
-            sources.forEach((src, srcIdx) => {
-                _buildV2rayOutboundsForNode(user, src, (innerIdx, baseTag) => {
-                    // Tag scheme: first ever outbound = "proxy", rest = "proxy-N"
-                    // (Xray's selector matches by prefix). Keeps fallbackTag
-                    // consistent with Remnawave's documented behaviour.
+            // Re-tag every outbound once it lands in the balancer pool. We can't
+            // do this inside _buildV2rayOutboundsForNode's callback because a
+            // single source node may yield multiple outbounds (xray with
+            // multi-inbound) — the callback would see the same outbounds.length
+            // for all of them and produce duplicate tags ("existing tag found:
+            // proxy-N" XrayCore error). Xray's selector / subjectSelector both
+            // do prefix matching, so "proxy", "proxy-2", "proxy-3" all match
+            // selector ["proxy"], and fallbackTag="proxy" still resolves
+            // unambiguously to the first outbound.
+            sources.forEach((src) => {
+                _buildV2rayOutboundsForNode(user, src).forEach(({ outbound }) => {
                     const ord = outbounds.length + 1;
-                    return ord === 1 ? 'proxy' : `proxy-${ord}`;
-                }).forEach(({ outbound }) => {
+                    const tag = ord === 1 ? 'proxy' : `proxy-${ord}`;
+                    outbound.tag = tag;
                     outbounds.push(outbound);
                 });
             });
