@@ -21,11 +21,24 @@ const manageGroupSchema = z.object({
     id: z.string().optional().describe('Group MongoDB _id (required for update/delete)'),
     data: z.object({
         name: z.string().optional(),
+        description: z.string().optional(),
         color: z.string().optional().describe('CSS color, e.g. #ff0000'),
+        active: z.boolean().optional(),
         maxDevices: z.number().int().min(0).optional().describe('0 = unlimited'),
         subscriptionTitle: z.string().optional(),
     }).optional(),
 });
+
+// Invalidate every cache surface a group change can affect — mirrors the
+// panel group handlers so REST/MCP/panel behave identically.
+async function invalidateGroupCaches() {
+    await Promise.all([
+        cache.invalidateGroups(),
+        cache.invalidateNodes(),
+        cache.invalidateAllSubscriptions(),
+        cache.invalidateDashboardCounts(),
+    ]);
+}
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -66,12 +79,14 @@ async function manageGroup(args) {
             if (!data.name) throw new Error('name is required for create');
             const group = new ServerGroup({
                 name: data.name,
+                description: data.description || '',
                 color: data.color || '#6366f1',
+                active: data.active !== undefined ? data.active : true,
                 maxDevices: data.maxDevices || 0,
                 subscriptionTitle: data.subscriptionTitle || data.name,
             });
             await group.save();
-            await cache.invalidateDashboardCounts();
+            await invalidateGroupCaches();
             logger.info(`[MCP] Created group ${data.name}`);
             return { success: true, group };
         }
@@ -80,13 +95,15 @@ async function manageGroup(args) {
             if (!id) throw new Error('id is required for update');
             const updates = {};
             if (data.name !== undefined) updates.name = data.name;
+            if (data.description !== undefined) updates.description = data.description;
             if (data.color !== undefined) updates.color = data.color;
+            if (data.active !== undefined) updates.active = data.active;
             if (data.maxDevices !== undefined) updates.maxDevices = data.maxDevices;
             if (data.subscriptionTitle !== undefined) updates.subscriptionTitle = data.subscriptionTitle;
 
             const group = await ServerGroup.findByIdAndUpdate(id, { $set: updates }, { new: true });
             if (!group) return { error: `Group '${id}' not found`, code: 404 };
-            await cache.invalidateDashboardCounts();
+            await invalidateGroupCaches();
             logger.info(`[MCP] Updated group ${group.name}`);
             return { success: true, group };
         }
@@ -97,7 +114,7 @@ async function manageGroup(args) {
             if (!group) return { error: `Group '${id}' not found`, code: 404 };
             await HyNode.updateMany({ groups: group._id }, { $pull: { groups: group._id } });
             await HyUser.updateMany({ groups: group._id }, { $pull: { groups: group._id } });
-            await cache.invalidateDashboardCounts();
+            await invalidateGroupCaches();
             logger.info(`[MCP] Deleted group ${group.name}`);
             return { success: true, message: `Group '${group.name}' deleted` };
         }

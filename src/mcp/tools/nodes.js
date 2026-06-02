@@ -41,7 +41,7 @@ const queryNodesSchema = z.object({
 });
 
 const manageNodeSchema = z.object({
-    action: z.enum(['create', 'update', 'delete', 'sync', 'setup', 'reset_status', 'update_config']),
+    action: z.enum(['create', 'update', 'delete', 'sync', 'setup', 'reset_status', 'update_config', 'setup_port_hopping', 'generate_xray_keys']),
     id: z.string().optional().describe('Node MongoDB _id (required for all except create)'),
     data: z.object({
         name: z.string().optional(),
@@ -164,6 +164,13 @@ const manageNodeSchema = z.object({
         setupPortHopping: z.boolean().default(true),
         restartService: z.boolean().default(true),
     }).optional(),
+});
+
+const scanSniSchema = z.object({
+    ip: z.string().describe('Target IPv4 address. The whole /24 around it is scanned'),
+    port: z.number().int().min(1).max(65535).default(443).describe('TLS port to probe'),
+    threads: z.number().int().min(1).max(200).default(50).describe('Concurrent probes'),
+    timeout: z.number().int().min(2).max(30).default(5).describe('Per-host timeout in seconds'),
 });
 
 const executeSshSchema = z.object({
@@ -471,9 +478,75 @@ async function manageNode(args, emit) {
             return { success: false, error: 'Failed to update config' };
         }
 
+        case 'setup_port_hopping': {
+            if (!id) throw new Error('id is required for setup_port_hopping');
+            const node = await HyNode.findById(id);
+            if (!node) return { error: `Node '${id}' not found`, code: 404 };
+            if (node.type === 'virtual') {
+                return { error: 'Virtual nodes have no remote server', code: 400 };
+            }
+            emit('progress', { message: `Configuring port hopping on ${node.name}...` });
+            const success = await getSyncService().setupPortHopping(node);
+            if (success) return { success: true, message: 'Port hopping configured' };
+            return { success: false, error: 'Failed to configure port hopping' };
+        }
+
+        case 'generate_xray_keys': {
+            if (!id) throw new Error('id is required for generate_xray_keys');
+            const node = await HyNode.findById(id);
+            if (!node) return { error: `Node '${id}' not found`, code: 404 };
+            if (node.type !== 'xray') return { error: 'Node is not an Xray node', code: 400 };
+            if (!node.ssh?.password && !node.ssh?.privateKey) {
+                return { error: 'SSH credentials not configured', code: 400 };
+            }
+
+            const nodeSetup = require('../../services/nodeSetup');
+            emit('progress', { message: `Generating x25519 Reality keys on ${node.name}...` });
+
+            const conn = await nodeSetup.connectSSH(node);
+            let keys;
+            try {
+                keys = await nodeSetup.generateX25519Keys(conn);
+            } finally {
+                conn.end();
+            }
+
+            await HyNode.findByIdAndUpdate(id, {
+                $set: {
+                    'xray.realityPrivateKey': keys.privateKey,
+                    'xray.realityPublicKey': keys.publicKey,
+                },
+            });
+            await invalidateNodesCache();
+            logger.info(`[MCP] x25519 keys generated for ${node.name}`);
+            return { success: true, publicKey: keys.publicKey };
+        }
+
         default:
             throw new Error(`Unknown action: ${action}`);
     }
+}
+
+async function scanSni(args, emit) {
+    const parsed = scanSniSchema.parse(args);
+    const sniScanner = require('../../services/sniScanner');
+
+    if (!sniScanner.isValidIpv4(parsed.ip)) {
+        return { error: 'Invalid IPv4 address', code: 400 };
+    }
+
+    const controller = new AbortController();
+    const results = await sniScanner.scanRange({
+        ip: parsed.ip,
+        port: parsed.port,
+        threads: parsed.threads,
+        timeout: parsed.timeout,
+        signal: controller.signal,
+        onResult: (r) => emit('log', { type: 'result', ...r }),
+        onProgress: (done, total) => emit('progress', { done, total }),
+    });
+
+    return { success: true, ip: parsed.ip, port: parsed.port, count: results.length, results };
 }
 
 async function executeSsh(args, emit) {
@@ -620,10 +693,12 @@ module.exports = {
     manageNode,
     executeSsh,
     sshSession,
+    scanSni,
     schemas: {
         queryNodes: queryNodesSchema,
         manageNode: manageNodeSchema,
         executeSsh: executeSshSchema,
         sshSession: sshSessionSchema,
+        scanSni: scanSniSchema,
     },
 };

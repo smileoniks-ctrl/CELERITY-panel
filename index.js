@@ -33,6 +33,7 @@ const homepageService = require('./src/services/homepageService');
 const usersRoutes = require('./src/routes/users');
 const nodesRoutes = require('./src/routes/nodes');
 const cascadeRoutes = require('./src/routes/cascade');
+const groupsRoutes = require('./src/routes/groups');
 const subscriptionRoutes = require('./src/routes/subscription');
 const authRoutes = require('./src/routes/auth');
 const panelRoutes = require('./src/routes/panel');
@@ -299,16 +300,7 @@ app.use('/api/users', requireAuth, usersRoutes);
 app.use('/api/nodes', requireAuth, nodesRoutes);
 app.use('/api/cascade', requireAuth, cascadeRoutes);
 app.use('/api/mcp', requireAuth, mcpRoutes);
-
-app.get('/api/groups', requireAuth, requireScope('stats:read'), async (req, res) => {
-    try {
-        const { getActiveGroups } = require('./src/utils/helpers');
-        const groups = await getActiveGroups();
-        res.json(groups.map(g => ({ _id: g._id, name: g.name })));
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+app.use('/api/groups', requireAuth, groupsRoutes);
 
 app.get('/api/stats', requireAuth, requireScope('stats:read'), async (req, res) => {
     try {

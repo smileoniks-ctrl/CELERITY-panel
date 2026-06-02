@@ -482,6 +482,26 @@ router.post('/:userId/disable', requireScope('users:write'), async (req, res) =>
 });
 
 /**
+ * POST /users/:userId/reset-traffic - Сбросить счётчики трафика
+ *
+ * Delegates to the shared MCP tool handler, which also re-enables the user when
+ * zeroing the counter makes them healthy again (renewal-by-reset).
+ */
+router.post('/:userId/reset-traffic', requireScope('users:write'), async (req, res) => {
+    try {
+        const usersTool = require('../mcp/tools/users');
+        const result = await usersTool.manageUser({ action: 'reset_traffic', userId: req.params.userId }, () => {});
+        if (result && result.error) {
+            return res.status(result.code || 400).json({ error: result.error });
+        }
+        res.json(result);
+    } catch (error) {
+        logger.error(`[Users API] Reset traffic error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * POST /users/:userId/groups - Добавить пользователя в группы
  * Body: { groups: ['groupId1', 'groupId2'] }
  */
