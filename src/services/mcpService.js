@@ -11,6 +11,7 @@
  *   event: error     — tool or protocol error
  */
 
+const { z } = require('zod');
 const logger = require('../utils/logger');
 
 const { listPrompts, getPrompt } = require('../mcp/prompts');
@@ -21,6 +22,24 @@ const cascadeTools = require('../mcp/tools/cascade');
 const systemTools = require('../mcp/tools/system');
 const statsTools = require('../mcp/tools/stats');
 const logsTools = require('../mcp/tools/logs');
+
+// ─── Schema generation ─────────────────────────────────────────────────────
+// Advertised tool `inputSchema`s are derived from the zod schemas that the
+// handlers already validate against — a single source of truth, so the schema
+// shown to MCP clients can never drift from what the handler actually accepts.
+// Runs once at module load. Falls back to a permissive object schema if a given
+// zod schema isn't representable as JSON Schema, so one bad schema can't break
+// tools/list.
+function zodToInputSchema(schema) {
+    try {
+        const js = z.toJSONSchema(schema, { target: 'draft-7' });
+        delete js.$schema;
+        return js;
+    } catch (err) {
+        logger.warn(`[MCP] inputSchema generation failed: ${err.message}`);
+        return { type: 'object' };
+    }
+}
 
 // ─── Tool Definitions ────────────────────────────────────────────────────────
 // Each entry: { description, requiredScope, inputSchema (JSON Schema), handler }
@@ -56,168 +75,49 @@ const TOOLS = {
     manage_user: {
         description: 'Manage VPN users: create, update, delete, enable, disable, or reset traffic.',
         requiredScope: 'users:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: {
-                    type: 'string',
-                    enum: ['create', 'update', 'delete', 'enable', 'disable', 'reset_traffic'],
-                    description: 'Action to perform',
-                },
-                userId: { type: 'string', description: 'User ID (required for all actions except create where it defines the new ID)' },
-                data: {
-                    type: 'object',
-                    description: 'User data for create/update',
-                    properties: {
-                        username: { type: 'string', description: 'Display name' },
-                        groups: { type: 'array', items: { type: 'string' }, description: 'Array of group MongoDB _ids' },
-                        trafficLimit: { type: 'number', description: 'Traffic limit in bytes, 0 = unlimited' },
-                        expireAt: { type: 'string', description: 'ISO datetime or null' },
-                        maxDevices: { type: 'number', description: 'Max simultaneous devices, 0 = unlimited' },
-                        enabled: { type: 'boolean' },
-                        hwidMode: { type: 'string', enum: ['inherit', 'off', 'strict'], description: 'HWID policy override' },
-                        hwidEnforceFrom: { type: ['string', 'null'], description: 'ISO datetime when HWID limit starts enforcing (null = now)' },
-                    },
-                },
-            },
-            required: ['action'],
-        },
+        inputSchema: zodToInputSchema(usersTools.schemas.manageUser),
     },
 
     manage_hwid_devices: {
         description: 'List or remove HWID devices registered for a user (subscription clients).',
         requiredScope: 'users:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: { type: 'string', enum: ['list', 'unlink', 'unlink_all'], description: 'list=enumerate devices, unlink=one hwid, unlink_all=clear' },
-                userId: { type: 'string', description: 'Target userId' },
-                hwid: { type: 'string', description: 'HWID string (required for unlink)' },
-            },
-            required: ['action', 'userId'],
-        },
+        inputSchema: zodToInputSchema(usersTools.schemas.manageHwidDevices),
     },
 
     manage_node: {
-        description: 'Manage Hysteria/Xray nodes: create, update, delete, sync, auto-setup via SSH, reset status, update config.',
+        description: 'Manage Hysteria/Xray/virtual nodes: create, update, delete, sync, auto-setup via SSH, reset status, update config, setup port hopping, generate Xray Reality keys. "virtual" nodes are load-balancer entries over real sibling nodes.',
         requiredScope: 'nodes:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: {
-                    type: 'string',
-                    enum: ['create', 'update', 'delete', 'sync', 'setup', 'reset_status', 'update_config'],
-                    description: 'Action to perform',
-                },
-                id: { type: 'string', description: 'Node MongoDB _id (required for all except create)' },
-                data: {
-                    type: 'object',
-                    description: 'Node data for create/update',
-                    properties: {
-                        name: { type: 'string' },
-                        ip: { type: 'string' },
-                        domain: { type: 'string' },
-                        port: { type: 'number' },
-                        type: { type: 'string', enum: ['hysteria', 'xray'] },
-                        groups: { type: 'array', items: { type: 'string' } },
-                        active: { type: 'boolean' },
-                        country: { type: 'string', description: 'Country code, e.g. US, DE, NL' },
-                        cascadeRole: { type: 'string', enum: ['standalone', 'portal', 'bridge', 'relay'] },
-                    },
-                },
-                setupOptions: {
-                    type: 'object',
-                    description: 'Options for setup action',
-                    properties: {
-                        installHysteria: { type: 'boolean', default: true },
-                        setupPortHopping: { type: 'boolean', default: true },
-                        restartService: { type: 'boolean', default: true },
-                    },
-                },
-            },
-            required: ['action'],
-        },
+        inputSchema: zodToInputSchema(nodesTools.schemas.manageNode),
     },
 
     manage_group: {
         description: 'Manage server groups: create, update, or delete.',
         requiredScope: 'nodes:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: { type: 'string', enum: ['create', 'update', 'delete'] },
-                id: { type: 'string', description: 'Group MongoDB _id (required for update/delete)' },
-                data: {
-                    type: 'object',
-                    properties: {
-                        name: { type: 'string' },
-                        color: { type: 'string', description: 'CSS color, e.g. #ff0000' },
-                        maxDevices: { type: 'number', description: 'Default max devices for users in this group' },
-                        subscriptionTitle: { type: 'string' },
-                    },
-                },
-            },
-            required: ['action'],
-        },
+        inputSchema: zodToInputSchema(groupsTools.schemas.manageGroup),
     },
 
     manage_cascade: {
         description: 'Manage cascade links between portal and bridge nodes: create, update, delete, deploy, undeploy, reconnect.',
         requiredScope: 'nodes:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: {
-                    type: 'string',
-                    enum: ['create', 'update', 'delete', 'deploy', 'undeploy', 'reconnect'],
-                },
-                id: { type: 'string', description: 'Cascade link MongoDB _id' },
-                data: {
-                    type: 'object',
-                    properties: {
-                        name: { type: 'string' },
-                        portalNodeId: { type: 'string', description: 'Portal (entry) node _id' },
-                        bridgeNodeId: { type: 'string', description: 'Bridge (exit) node _id' },
-                        tunnelPort: { type: 'number', description: 'Port for the tunnel (1-65535)' },
-                        tunnelProtocol: { type: 'string', enum: ['vless', 'vmess'] },
-                        tunnelSecurity: { type: 'string', enum: ['none', 'tls', 'reality'] },
-                        tunnelTransport: { type: 'string', enum: ['tcp', 'ws', 'grpc', 'splithttp'] },
-                        mode: { type: 'string', enum: ['reverse', 'forward'] },
-                        priority: { type: 'number' },
-                    },
-                },
-            },
-            required: ['action'],
-        },
+        inputSchema: zodToInputSchema(cascadeTools.schemas.manageCascade),
     },
 
     execute_ssh: {
         description: 'Execute a shell command on a node via SSH. Returns stdout/stderr output. For interactive sessions use ssh_session.',
         requiredScope: 'nodes:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                nodeId: { type: 'string', description: 'Node MongoDB _id' },
-                command: { type: 'string', description: 'Shell command to execute, e.g. "systemctl status hysteria-server"' },
-                timeout: { type: 'number', description: 'Timeout in ms (default 30000, max 120000)', default: 30000 },
-            },
-            required: ['nodeId', 'command'],
-        },
+        inputSchema: zodToInputSchema(nodesTools.schemas.executeSsh),
     },
 
     ssh_session: {
         description: 'Manage an interactive SSH session on a node. Start a session, send input commands, or close it.',
         requiredScope: 'nodes:write',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                action: { type: 'string', enum: ['start', 'input', 'close'], description: 'start=open new session, input=send text, close=terminate' },
-                nodeId: { type: 'string', description: 'Node MongoDB _id (required for start)' },
-                sessionId: { type: 'string', description: 'Session ID returned by start (required for input/close)' },
-                data: { type: 'string', description: 'Input text to send (for action=input, include newline \\n to execute)' },
-            },
-            required: ['action'],
-        },
+        inputSchema: zodToInputSchema(nodesTools.schemas.sshSession),
+    },
+
+    scan_sni: {
+        description: 'Scan a host IP for working TLS SNI domains (for Reality/masquerade). Streams progress and results. Does not require a node — give a raw IP.',
+        requiredScope: 'nodes:read',
+        inputSchema: zodToInputSchema(nodesTools.schemas.scanSni),
     },
 
     system_action: {
@@ -368,6 +268,9 @@ async function callTool(name, args, apiKey, emit) {
 
         case 'ssh_session':
             return await nodesTools.sshSession(args, emit);
+
+        case 'scan_sni':
+            return await nodesTools.scanSni(args, emit);
 
         case 'system_action':
             return await systemTools.systemAction(args, emit);

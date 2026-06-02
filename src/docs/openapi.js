@@ -8,6 +8,18 @@ function addCommonSchemas(target) {
     const schemas = target.components.schemas;
     Object.assign(schemas, {
         ApiError: schemas.Error,
+        GroupInput: {
+            type: 'object',
+            description: 'Server group create/update payload. For update, only the provided fields change.',
+            properties: {
+                name: { type: 'string', example: 'Premium' },
+                description: { type: 'string' },
+                color: { type: 'string', example: '#6366f1', description: 'CSS color' },
+                active: { type: 'boolean', default: true },
+                maxDevices: { type: 'integer', example: 0, description: 'Default max devices for users in this group, 0 = unlimited' },
+                subscriptionTitle: { type: 'string', description: 'Title shown in subscription clients' },
+            },
+        },
         Traffic: {
             type: 'object',
             description: 'Traffic counters in bytes.',
@@ -1547,6 +1559,61 @@ These endpoints are not under \`/api\` and are not part of this specification:
                     403: { $ref: '#/components/responses/Forbidden' },
                 },
             },
+
+            post: {
+                tags: ['Stats'],
+                summary: 'Create server group',
+                description: 'Requires the `nodes:write` scope. Returns the created group.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: { $ref: '#/components/schemas/GroupInput' },
+                        },
+                    },
+                },
+                responses: {
+                    201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, group: { type: 'object' } } } } } },
+                    400: { $ref: '#/components/responses/BadRequest' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    403: { $ref: '#/components/responses/Forbidden' },
+                },
+            },
+        },
+
+        '/groups/{id}': {
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Group ObjectId' }],
+            put: {
+                tags: ['Stats'],
+                summary: 'Update server group',
+                description: 'Requires the `nodes:write` scope. Only provided fields are updated.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: { $ref: '#/components/schemas/GroupInput' },
+                        },
+                    },
+                },
+                responses: {
+                    200: { description: 'Updated', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, group: { type: 'object' } } } } } },
+                    400: { $ref: '#/components/responses/BadRequest' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    403: { $ref: '#/components/responses/Forbidden' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                },
+            },
+            delete: {
+                tags: ['Stats'],
+                summary: 'Delete server group',
+                description: 'Requires the `nodes:write` scope. The group is also detached from all nodes and users.',
+                responses: {
+                    200: { description: 'Deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    403: { $ref: '#/components/responses/Forbidden' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                },
+            },
         },
 
         // ── Users ──────────────────────────────────────────────────────────────
@@ -1734,6 +1801,21 @@ These endpoints are not under \`/api\` and are not part of this specification:
                 description: 'Returns the updated user. `groups` and `nodes` are returned as ObjectId strings (no populate); call `GET /users/{userId}` for populated objects.',
                 responses: {
                     200: { description: 'Updated user', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    403: { $ref: '#/components/responses/Forbidden' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                },
+            },
+        },
+
+        '/users/{userId}/reset-traffic': {
+            parameters: [{ $ref: '#/components/parameters/userId' }],
+            post: {
+                tags: ['Users'],
+                summary: 'Reset user traffic',
+                description: 'Zeroes the upload/download counters. If the user was disabled only because of traffic/expiry and zeroing makes them healthy again, they are re-enabled automatically (renewal-by-reset).',
+                responses: {
+                    200: { description: 'Traffic reset', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, message: { type: 'string' }, user: { $ref: '#/components/schemas/User' } } } } } },
                     401: { $ref: '#/components/responses/Unauthorized' },
                     403: { $ref: '#/components/responses/Forbidden' },
                     404: { $ref: '#/components/responses/NotFound' },
