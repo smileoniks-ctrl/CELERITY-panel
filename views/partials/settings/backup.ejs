@@ -65,9 +65,6 @@
                             </button>
                             <input type="file" id="settingsRestoreInput" accept=".tar.gz,.tgz" style="display:none" onchange="restoreBackupFile(this)">
                         </div>
-                        <small class="hint" style="display:block; margin-top: 8px;">
-                            <%= t('settings.backupActionsHint') || 'Эти действия такие же, как на дашборде: создать свежий архив и скачать его, либо восстановить базу из загруженного .tar.gz/.tgz файла.' %>
-                        </small>
 
                         <hr class="settings-divider">
 
@@ -82,9 +79,6 @@
                         </label>
                         <small class="hint" style="display: block; margin-top: 6px;">
                             <%= t('settings.s3EnabledHint') %>
-                        </small>
-                        <small class="hint" style="display: block; margin-top: 6px;">
-                            <%= t('settings.s3WriteTestHint') || 'Проверка S3 создаёт и удаляет маленький тестовый объект, чтобы подтвердить права на запись и очистку.' %>
                         </small>
 
                         <div id="s3Settings" style="margin-top: 14px; <%= settings?.backup?.s3?.enabled ? '' : 'display: none;' %>">
