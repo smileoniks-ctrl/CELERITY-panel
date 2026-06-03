@@ -13,6 +13,9 @@ const logger = require('../utils/logger');
 const cryptoService = require('./cryptoService');
 
 const execFileAsync = promisify(execFile);
+const BACKUP_FILE_PREFIX = 'celerity-backup-';
+const LEGACY_BACKUP_FILE_PREFIXES = ['hysteria-backup-'];
+const BACKUP_FILE_PREFIXES = [BACKUP_FILE_PREFIX, ...LEGACY_BACKUP_FILE_PREFIXES];
 
 /**
  * Extract database name from MONGO_URI, fallback to 'hysteria'.
@@ -35,6 +38,15 @@ function normalizeS3Prefix(prefix) {
 function buildS3Key(prefix, fileName) {
     const normalizedPrefix = normalizeS3Prefix(prefix);
     return normalizedPrefix ? `${normalizedPrefix}/${fileName}` : fileName;
+}
+
+function isBackupFileName(name) {
+    return BACKUP_FILE_PREFIXES.some(prefix => name.startsWith(prefix)) && name.endsWith('.tar.gz');
+}
+
+function isBackupKeyForPrefix(key, prefix) {
+    const normalizedPrefix = normalizeS3Prefix(prefix);
+    return BACKUP_FILE_PREFIXES.some(filePrefix => key.startsWith(buildS3Key(normalizedPrefix, filePrefix))) && key.endsWith('.tar.gz');
 }
 
 function getS3Client(settings) {
@@ -67,7 +79,7 @@ async function createBackup(settings) {
     await fs.mkdir(backupDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupName = `hysteria-backup-${timestamp}`;
+    const backupName = `${BACKUP_FILE_PREFIX}${timestamp}`;
     const backupPath = path.join(backupDir, backupName);
     const archivePath = path.join(backupDir, `${backupName}.tar.gz`);
 
@@ -193,19 +205,19 @@ async function rotateS3Backups(settings) {
         const prefix = normalizeS3Prefix(settings.backup.s3.prefix);
         const keepLast = settings.backup.s3.keepLast || 7;
         
-        // List objects
-        const listResult = await client.send(new ListObjectsV2Command({
+        const listResults = await Promise.all(BACKUP_FILE_PREFIXES.map(filePrefix => client.send(new ListObjectsV2Command({
             Bucket: bucket,
-            Prefix: buildS3Key(prefix, 'hysteria-backup-'),
-        }));
-        
-        if (!listResult.Contents || listResult.Contents.length <= keepLast) {
+            Prefix: buildS3Key(prefix, filePrefix),
+        }))));
+        const contents = listResults.flatMap(result => result.Contents || []);
+
+        if (contents.length <= keepLast) {
             return;
         }
         
         // Sort by date (oldest first)
-        const sorted = listResult.Contents
-            .filter(obj => obj.Key.endsWith('.tar.gz'))
+        const sorted = contents
+            .filter(obj => isBackupKeyForPrefix(obj.Key, prefix))
             .sort((a, b) => a.LastModified - b.LastModified);
         
         // Delete excess
@@ -232,7 +244,7 @@ async function rotateBackups(backupDir, keepLast) {
         const entries = await fs.readdir(backupDir, { withFileTypes: true });
         const files = await Promise.all(
             entries
-                .filter(e => e.isFile() && e.name.startsWith('hysteria-backup-') && e.name.endsWith('.tar.gz'))
+                .filter(e => e.isFile() && isBackupFileName(e.name))
                 .map(async (e) => {
                     const filePath = path.join(backupDir, e.name);
                     const stats = await fs.stat(filePath);
@@ -274,7 +286,7 @@ async function listBackups() {
     const entries = await fs.readdir(backupDir, { withFileTypes: true });
     const files = await Promise.all(
         entries
-            .filter(e => e.isFile() && e.name.startsWith('hysteria-backup-') && e.name.endsWith('.tar.gz'))
+            .filter(e => e.isFile() && isBackupFileName(e.name))
             .map(async (e) => {
                 const filePath = path.join(backupDir, e.name);
                 const stats = await fs.stat(filePath);
@@ -394,17 +406,18 @@ async function listS3Backups(settings) {
         const bucket = settings.backup.s3.bucket;
         const prefix = normalizeS3Prefix(settings.backup.s3.prefix);
         
-        const result = await client.send(new ListObjectsV2Command({
+        const results = await Promise.all(BACKUP_FILE_PREFIXES.map(filePrefix => client.send(new ListObjectsV2Command({
             Bucket: bucket,
-            Prefix: buildS3Key(prefix, 'hysteria-backup-'),
-        }));
-        
-        if (!result.Contents) {
+            Prefix: buildS3Key(prefix, filePrefix),
+        }))));
+        const contents = results.flatMap(result => result.Contents || []);
+
+        if (contents.length === 0) {
             return [];
         }
         
-        return result.Contents
-            .filter(obj => obj.Key.endsWith('.tar.gz'))
+        return contents
+            .filter(obj => isBackupKeyForPrefix(obj.Key, prefix))
             .map(obj => ({
                 name: obj.Key.split('/').pop(),
                 key: obj.Key,
@@ -455,7 +468,7 @@ function getLocalBackupPath(name) {
     if (!safeName || safeName === '.' || safeName === '..') {
         throw new Error('Invalid backup name');
     }
-    if (!safeName.startsWith('hysteria-backup-') || !safeName.endsWith('.tar.gz')) {
+    if (!isBackupFileName(safeName)) {
         throw new Error('Invalid backup name');
     }
     return path.join(backupDir, safeName);
@@ -566,6 +579,9 @@ async function restoreBackup(settings, source, identifier) {
     let tempDownload = false;
 
     if (source === 's3') {
+        if (!isBackupKeyForPrefix(identifier, settings?.backup?.s3?.prefix || 'backups')) {
+            throw new Error('Invalid S3 key');
+        }
         archivePath = await downloadFromS3(settings, identifier);
         tempDownload = true;
     } else {
@@ -599,7 +615,7 @@ async function restoreUploadedBackup(filePath, originalName) {
         throw new Error('Invalid backup file');
     }
     if (!safeName.endsWith('.tar.gz') && !safeName.endsWith('.tgz')) {
-        throw new Error('Only .tar.gz files are allowed');
+        throw new Error('Only .tar.gz or .tgz files are allowed');
     }
 
     try {
@@ -620,6 +636,7 @@ module.exports = {
     getLocalBackupPath,
     restoreBackup,
     restoreUploadedBackup,
+    isBackupKeyForPrefix,
     shouldRunBackup,
     scheduledBackup,
     testS3Connection,

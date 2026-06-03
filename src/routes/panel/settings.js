@@ -759,7 +759,7 @@ router.get('/settings/backups-s3', async (req, res) => {
 });
 
 // GET /settings/backups/download - Download a local backup file
-// Query: ?name=hysteria-backup-YYYY-MM-DDTHH-mm-ss.tar.gz
+// Query: ?name=celerity-backup-YYYY-MM-DDTHH-mm-ss.tar.gz
 router.get('/settings/backups/download', async (req, res) => {
     try {
         const backupService = require('../../services/backupService');
@@ -813,8 +813,8 @@ router.get('/settings/backups-s3/download', async (req, res) => {
 
         // Sanity check: key must live in the configured prefix to prevent
         // arbitrary object reads from the bucket via this endpoint.
-        const prefix = (settings.backup.s3.prefix || 'backups').replace(/\/+$/, '');
-        if (!key.startsWith(`${prefix}/hysteria-backup-`) || !key.endsWith('.tar.gz')) {
+        const prefix = settings.backup.s3.prefix || 'backups';
+        if (!backupService.isBackupKeyForPrefix(key, prefix)) {
             return res.status(400).json({ error: 'Invalid backup key' });
         }
 
