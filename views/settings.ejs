@@ -115,6 +115,13 @@ const i18n = {
     const captionIcon  = document.getElementById('stcIcon');
     const captionTitle = document.getElementById('stcTitle');
     const captionDesc  = document.getElementById('stcDesc');
+    let backupsListLoaded = false;
+
+    function ensureBackupsListLoaded(tabId) {
+        if (tabId !== 'backup' || backupsListLoaded) return;
+        backupsListLoaded = true;
+        loadBackupsList();
+    }
 
     function activateTab(tab, opts) {
         if (!tab) return;
@@ -147,6 +154,8 @@ const i18n = {
         try {
             tab.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
         } catch (_) {}
+
+        ensureBackupsListLoaded(tab.dataset.tab);
     }
 
     document.querySelectorAll('.settings-tab').forEach(tab => {
@@ -160,6 +169,8 @@ const i18n = {
         const tab = document.querySelector(`.settings-tab[data-tab="${savedTab}"]`);
         if (tab && !tab.classList.contains('active')) activateTab(tab, { persist: false });
     }
+
+    ensureBackupsListLoaded(document.querySelector('.settings-tab.active')?.dataset.tab);
 })();
 
 // ==================== BACKUP ====================
