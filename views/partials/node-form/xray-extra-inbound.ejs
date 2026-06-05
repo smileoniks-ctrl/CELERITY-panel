@@ -9,6 +9,7 @@
     const security = e.security || 'reality';
     const fingerprint = e.fingerprint || 'chrome';
     const fingerprintPool = e.fingerprintPool || [];
+    const fpMode = fingerprintPool.length > 0 ? 'pool' : 'single';
     const fingerprintList = ['chrome','firefox','safari','ios','android','edge','360','qq','random','randomized'];
     const fpLabel = (f) => f === 'ios' ? 'iOS' : (f === 'qq' ? 'QQ' : (f === '360' ? '360' : f.charAt(0).toUpperCase() + f.slice(1)));
     const summary = `${transport.toUpperCase()} / ${security} : ${e.port || ''}`;
@@ -80,10 +81,9 @@
         <div class="form-row">
             <div class="form-group">
                 <label><%= t('nodes.xrayFingerprint') %></label>
-                <select name="xray_extra_fingerprint">
-                    <% fingerprintList.forEach(function(f) { %>
-                        <option value="<%= f %>" <%= fingerprint === f ? 'selected' : '' %>><%= fpLabel(f) %></option>
-                    <% }); %>
+                <select class="extra-fp-mode" onchange="updateExtraFingerprintModeUI(this)">
+                    <option value="single" <%= fpMode === 'single' ? 'selected' : '' %>><%= t('nodes.xrayFingerprintModeSingle') %></option>
+                    <option value="pool" <%= fpMode === 'pool' ? 'selected' : '' %>><%= t('nodes.xrayFingerprintModePool') %></option>
                 </select>
             </div>
             <div class="form-group extra-alpn-group" style="<%= security === 'tls' ? '' : 'display:none' %>">
@@ -92,11 +92,20 @@
             </div>
         </div>
 
-        <div class="form-group">
-            <label><%= t('nodes.xrayFingerprintPool') %></label>
-            <%# UI-only multi-select (no name); a per-row hidden CSV input below carries the value
-                so the parallel xray_extra_*[] arrays stay index-aligned. %>
-            <select class="extra-fp-pool" multiple size="6" onchange="syncExtraFingerprintPool(this)">
+        <%# Single fingerprint — always submitted (one per row) so the parallel
+            xray_extra_*[] arrays stay index-aligned; ignored when pool is used. %>
+        <div class="form-group extra-fp-single" style="<%= fpMode === 'single' ? '' : 'display:none' %>">
+            <select name="xray_extra_fingerprint">
+                <% fingerprintList.forEach(function(f) { %>
+                    <option value="<%= f %>" <%= fingerprint === f ? 'selected' : '' %>><%= fpLabel(f) %></option>
+                <% }); %>
+            </select>
+        </div>
+
+        <%# Pool — UI-only multi-select (no name); the per-row hidden CSV input is the
+            source of truth and is kept in sync by JS (cleared in single mode). %>
+        <div class="form-group extra-fp-pool-block" style="<%= fpMode === 'pool' ? '' : 'display:none' %>">
+            <select class="extra-fp-pool" multiple size="8" onchange="syncExtraFingerprintPool(this)">
                 <% fingerprintList.forEach(function(f) { %>
                     <option value="<%= f %>" <%= fingerprintPool.indexOf(f) !== -1 ? 'selected' : '' %>><%= fpLabel(f) %></option>
                 <% }); %>

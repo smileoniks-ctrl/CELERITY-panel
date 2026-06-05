@@ -665,6 +665,20 @@ function _anyXrayTlsInboundActive() {
     return false;
 }
 
+// Toggle the main inbound fingerprint UI between "single" and "pool" modes.
+// The pool multi-select is disabled in single mode so its (possibly stale)
+// selection is never submitted; the empty hidden fallback still clears the pool.
+function updateXrayFingerprintModeUI() {
+    const checked = document.querySelector('input[name="xrayFingerprintMode"]:checked');
+    const mode = checked ? checked.value : 'single';
+    const single = document.getElementById('xrayFingerprintSingle');
+    const poolBlock = document.getElementById('xrayFingerprintPoolBlock');
+    const poolSelect = document.getElementById('xrayFingerprintPool');
+    if (single) single.style.display = mode === 'single' ? '' : 'none';
+    if (poolBlock) poolBlock.style.display = mode === 'pool' ? '' : 'none';
+    if (poolSelect) poolSelect.disabled = mode !== 'pool';
+}
+
 function updateXraySecurityUI() {
     const security = document.getElementById('xraySecurity').value;
     document.getElementById('realityFields').style.display = security === 'reality' ? '' : 'none';
@@ -909,6 +923,25 @@ function syncExtraFingerprintPool(selectEl) {
     if (!hidden) return;
     const values = Array.from(selectEl.selectedOptions).map(o => o.value);
     hidden.value = values.join(',');
+}
+
+// Toggle an extra inbound's fingerprint UI between "single" and "pool" modes.
+// The hidden CSV input is the source of truth: filled from the multi-select in
+// pool mode, emptied in single mode (so the pool is cleared on save).
+function updateExtraFingerprintModeUI(selectEl) {
+    const card = _findExtraCard(selectEl);
+    if (!card) return;
+    const mode = selectEl.value;
+    const single = card.querySelector('.extra-fp-single');
+    const poolBlock = card.querySelector('.extra-fp-pool-block');
+    const poolSelect = card.querySelector('.extra-fp-pool');
+    const hidden = card.querySelector('input.extra-fp-pool-csv');
+    if (single) single.style.display = mode === 'single' ? '' : 'none';
+    if (poolBlock) poolBlock.style.display = mode === 'pool' ? '' : 'none';
+    if (!hidden) return;
+    hidden.value = (mode === 'pool' && poolSelect)
+        ? Array.from(poolSelect.selectedOptions).map(o => o.value).join(',')
+        : '';
 }
 
 function updateExtraInboundTitle(input) {
@@ -1383,6 +1416,7 @@ async function generateXrayKeys() {
     if (proto === 'xray') {
         updateXrayTransportUI();
         updateXraySecurityUI();
+        updateXrayFingerprintModeUI();
         // Run an initial PEM validation pass for any pre-filled textarea so
         // the operator sees the inline status icon without having to focus.
         const certTa = document.getElementById('xrayManualCert');
