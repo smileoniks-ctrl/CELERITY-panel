@@ -452,6 +452,8 @@
     "xraySecurityNone": "None",
     "xrayFingerprint": "TLS Fingerprint",
     "xrayFingerprintHint": "uTLS fingerprint for TLS handshake (Reality/TLS)",
+    "xrayFingerprintPool": "Fingerprint Pool (random)",
+    "xrayFingerprintPoolHint": "Select multiple to rotate the published fingerprint randomly. It changes when the subscription cache refreshes (per cache TTL), not on every request. Leave empty to use the single fingerprint above.",
     "xrayAlpn": "ALPN",
     "xrayAlpnHint": "Comma-separated: h3, h2, http/1.1 (TLS only)",
     "xrayFlow": "Flow (XTLS)",

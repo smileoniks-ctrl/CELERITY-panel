@@ -32,6 +32,8 @@
                             <option value="ios" <%= node?.xray?.fingerprint === 'ios' ? 'selected' : '' %>>iOS</option>
                             <option value="android" <%= node?.xray?.fingerprint === 'android' ? 'selected' : '' %>>Android</option>
                             <option value="edge" <%= node?.xray?.fingerprint === 'edge' ? 'selected' : '' %>>Edge</option>
+                            <option value="360" <%= node?.xray?.fingerprint === '360' ? 'selected' : '' %>>360</option>
+                            <option value="qq" <%= node?.xray?.fingerprint === 'qq' ? 'selected' : '' %>>QQ</option>
                             <option value="random" <%= node?.xray?.fingerprint === 'random' ? 'selected' : '' %>>Random</option>
                             <option value="randomized" <%= node?.xray?.fingerprint === 'randomized' ? 'selected' : '' %>>Randomized</option>
                         </select>
@@ -44,6 +46,19 @@
                                placeholder="h2, http/1.1">
                         <small><%= t('nodes.xrayAlpnHint') %></small>
                     </div>
+                </div>
+
+                <% var _fpPool = node?.xray?.fingerprintPool || []; %>
+                <div class="form-group">
+                    <label for="xrayFingerprintPool"><%= t('nodes.xrayFingerprintPool') %></label>
+                    <%# Empty fallback so deselecting all still submits the field (clears the pool). %>
+                    <input type="hidden" name="xray.fingerprintPool" value="">
+                    <select id="xrayFingerprintPool" name="xray.fingerprintPool" multiple size="6">
+                        <% ['chrome','firefox','safari','ios','android','edge','360','qq','random','randomized'].forEach(function(f) { %>
+                            <option value="<%= f %>" <%= _fpPool.indexOf(f) !== -1 ? 'selected' : '' %>><%= f === 'ios' ? 'iOS' : (f === 'qq' ? 'QQ' : (f === '360' ? '360' : f.charAt(0).toUpperCase() + f.slice(1))) %></option>
+                        <% }); %>
+                    </select>
+                    <small><%= t('nodes.xrayFingerprintPoolHint') %></small>
                 </div>
 
                 <%# TLS Source (only when security==='tls'): panel | acme | manual | self-signed %>

@@ -324,6 +324,23 @@ function generateURI(user, node, config) {
 }
 
 /**
+ * Resolve the fingerprint to publish for an inbound. When a non-empty pool is
+ * configured, one entry is chosen at random per call; otherwise the single
+ * `fingerprint` is used. Resolved once here so every downstream format
+ * (VLESS URI / Clash / sing-box / v2ray) stays uniform.
+ *
+ * NOTE: subscription responses are cached in Redis (see serveSubscription),
+ * so the random pick is effectively "frozen" for the subscription cache TTL
+ * and rotates on the next cache MISS — not on every HTTP request.
+ */
+function pickFingerprint(fingerprint, pool) {
+    if (pool && pool.length > 0) {
+        return pool[(Math.random() * pool.length) | 0];
+    }
+    return fingerprint || 'chrome';
+}
+
+/**
  * Build the list of inbound descriptors to advertise in the subscription.
  * The first entry is the main inbound (port = node.port, name = node label),
  * followed by every entry of `node.xray.extraInbounds` that has a port. Each
@@ -342,7 +359,7 @@ function getXrayPublishedInbounds(node) {
         transport: xray.transport,
         security: xray.security,
         flow: xray.flow,
-        fingerprint: xray.fingerprint,
+        fingerprint: pickFingerprint(xray.fingerprint, xray.fingerprintPool),
         alpn: xray.alpn,
         realityPublicKey: xray.realityPublicKey,
         realitySni: xray.realitySni,
@@ -372,7 +389,7 @@ function getXrayPublishedInbounds(node) {
             transport: i.transport,
             security: i.security,
             flow: i.flow,
-            fingerprint: i.fingerprint,
+            fingerprint: pickFingerprint(i.fingerprint, i.fingerprintPool),
             alpn: i.alpn,
             realityPublicKey: i.realityPublicKey,
             realitySni: i.realitySni,

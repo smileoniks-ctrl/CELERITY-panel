@@ -87,7 +87,7 @@ const ACME_EMAIL_RE = /^(?=.{3,254}$)[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z
 const FALLBACK_DEST_RE = /^(?:\d{1,5}|[A-Za-z0-9._\-]{1,253}:\d{1,5}|\[[0-9A-Fa-f:]{2,45}\]:\d{1,5}|unix:\/[^\0\s]{1,250})$/;
 const XRAY_FINGERPRINT_VALUES = [
     'chrome', 'firefox', 'safari', 'ios', 'android',
-    'edge', 'random', 'randomized',
+    'edge', '360', 'qq', 'random', 'randomized',
 ];
 
 // Sentinel value rendered into the manualKey textarea when an existing key is
@@ -108,6 +108,24 @@ function _splitCsv(raw, { keepEmpty = false } = {}) {
     if (raw === undefined || raw === null) return null;
     const list = String(raw).split(',').map(s => s.trim());
     return keepEmpty ? list : list.filter(Boolean);
+}
+
+// Parse a fingerprint pool from the form. Accepts an array (checkbox/multi-select
+// group) or a CSV string (one value per extra-inbound row). Keeps only whitelisted
+// values, deduped and order-preserving. Returns [] when nothing valid is present.
+function _parseFingerprintPool(raw) {
+    if (raw === undefined || raw === null) return [];
+    const tokens = Array.isArray(raw) ? raw : String(raw).split(',');
+    const seen = new Set();
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+        const v = String(tokens[i]).trim();
+        if (v && XRAY_FINGERPRINT_VALUES.includes(v) && !seen.has(v)) {
+            seen.add(v);
+            out.push(v);
+        }
+    }
+    return out;
 }
 
 /**
@@ -137,6 +155,7 @@ function parseExtraInbounds(body) {
     const securities = arr('xray_extra_security');
     const flows = arr('xray_extra_flow');
     const fingerprints = arr('xray_extra_fingerprint');
+    const fingerprintPools = arr('xray_extra_fingerprintPool');
     const alpns = arr('xray_extra_alpn');
     const realityDests = arr('xray_extra_realityDest');
     const realitySnis = arr('xray_extra_realitySni');
@@ -177,6 +196,7 @@ function parseExtraInbounds(body) {
             security,
             flow: String(flows[i] !== undefined ? flows[i] : 'xtls-rprx-vision'),
             fingerprint: _pickEnum(fingerprints[i], XRAY_FINGERPRINT_VALUES, 'chrome'),
+            fingerprintPool: _parseFingerprintPool(fingerprintPools[i]),
             alpn: alpns[i] !== undefined ? (_splitCsv(alpns[i]) || []) : [],
             realityDest: String(realityDests[i] || 'www.google.com:443'),
             realitySni: realitySnis[i] !== undefined
@@ -215,6 +235,9 @@ function parseXrayFormFields(body) {
     if (body['xray.flow'] !== undefined) xray.flow = body['xray.flow'];
     if (body['xray.fingerprint']) {
         xray.fingerprint = _pickEnum(body['xray.fingerprint'], XRAY_FINGERPRINT_VALUES, 'chrome');
+    }
+    if (body['xray.fingerprintPool'] !== undefined) {
+        xray.fingerprintPool = _parseFingerprintPool(body['xray.fingerprintPool']);
     }
 
     if (body['xray.alpn'] !== undefined) {

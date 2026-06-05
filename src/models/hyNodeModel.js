@@ -124,6 +124,10 @@ const xrayExtraInboundSchema = new mongoose.Schema({
     flow: { type: String, default: 'xtls-rprx-vision' },
 
     fingerprint: { type: String, default: 'chrome' },
+    // Optional set of fingerprints; when non-empty, one is chosen at random when
+    // the subscription cache is (re)built, rotating per cache TTL rather than on
+    // every request (overrides the single `fingerprint`).
+    fingerprintPool: { type: [String], default: [] },
     alpn: { type: [String], default: [] },
 
     realityDest: { type: String, default: 'www.google.com:443' },
@@ -154,8 +158,12 @@ const xrayConfigSchema = new mongoose.Schema({
     // XTLS flow — only for tcp+reality/tls
     flow: { type: String, default: 'xtls-rprx-vision' },
 
-    // TLS Fingerprint (uTLS) — chrome, firefox, safari, ios, android, edge, random, randomized
+    // TLS Fingerprint (uTLS) — chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized
     fingerprint: { type: String, default: 'chrome' },
+    // Optional set of fingerprints; when non-empty, one is chosen at random when
+    // the subscription cache is (re)built, rotating per cache TTL rather than on
+    // every request (overrides the single `fingerprint`).
+    fingerprintPool: { type: [String], default: [] },
     // ALPN — comma-separated or array: h3, h2, http/1.1
     alpn: { type: [String], default: [] },
 

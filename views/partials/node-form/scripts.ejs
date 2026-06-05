@@ -899,6 +899,18 @@ function updateExtraInboundSummary(el) {
     if (summary) summary.textContent = transport.toUpperCase() + ' / ' + security + ' : ' + port;
 }
 
+// Serialize the per-row fingerprint-pool multi-select into its sibling hidden
+// CSV input. The hidden input (not the select) is submitted so the parallel
+// xray_extra_*[] arrays stay index-aligned (one value per row).
+function syncExtraFingerprintPool(selectEl) {
+    const card = _findExtraCard(selectEl);
+    if (!card) return;
+    const hidden = card.querySelector('input.extra-fp-pool-csv');
+    if (!hidden) return;
+    const values = Array.from(selectEl.selectedOptions).map(o => o.value);
+    hidden.value = values.join(',');
+}
+
 function updateExtraInboundTitle(input) {
     const card = _findExtraCard(input);
     if (!card) return;

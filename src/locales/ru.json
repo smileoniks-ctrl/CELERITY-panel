@@ -452,6 +452,8 @@
     "xraySecurityNone": "Без защиты",
     "xrayFingerprint": "TLS Fingerprint",
     "xrayFingerprintHint": "uTLS отпечаток для TLS-рукопожатия (Reality/TLS)",
+    "xrayFingerprintPool": "Набор отпечатков (случайный)",
+    "xrayFingerprintPoolHint": "Выберите несколько — публикуемый отпечаток будет случайно меняться при обновлении кэша подписки (по TTL кэша), а не при каждом запросе. Пусто — используется одиночный отпечаток выше.",
     "xrayAlpn": "ALPN",
     "xrayAlpnHint": "Через запятую: h3, h2, http/1.1 (только для TLS)",
     "xrayFlow": "Flow (XTLS)",
