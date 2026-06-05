@@ -40,6 +40,53 @@ const queryNodesSchema = z.object({
     includeConfig: z.boolean().default(false).describe('Include generated config for a single node'),
 });
 
+// Xray stream/security fields shared by the main inbound and extras. Enums
+// mirror xrayConfigSchema/xrayExtraInboundSchema in hyNodeModel.js.
+const xrayInboundCommonZ = {
+    transport: z.enum(['tcp', 'ws', 'grpc', 'xhttp']).optional(),
+    security: z.enum(['reality', 'tls', 'none']).optional(),
+    flow: z.string().optional(),
+    fingerprint: z.string().optional().describe('uTLS fingerprint: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized'),
+    fingerprintPool: z.array(z.string()).optional().describe('Set of fingerprints; when non-empty one is picked at random per subscription-cache rebuild (overrides fingerprint)'),
+    alpn: z.array(z.string()).optional().describe('e.g. ["h3","h2","http/1.1"]'),
+    realityDest: z.string().optional(),
+    realitySni: z.array(z.string()).optional(),
+    realityPrivateKey: z.string().optional(),
+    realityPublicKey: z.string().optional(),
+    realityShortIds: z.array(z.string()).optional(),
+    realitySpiderX: z.string().optional(),
+    wsPath: z.string().optional(),
+    wsHost: z.string().optional(),
+    grpcServiceName: z.string().optional(),
+    xhttpPath: z.string().optional(),
+    xhttpHost: z.string().optional(),
+    xhttpMode: z.enum(['auto', 'packet-up', 'stream-up', 'stream-one']).optional(),
+    fallbackDest: z.string().optional().describe('VLESS fallbacks[].dest — emitted only on tcp+tls'),
+};
+
+const xrayExtraInboundZ = z.object({
+    ...xrayInboundCommonZ,
+    id: z.string().describe('Stable client-generated uuid tracking the inbound across edits'),
+    label: z.string().optional(),
+    uniqueName: z.boolean().optional(),
+    port: z.number(),
+    inboundTag: z.string(),
+});
+
+const xrayConfigZ = z.object({
+    ...xrayInboundCommonZ,
+    tlsSource: z.enum(['panel', 'acme', 'manual', 'self-signed']).optional(),
+    acmeEmail: z.string().optional(),
+    manualCert: z.string().optional(),
+    manualKey: z.string().optional(),
+    apiPort: z.number().optional(),
+    inboundTag: z.string().optional(),
+    agentPort: z.number().optional(),
+    agentToken: z.string().optional(),
+    agentTls: z.boolean().optional(),
+    extraInbounds: z.array(xrayExtraInboundZ).optional(),
+});
+
 const manageNodeSchema = z.object({
     action: z.enum(['create', 'update', 'delete', 'sync', 'setup', 'reset_status', 'update_config', 'setup_port_hopping', 'generate_xray_keys']),
     id: z.string().optional().describe('Node MongoDB _id (required for all except create)'),
@@ -76,7 +123,20 @@ const manageNodeSchema = z.object({
             port: z.number().optional(),
             username: z.string().optional(),
             password: z.string().optional(),
+            privateKey: z.string().optional(),
         }).optional(),
+        statsPort: z.number().optional(),
+        paths: z.object({
+            config: z.string().optional(),
+            cert: z.string().optional(),
+            key: z.string().optional(),
+        }).optional(),
+        settings: z.record(z.unknown()).optional(),
+        rankingCoefficient: z.number().optional(),
+        comment: z.string().optional().describe('Free-form operator note (trimmed, max 500 chars)'),
+        // Xray inbound config (only for type="xray"). On update only the provided
+        // keys are changed; omit reality keys / manualKey to keep generated values.
+        xray: xrayConfigZ.optional().describe('Xray inbound config (only for type="xray"). On update only provided keys change; omit realityPrivateKey/realityPublicKey/manualKey to preserve generated values'),
         // Hysteria 2 advanced configuration
         hopInterval: z.string().optional().describe('Port-hopping interval, e.g. "30s"'),
         acme: z.object({
@@ -330,6 +390,15 @@ async function manageNode(args, emit) {
             for (const k of hy2Keys) {
                 if (data[k] !== undefined) nodeData[k] = data[k];
             }
+
+            // Xray + remaining common fields, mirroring routes/nodes.js POST.
+            if (nodeType === 'xray' && data.xray) nodeData.xray = data.xray;
+            if (data.statsPort !== undefined) nodeData.statsPort = data.statsPort;
+            if (data.paths !== undefined) nodeData.paths = data.paths;
+            if (data.settings !== undefined) nodeData.settings = data.settings;
+            if (data.rankingCoefficient !== undefined) nodeData.rankingCoefficient = data.rankingCoefficient;
+            if (typeof data.comment === 'string') nodeData.comment = data.comment.trim().slice(0, 500);
+
             const node = new HyNode(nodeData);
             await node.save();
             await invalidateNodesCache();
@@ -340,7 +409,8 @@ async function manageNode(args, emit) {
         case 'update': {
             if (!id) throw new Error('id is required for update');
             const allowed = [
-                'name', 'domain', 'sni', 'port', 'portRange', 'groups', 'active', 'country', 'cascadeRole', 'type',
+                'name', 'domain', 'sni', 'port', 'portRange', 'statsPort', 'groups', 'ssh', 'paths',
+                'settings', 'active', 'rankingCoefficient', 'country', 'comment', 'cascadeRole', 'type',
                 'virtual',
                 'hopInterval', 'acme', 'masquerade', 'bandwidth',
                 'ignoreClientBandwidth', 'speedTest', 'disableUDP',
@@ -349,7 +419,22 @@ async function manageNode(args, emit) {
             ];
             const updates = {};
             for (const k of allowed) {
-                if (data[k] !== undefined) updates[k] = data[k];
+                if (data[k] === undefined) continue;
+                if (k === 'ssh') {
+                    updates[k] = cryptoService.encryptSshCredentials(data[k]);
+                } else if (k === 'comment') {
+                    updates[k] = typeof data[k] === 'string' ? data[k].trim().slice(0, 500) : '';
+                } else {
+                    updates[k] = data[k];
+                }
+            }
+
+            // Xray: partial update via dot-paths so unsent secrets (realityPrivateKey,
+            // realityPublicKey, manualKey) are preserved instead of wiped by a full $set.
+            if (data.xray && typeof data.xray === 'object') {
+                for (const [k, v] of Object.entries(data.xray)) {
+                    updates[`xray.${k}`] = v;
+                }
             }
 
             // findByIdAndUpdate skips pre('validate') hooks, so re-implement

@@ -85,7 +85,7 @@ const TOOLS = {
     },
 
     manage_node: {
-        description: 'Manage Hysteria/Xray/virtual nodes: create, update, delete, sync, auto-setup via SSH, reset status, update config, setup port hopping, generate Xray Reality keys. "virtual" nodes are load-balancer entries over real sibling nodes.',
+        description: 'Manage Hysteria/Xray/virtual nodes: create, update, delete, sync, auto-setup via SSH, reset status, update config, setup port hopping, generate Xray Reality keys. "virtual" nodes are load-balancer entries over real sibling nodes. For type="xray" pass the full "xray" object (transport, security/reality, fingerprint + fingerprintPool, alpn, ws/grpc/xhttp, extraInbounds); on update the xray object is merged per-field, so omit realityPrivateKey/realityPublicKey/manualKey to keep generated values.',
         requiredScope: 'nodes:write',
         inputSchema: zodToInputSchema(nodesTools.schemas.manageNode),
     },
