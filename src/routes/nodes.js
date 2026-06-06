@@ -12,6 +12,29 @@ const logger = require('../utils/logger');
 const { requireScope } = require('../middleware/auth');
 const { invalidateNodesCache } = require('../utils/helpers');
 
+async function setNodeActive(req, res, active) {
+    try {
+        const node = await HyNode.findByIdAndUpdate(
+            req.params.id,
+            { $set: { active } },
+            { new: true }
+        );
+
+        if (!node) {
+            return res.status(404).json({ error: 'Node not found' });
+        }
+
+        await invalidateNodesCache();
+
+        logger.info(`[Nodes API] ${active ? 'Enabled' : 'Disabled'} node ${node.name}`);
+
+        res.json({ success: true, node });
+    } catch (error) {
+        logger.error(`[Nodes API] ${active ? 'Enable' : 'Disable'} node error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+}
+
 /**
  * GET /nodes - Список всех нод
  */
@@ -78,6 +101,16 @@ router.get('/:id', requireScope('nodes:read'), async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+/**
+ * POST /nodes/:id/enable - Включить ноду в подписках
+ */
+router.post('/:id/enable', requireScope('nodes:write'), (req, res) => setNodeActive(req, res, true));
+
+/**
+ * POST /nodes/:id/disable - Отключить ноду из подписок без остановки сервиса
+ */
+router.post('/:id/disable', requireScope('nodes:write'), (req, res) => setNodeActive(req, res, false));
 
 /**
  * POST /nodes - Создать ноду
