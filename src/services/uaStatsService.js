@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 // Ordered list for consistent matching (Hiddify before Clash — its UA contains "ClashMeta")
 const CLIENT_PATTERNS = [
     { name: 'happ',         re: /happ/i },
+    { name: 'incy',         re: /incy/i },
     { name: 'hiddify',      re: /hiddify/i },
     { name: 'nekobox',      re: /nekobox|nekoray/i },
     { name: 'singbox',      re: /sing-?box|sfa|sfi|sfm|sft|karing/i },
