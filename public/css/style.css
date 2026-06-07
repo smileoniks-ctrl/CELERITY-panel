@@ -179,8 +179,8 @@ html {
 }
 
 .logo .version-badge {
-    margin-left: auto;
     align-self: flex-start;
+    margin-top: 6px;
 }
 
 .login-header .version-badge {
