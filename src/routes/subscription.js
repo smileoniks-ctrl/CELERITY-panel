@@ -587,12 +587,31 @@ function buildXrayRules(rules) {
 }
 
 /**
+ * Normalize a DNS address into a scheme Xray-core supports.
+ * Xray has no DoT (`tls://`) scheme, so map it to DoH; bare DoQ → local DoQ.
+ */
+function normalizeXrayDnsAddr(addr) {
+    if (!addr) return null;
+    const s = String(addr).trim();
+    if (!s) return null;
+    if (/^tls:\/\//i.test(s)) {
+        // DoT is :853, DoH is :443 — drop an explicit DoT port on conversion.
+        const host = s.slice(6).replace(/\/+$/, '').replace(/:853$/, '');
+        return `https://${host}/dns-query`;
+    }
+    if (/^quic:\/\//i.test(s)) {
+        return `quic+local://${s.slice(7).replace(/\/+$/, '')}`;
+    }
+    return s;
+}
+
+/**
  * Build Xray split-DNS servers array from routing rules + dns settings.
  * Domestic domains get routed to domestic DNS server.
  */
 function buildXrayDns(rules, dns) {
-    const domesticDns = (dns && dns.domestic) ? dns.domestic : '77.88.8.8';
-    const remoteDns   = (dns && dns.remote)   ? dns.remote   : '1.1.1.1';
+    const domesticDns = normalizeXrayDnsAddr((dns && dns.domestic) || '77.88.8.8');
+    const remoteDns   = normalizeXrayDnsAddr((dns && dns.remote)   || 'tls://1.1.1.1');
 
     const domesticDomains = [];
     for (const r of (rules || [])) {
