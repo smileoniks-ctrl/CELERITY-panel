@@ -40,9 +40,6 @@
                 <div class="logo-content">
                     <span class="logo-text">C³ CELERITY</span>
                     <a href="https://t.me/First_VPN_Click_bot" target="_blank" class="logo-sub">by Click Connect</a>
-                    <% if (typeof appVersion !== 'undefined' && appVersion) { %>
-                    <a href="https://github.com/ClickDevTech/CELERITY-panel/releases" target="_blank" rel="noopener" class="version-badge">v<%= appVersion %></a>
-                    <% } %>
                 </div>
             </div>
             <ul class="nav-menu">
@@ -82,6 +79,9 @@
                     <span>GitHub</span>
                 </a>
                 <a href="/panel/logout" class="logout-btn"><%= t('nav.logout') %></a>
+                <% if (typeof appVersion !== 'undefined' && appVersion) { %>
+                <a href="https://github.com/ClickDevTech/CELERITY-panel/releases" target="_blank" rel="noopener" class="sidebar-version">v<%= appVersion %></a>
+                <% } %>
             </div>
         </nav>
         <main class="content">
