@@ -852,6 +852,8 @@ function generateXrayConfig(node, users) {
     // field-rule with no domain/ip filter, matching every connection from the
     // VLESS inbounds (issue #75).
     const customOutboundNames = new Set(customOutbounds.map(o => o && o.name).filter(Boolean));
+    // Xray rejects condition-less routing rules, so scope `all` to VLESS inbounds.
+    const vlessInboundTags = [mainInboundTag, ...extraInbounds.map(e => e && e.inboundTag).filter(Boolean)];
     const aclRules = node.aclRules || [];
     for (const rule of aclRules) {
         const match = rule.match(/^([\w\-]+)\((.+)\)$/);
@@ -886,6 +888,9 @@ function generateXrayConfig(node, users) {
             } else {
                 routingRule.domain = [`full:${target}`];
             }
+        } else {
+            routingRule.inboundTag = vlessInboundTags;
+            routingRule.ruleTag = 'acl-catch-all';
         }
 
         config.routing.rules.push(routingRule);
@@ -1611,10 +1616,11 @@ function ensurePrivateIpBlock(config) {
     // Catch-all ACL rules (no ip/domain/inboundTag/protocol filters) must run
     // AFTER the private-network block, otherwise LAN traffic would leak
     // through a user-defined proxy like `ukr(all)` (issue #75).
-    const isCatchAll = (r) => r && r.type === 'field'
-        && !r.ip && !r.domain
-        && !r.inboundTag && !r.protocol
-        && !r.port && !r.network && !r.source;
+    const isCatchAll = (r) => r && r.type === 'field' && (
+        r.ruleTag === 'acl-catch-all'
+        || (!r.ip && !r.domain && !r.inboundTag && !r.protocol
+            && !r.port && !r.network && !r.source)
+    );
 
     const tail = [];
     const head = [];
