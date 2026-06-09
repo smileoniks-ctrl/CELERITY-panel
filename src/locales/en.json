@@ -587,7 +587,7 @@
     "confirmDeployCascade": "Deploy this cascade link?",
     "confirmUndeployCascade": "Undeploy this cascade link?",
     "confirmDeleteCascade": "Delete cascade link \"{name}\"? This will also undeploy it.",
-    "xrayGenerateKeysConfirm": "Generate new x25519 Reality keys via SSH? This will overwrite existing keys.",
+    "xrayGenerateKeysConfirm": "Generate new x25519 Reality keys? This will overwrite existing keys.",
     "xrayKeysSuccess": "Keys generated! Public key: {key}",
     "goToNetworkMap": "Network Map",
     "addCascadeLink": "Add Cascade Link"

@@ -953,7 +953,6 @@ function updateExtraInboundTitle(input) {
     }
 }
 
-<% if (node?._id && node.type === 'xray') { %>
 async function generateExtraXrayKeys(btn) {
     const card = _findExtraCard(btn);
     if (!card) return;
@@ -962,7 +961,7 @@ async function generateExtraXrayKeys(btn) {
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader-2"></i>';
     try {
-        const res = await fetch('/api/nodes/<%= node._id %>/generate-xray-keys', {
+        const res = await fetch('/panel/nodes/generate-reality-keys', {
             method: 'POST',
             credentials: 'include',
         });
@@ -982,11 +981,6 @@ async function generateExtraXrayKeys(btn) {
         btn.innerHTML = original;
     }
 }
-<% } else { %>
-function generateExtraXrayKeys() {
-    alert(i18n.saveFirst || 'Save the node first to generate Reality keys.');
-}
-<% } %>
 
 // ==================== Hysteria helpers ====================
 
@@ -1369,14 +1363,13 @@ async function refreshNodeInfo() {
 }
 <% } %>
 
-<% if (node?._id && node.type === 'xray') { %>
 async function generateXrayKeys() {
     if (!confirm(i18n.xrayGenerateKeysConfirm)) return;
     const btn = event.target;
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader-2"></i>';
     try {
-        const res = await fetch('/api/nodes/<%= node._id %>/generate-xray-keys', {
+        const res = await fetch('/panel/nodes/generate-reality-keys', {
             method: 'POST',
             credentials: 'include',
         });
@@ -1395,7 +1388,6 @@ async function generateXrayKeys() {
         btn.innerHTML = '<i class="ti ti-refresh"></i>';
     }
 }
-<% } %>
 
 // Init UI on page load
 (function() {

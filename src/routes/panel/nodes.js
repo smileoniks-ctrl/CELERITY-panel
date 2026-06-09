@@ -221,10 +221,17 @@ router.get('/nodes/add', async (req, res) => {
             }
         }
 
+        // Pre-fill a fresh Reality keypair so a newly opened Xray form already has
+        // valid keys. Generated locally (no SSH/xray dependency); only persisted if
+        // the operator actually submits an Xray node with Reality. Passed separately
+        // (not via `node`) to keep the form's create-vs-edit detection intact.
+        const defaultRealityKeys = cryptoService.generateX25519KeysLocal();
+
         render(res, 'node-form', {
             title: res.locals.t('nodes.newNode'),
             page: 'nodes',
             node: prefillNode,
+            defaultRealityKeys,
             groups,
             candidateNodes,
             cascadeLinks: [],
@@ -376,7 +383,7 @@ router.post('/nodes', async (req, res) => {
             if (xrayError) {
                 return res.redirect(`/panel/nodes/add?error=${encodeURIComponent(xrayError)}`);
             }
-            ensureExtraInboundRealityKeys(nodeData.xray, nodeSetup);
+            ensureExtraInboundRealityKeys(nodeData.xray);
             if (nodeData.cascadeRole !== 'bridge' && !nodeData.xray.agentToken) {
                 nodeData.xray.agentToken = nodeSetup.generateAgentToken();
             }
@@ -497,6 +504,20 @@ router.post('/nodes/preview-config', async (req, res) => {
     } catch (error) {
         logger.error('[Panel] Preview config generation error:', error.message);
         return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /panel/nodes/generate-reality-keys - Generate a fresh x25519 Reality keypair.
+// Stateless: returns keys for the form to fill in; persistence happens on node save.
+// Registered before the parametric /nodes/:id routes so the static path isn't
+// captured as an :id. Works without a saved node or an installed xray binary.
+router.post('/nodes/generate-reality-keys', (req, res) => {
+    try {
+        const keys = cryptoService.generateX25519KeysLocal();
+        res.json({ success: true, privateKey: keys.privateKey, publicKey: keys.publicKey });
+    } catch (error) {
+        logger.error(`[Panel] Generate reality keys error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -643,7 +664,7 @@ router.post('/nodes/:id', async (req, res) => {
             if (xrayError) {
                 return res.redirect(`/panel/nodes/${nodeId}?error=${encodeURIComponent(xrayError)}`);
             }
-            ensureExtraInboundRealityKeys(updates.xray, nodeSetup);
+            ensureExtraInboundRealityKeys(updates.xray);
             if ((req.body.cascadeRole || 'standalone') !== 'bridge' && !updates.xray.agentToken) {
                 updates.xray.agentToken = nodeSetup.generateAgentToken();
             }

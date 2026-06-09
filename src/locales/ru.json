@@ -587,7 +587,7 @@
     "confirmDeployCascade": "Деплоить эту каскадную связь?",
     "confirmUndeployCascade": "Убрать деплой этой каскадной связи?",
     "confirmDeleteCascade": "Удалить каскадную связь \"{name}\"? Это также уберёт деплой.",
-    "xrayGenerateKeysConfirm": "Сгенерировать новые x25519 Reality ключи через SSH? Существующие ключи будут заменены.",
+    "xrayGenerateKeysConfirm": "Сгенерировать новые x25519 Reality ключи? Существующие ключи будут заменены.",
     "xrayKeysSuccess": "Ключи сгенерированы! Публичный ключ: {key}",
     "goToNetworkMap": "Карта сети",
     "addCascadeLink": "Добавить каскадную связь"

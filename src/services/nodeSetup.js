@@ -968,69 +968,6 @@ echo "ACME setup completed for \${DOMAIN}"
 }
 
 /**
- * Generate x25519 keypair for Xray Reality LOCALLY (no SSH).
- * Uses Node's native crypto module (`crypto.generateKeyPairSync('x25519')`)
- * so the panel can mint keys for new nodes / additional inbounds before any
- * SSH connection has been established.
- *
- * Xray uses raw 32-byte keys encoded as base64url WITHOUT padding. We strip
- * the fixed PKCS8/SPKI ASN.1 prefixes (16 bytes for private, 12 for public)
- * to get the raw 32-byte payload, then base64url-encode.
- *
- * @returns {{ privateKey: string, publicKey: string }}
- */
-function generateX25519KeysLocal() {
-    const crypto = require('crypto');
-    const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');
-
-    // PKCS8 DER for x25519 private = 16-byte ASN.1 prefix + 32-byte raw key.
-    // SPKI  DER for x25519 public  = 12-byte ASN.1 prefix + 32-byte raw key.
-    const privDer = privateKey.export({ format: 'der', type: 'pkcs8' });
-    const pubDer  = publicKey .export({ format: 'der', type: 'spki'  });
-    const privRaw = privDer.subarray(privDer.length - 32);
-    const pubRaw  = pubDer .subarray(pubDer .length - 32);
-
-    const b64url = (buf) => buf.toString('base64')
-        .replace(/=+$/, '')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_');
-
-    return { privateKey: b64url(privRaw), publicKey: b64url(pubRaw) };
-}
-
-/**
- * Generate x25519 keys for Xray Reality via SSH (calls `xray x25519` on the
- * remote node). Use generateX25519KeysLocal() instead when no SSH session is
- * available; both produce keys in the exact same Xray format.
- * Supports multiple `xray x25519` output formats:
- * - Old: "Private key: xxx\nPublic key: xxx"
- * - New: "PrivateKey: xxx\nPublicKey: xxx"
- * @returns {{ privateKey: string, publicKey: string } | null}
- */
-async function generateX25519Keys(conn) {
-    const result = await execSSH(conn, 'xray x25519');
-    if (!result.success) {
-        throw new Error(`Failed to generate x25519 keys: ${result.output}`);
-    }
-    const output = result.output;
-    
-    // Try different formats (case-insensitive, with/without space)
-    const privMatch = output.match(/Private\s*[Kk]ey:\s*(\S+)/i);
-    const pubMatch = output.match(/Public\s*[Kk]ey:\s*(\S+)/i);
-    
-    if (!privMatch || !pubMatch) {
-        // Fallback: try to extract first two base64-like strings
-        const base64Pattern = /:\s*([A-Za-z0-9_-]{40,})/g;
-        const matches = [...output.matchAll(base64Pattern)];
-        if (matches.length >= 2) {
-            return { privateKey: matches[0][1], publicKey: matches[1][1] };
-        }
-        throw new Error(`Could not parse x25519 output: ${output}`);
-    }
-    return { privateKey: privMatch[1], publicKey: pubMatch[1] };
-}
-
-/**
  * Setup Xray node via SSH:
  * 1. Install xray-core
  * 2. Generate x25519 Reality keys (if security=reality and no keys yet)
@@ -1114,10 +1051,10 @@ async function setupXrayNode(node, options = {}) {
             const updates = {};
             let needsUpdate = false;
 
-            // Generate x25519 keys if not set
+            // Generate x25519 keys if not set (locally, no dependency on xray binary)
             if (!xrayCfg.realityPrivateKey) {
                 log('Generating x25519 Reality keys...');
-                generatedKeys = await generateX25519Keys(conn);
+                generatedKeys = cryptoService.generateX25519KeysLocal();
                 log(`Reality keys generated. PublicKey: ${generatedKeys.publicKey}`);
                 updates['xray.realityPrivateKey'] = generatedKeys.privateKey;
                 updates['xray.realityPublicKey'] = generatedKeys.publicKey;
@@ -1745,8 +1682,6 @@ module.exports = {
     startNodeRuntime,
     generateAgentToken,
     ensureXrayAgentToken,
-    generateX25519Keys,
-    generateX25519KeysLocal,
     checkXrayNodeStatus,
     getXrayNodeLogs,
     getPanelCertificates,

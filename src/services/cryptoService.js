@@ -2,6 +2,7 @@
  * Encryption service for user passwords and SSH credentials
  */
 
+const crypto = require('crypto');
 const CryptoJS = require('crypto-js');
 const config = require('../../config');
 
@@ -87,6 +88,33 @@ class CryptoService {
      */
     generateNodeSecret() {
         return CryptoJS.lib.WordArray.random(16).toString();
+    }
+
+    /**
+     * Generate an x25519 keypair for Xray Reality LOCALLY (no SSH / no xray binary).
+     *
+     * Xray uses raw 32-byte keys encoded as base64url WITHOUT padding. We strip
+     * the fixed PKCS8/SPKI ASN.1 prefixes (16 bytes for private, 12 for public)
+     * to get the raw 32-byte payload, then base64url-encode.
+     *
+     * @returns {{ privateKey: string, publicKey: string }}
+     */
+    generateX25519KeysLocal() {
+        const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');
+
+        // PKCS8 DER for x25519 private = 16-byte ASN.1 prefix + 32-byte raw key.
+        // SPKI  DER for x25519 public  = 12-byte ASN.1 prefix + 32-byte raw key.
+        const privDer = privateKey.export({ format: 'der', type: 'pkcs8' });
+        const pubDer = publicKey.export({ format: 'der', type: 'spki' });
+        const privRaw = privDer.subarray(privDer.length - 32);
+        const pubRaw = pubDer.subarray(pubDer.length - 32);
+
+        const b64url = (buf) => buf.toString('base64')
+            .replace(/=+$/, '')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_');
+
+        return { privateKey: b64url(privRaw), publicKey: b64url(pubRaw) };
     }
 }
 

@@ -460,10 +460,6 @@ function addCommonExamples(target) {
             summary: 'Node status reset',
             value: { success: true, message: 'Статус сброшен', node: { _id: '64a1b2c3d4e5f6a7b8c9d0e2', name: 'Germany 1', status: 'online' } },
         },
-        XrayKeysResponse: {
-            summary: 'Generated Xray REALITY keys',
-            value: { success: true, privateKey: 'base64-private', publicKey: 'base64-public' },
-        },
         ConfigUpdatedResponse: {
             summary: 'Config updated on node',
             value: { success: true, message: 'Конфиг обновлён' },
@@ -580,7 +576,6 @@ const OPERATION_METADATA = {
     'DELETE /nodes/{id}/groups/{groupId}': { scopes: ['nodes:write'], responseExample: 'NodeResponse' },
     'POST /nodes/{id}/setup-port-hopping': { scopes: ['nodes:write'], responseExample: 'PortHoppingConfiguredResponse' },
     'POST /nodes/{id}/update-config': { scopes: ['nodes:write'], responseExample: 'ConfigUpdatedResponse' },
-    'POST /nodes/{id}/generate-xray-keys': { scopes: ['nodes:write'], responseExample: 'XrayKeysResponse', skipGenericExamples: true },
     'GET /cascade/links': { scopes: ['nodes:read'], responseExample: 'CascadeLinksListResponse' },
     'POST /cascade/links': { scopes: ['nodes:write'], requestExample: 'CascadeLinkRequest', responseExample: 'CascadeLinkResponse' },
     'GET /cascade/links/{id}': { scopes: ['nodes:read'], responseExample: 'CascadeLinkResponse' },
@@ -2406,22 +2401,6 @@ See the request body examples panel for both flavours.`,
                     403: { $ref: '#/components/responses/Forbidden' },
                     404: { $ref: '#/components/responses/NotFound' },
                     500: { description: 'Failed to update config' },
-                },
-            },
-        },
-
-        '/nodes/{id}/generate-xray-keys': {
-            parameters: [{ $ref: '#/components/parameters/nodeId' }],
-            post: {
-                tags: ['Nodes'],
-                summary: 'Generate Xray REALITY keys',
-                description: 'Generates x25519 keys on an Xray node via SSH and stores them on the node record.',
-                responses: {
-                    200: { description: 'Generated keys', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, privateKey: { type: 'string' }, publicKey: { type: 'string' } } } } } },
-                    400: { description: 'Node is not Xray or SSH credentials are missing' },
-                    401: { $ref: '#/components/responses/Unauthorized' },
-                    403: { $ref: '#/components/responses/Forbidden' },
-                    404: { $ref: '#/components/responses/NotFound' },
                 },
             },
         },

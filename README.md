@@ -552,7 +552,6 @@ Required scope: `nodes:read` (GET) / `nodes:write` (POST, PUT, DELETE)
 | POST | `/api/nodes/:id/groups` | Add node to groups |
 | DELETE | `/api/nodes/:id/groups/:groupId` | Remove from group |
 | GET | `/api/nodes/:id/agent-info` | Get CC Agent info (Xray) |
-| POST | `/api/nodes/:id/generate-xray-keys` | Generate Reality keys |
 
 ### Stats & Sync
 

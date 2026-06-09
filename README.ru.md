@@ -579,7 +579,6 @@ Authorization: Bearer ck_your_key_here
 | POST   | `/api/nodes/:id/groups`             | Добавить ноду в группы      |
 | DELETE | `/api/nodes/:id/groups/:groupId`    | Удалить из группы           |
 | GET    | `/api/nodes/:id/agent-info`         | Инфо от CC Agent (Xray)     |
-| POST   | `/api/nodes/:id/generate-xray-keys` | Генерация Reality ключей    |
 
 
 ### Статистика и синхронизация

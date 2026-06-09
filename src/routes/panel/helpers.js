@@ -509,13 +509,12 @@ function sanitizeXrayForRender(xray) {
  * admins can add Reality extras without manually clicking "Generate keys".
  *
  * @param {Object} xray - Parsed xray object (with extraInbounds[])
- * @param {Object} nodeSetup - The nodeSetup module (passed to avoid cycles)
  */
-function ensureExtraInboundRealityKeys(xray, nodeSetup) {
+function ensureExtraInboundRealityKeys(xray) {
     if (!xray || !Array.isArray(xray.extraInbounds)) return;
     for (const inbound of xray.extraInbounds) {
         if (inbound.security === 'reality' && !inbound.realityPrivateKey) {
-            const keys = nodeSetup.generateX25519KeysLocal();
+            const keys = cryptoService.generateX25519KeysLocal();
             inbound.realityPrivateKey = keys.privateKey;
             inbound.realityPublicKey = keys.publicKey;
         }

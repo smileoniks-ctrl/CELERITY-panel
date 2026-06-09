@@ -581,20 +581,11 @@ async function manageNode(args, emit) {
             const node = await HyNode.findById(id);
             if (!node) return { error: `Node '${id}' not found`, code: 404 };
             if (node.type !== 'xray') return { error: 'Node is not an Xray node', code: 400 };
-            if (!node.ssh?.password && !node.ssh?.privateKey) {
-                return { error: 'SSH credentials not configured', code: 400 };
-            }
 
-            const nodeSetup = require('../../services/nodeSetup');
-            emit('progress', { message: `Generating x25519 Reality keys on ${node.name}...` });
+            emit('progress', { message: `Generating x25519 Reality keys for ${node.name}...` });
 
-            const conn = await nodeSetup.connectSSH(node);
-            let keys;
-            try {
-                keys = await nodeSetup.generateX25519Keys(conn);
-            } finally {
-                conn.end();
-            }
+            // Generate locally — no dependency on xray being installed on the node.
+            const keys = cryptoService.generateX25519KeysLocal();
 
             await HyNode.findByIdAndUpdate(id, {
                 $set: {

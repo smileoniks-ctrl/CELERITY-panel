@@ -724,48 +724,6 @@ router.post('/:id/update-config', requireScope('nodes:write'), async (req, res) 
 });
 
 /**
- * POST /nodes/:id/generate-xray-keys - Generate x25519 Reality keys via SSH
- * Saves the keys to the node and returns the public key.
- */
-router.post('/:id/generate-xray-keys', requireScope('nodes:write'), async (req, res) => {
-    try {
-        const node = await HyNode.findById(req.params.id);
-
-        if (!node) return res.status(404).json({ error: 'Node not found' });
-        if (node.type !== 'xray') return res.status(400).json({ error: 'Нода не является Xray-нодой' });
-        if (!node.ssh?.password && !node.ssh?.privateKey) {
-            return res.status(400).json({ error: 'SSH credentials not configured' });
-        }
-
-        const nodeSetup = require('../services/nodeSetup');
-        const { connectSSH, generateX25519Keys } = nodeSetup;
-
-        const conn = await connectSSH(node);
-        let keys;
-        try {
-            keys = await generateX25519Keys(conn);
-        } finally {
-            conn.end();
-        }
-
-        await HyNode.findByIdAndUpdate(req.params.id, {
-            $set: {
-                'xray.realityPrivateKey': keys.privateKey,
-                'xray.realityPublicKey': keys.publicKey,
-            },
-        });
-
-        await invalidateNodesCache();
-
-        logger.info(`[Nodes API] x25519 keys generated for ${node.name}`);
-        res.json({ success: true, privateKey: keys.privateKey, publicKey: keys.publicKey });
-    } catch (error) {
-        logger.error(`[Nodes API] Generate xray keys error: ${error.message}`);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-/**
  * POST /nodes/:id/setup - Auto-setup node via SSH
  *
  * Installs Hysteria, generates certs, configures port hopping, opens firewall ports
