@@ -293,12 +293,12 @@ Fast UDP protocol based on QUIC with port hopping and obfuscation support.
 **Advantages:**
 - High speed on unstable networks
 - Port hopping to bypass blocks
-- Salamander obfuscation
+- Salamander and Gecko obfuscation (Gecko requires Hysteria 2.9.x)
 
 **Settings:**
 - Port, port range for hopping
 - ACME or self-signed certificates
-- Obfs (Salamander) with password
+- Obfs (`salamander` or `gecko`) with password
 
 **Advanced Hysteria settings in panel:**
 - Port Hopping interval (`hopInterval`)
@@ -416,15 +416,16 @@ Agent is installed automatically during Xray node auto-setup.
    - Open firewall ports
    - Start service
 
-### Obfuscation (Salamander)
+### Obfuscation (Salamander / Gecko)
 
 Hysteria supports obfuscation to disguise traffic:
 
 1. Enable **Obfs** in node settings
-2. Set **obfuscation password**
-3. Save and update config
+2. Select **Salamander** or **Gecko** (`gecko` requires Hysteria 2.9.x)
+3. Set **obfuscation password**
+4. Save and update config
 
-Clients will automatically receive obfs params in subscription.
+Clients will automatically receive the selected `obfs` type and password in subscription.
 
 ### Single VPS Setup (Panel + Node)
 
@@ -647,7 +648,7 @@ const expected = 'sha256=' + crypto
 | `port` | Number | Main port (443) |
 | `portRange` | String | Port hopping range |
 | `portConfigs` | Array | Multi-port: `[{ name, port, portRange, enabled }]` |
-| `obfs` | Object | Obfuscation: `{ type: 'salamander', password }` |
+| `obfs` | Object | Obfuscation: `{ type: 'salamander' \| 'gecko', password }` |
 | `statsPort` | Number | Hysteria stats port (9999) |
 | `statsSecret` | String | Stats API secret |
 | `groups` | [ObjectId] | Server groups |
