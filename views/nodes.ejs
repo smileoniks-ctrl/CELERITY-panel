@@ -1,3 +1,27 @@
+<%
+const nodeMetaLabels = {
+    transportTitle: t('nodes.nodeMetaTransport'),
+    securityTitle: t('nodes.nodeMetaSecurity'),
+    certificateTitle: t('nodes.nodeMetaCertificate'),
+    certPanel: t('nodes.nodeMetaCertPanel'),
+    certAcme: t('nodes.nodeMetaCertAcme'),
+    certManual: t('nodes.nodeMetaCertManual'),
+    certSelfSigned: t('nodes.nodeMetaCertSelfSigned'),
+    certFiles: t('nodes.nodeMetaCertFiles'),
+    securityNone: t('nodes.nodeMetaSecurityNone'),
+    virtualTransport: t('nodes.nodeMetaVirtual'),
+};
+function nodeMetaFor(node) {
+    if (typeof buildNodeUiMeta !== 'function') {
+        return { displayDomain: node?.domain || '', badges: [] };
+    }
+    return buildNodeUiMeta(node, {
+        panelDomain: typeof panelDomain === 'string' ? panelDomain : '',
+        labels: nodeMetaLabels,
+    });
+}
+%>
+
 <div class="page-header sticky-header">
     <div class="page-header-left">
         <div class="view-tabs">
@@ -90,6 +114,7 @@
                     <% } %>
                     <% nodes.forEach(node => { 
                         const groupIds = (node.groups || []).map(g => g._id?.toString() || g.toString()).join(',');
+                        const nodeMeta = nodeMetaFor(node);
                     %>
                     <tr class="node-row"
                         data-status="<%= node.status %>"
@@ -119,8 +144,17 @@
                                     <% if (node.cascadeRole && node.cascadeRole !== 'standalone') { %>
                                     <span class="badge-cascade <%= node.cascadeRole %>"><%= node.cascadeRole.toUpperCase() %></span>
                                     <% } %>
-                                    <% if (node.domain) { %>
-                                    <br><small class="text-muted"><%= node.domain %></small>
+                                    <% if (nodeMeta.badges && nodeMeta.badges.length > 0) { %>
+                                    <div class="node-meta-strip">
+                                        <% nodeMeta.badges.forEach(badge => { %>
+                                        <span class="<%= badge.className %>" title="<%= badge.title %>">
+                                            <i class="<%= badge.icon %>"></i><%= badge.label %>
+                                        </span>
+                                        <% }); %>
+                                    </div>
+                                    <% } %>
+                                    <% if (nodeMeta.displayDomain) { %>
+                                    <small class="node-domain-line"><i class="ti ti-world"></i> <%= nodeMeta.displayDomain %></small>
                                     <% } %>
                                     <% if (node.comment) { %>
                                     <br><small class="node-comment" title="<%= node.comment %>"><i class="ti ti-message-circle"></i> <%= node.comment %></small>
@@ -240,6 +274,7 @@
             <% } %>
             <% nodes.forEach(node => { 
                 const groupIds = (node.groups || []).map(g => g._id?.toString() || g.toString()).join(',');
+                const nodeMeta = nodeMetaFor(node);
             %>
                 <div class="mobile-node-card node-row-mobile"
                      data-status="<%= node.status %>"
@@ -262,6 +297,18 @@
                             <img src="/img/hysteria.svg" alt="Hysteria" title="Hysteria 2" style="width:14px;height:14px;vertical-align:middle;opacity:0.7;">
                             <% } %>
                             <code style="font-size: 11px;"><%= node.type === 'virtual' ? ((node.virtual && node.virtual.strategy) || 'leastLoad') : node.ip %></code>
+                            <% if (nodeMeta.badges && nodeMeta.badges.length > 0) { %>
+                            <div class="node-meta-strip node-meta-strip-mobile">
+                                <% nodeMeta.badges.forEach(badge => { %>
+                                <span class="<%= badge.className %>" title="<%= badge.title %>">
+                                    <i class="<%= badge.icon %>"></i><%= badge.label %>
+                                </span>
+                                <% }); %>
+                            </div>
+                            <% } %>
+                            <% if (nodeMeta.displayDomain) { %>
+                            <small class="node-domain-line"><i class="ti ti-world"></i> <%= nodeMeta.displayDomain %></small>
+                            <% } %>
                         </div>
                         <div class="mobile-node-state">
                             <% if (node.type === 'virtual') { %>
