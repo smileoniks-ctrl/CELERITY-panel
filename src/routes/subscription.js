@@ -2326,20 +2326,20 @@ async function generateHTML(user, nodes, token, baseUrl, settings, lang = 'ru', 
             ${softBlock ? '' : `<p>${text.personalConfig}</p>`}
         </div>
 
-        <div class="stats">
+        ${softBlock ? '' : `<div class="stats">
             <div class="stat">
                 <div class="stat-value">${trafficUsed.toFixed(1)} ${text.gb}</div>
                 <div class="stat-label">${text.used}${trafficLimit > 0 ? ` / ${trafficLimit.toFixed(0)} ${text.gb}` : ''}</div>
             </div>
-            ${softBlock ? '' : `<div class="stat">
+            <div class="stat">
                 <div class="stat-value">${locationsCount}</div>
                 <div class="stat-label">${text.locations}</div>
-            </div>`}
+            </div>
             <div class="stat">
                 <div class="stat-value">${expireDate}</div>
                 <div class="stat-label">${text.validUntil}</div>
             </div>
-        </div>
+        </div>`}
 
         ${softBlock ? noticeHtml : `<div class="section">
             <h2><i class="ti ti-link"></i> ${text.appLinkTitle}</h2>
