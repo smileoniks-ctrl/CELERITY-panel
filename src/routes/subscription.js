@@ -1271,10 +1271,15 @@ function _buildV2rayOutboundsForNode(user, node, tagOverride) {
         const displayName = `${node.flag || ''} ${node.name} ${cfg.name}`.trim();
         const tag = tagOverride ? tagOverride(built.length, displayName) : displayName;
         const hysteriaSettings = { version: 2, auth };
+        // Legacy udphop/udpmasks for old cores + finalmask for modern Xray-core.
+        const finalmask = {};
         if (cfg.portRange) {
-            hysteriaSettings.udphop = { port: cfg.portRange };
             const hopSec = parseDurationSeconds(normalizeHopInterval(cfg.hopInterval));
+            hysteriaSettings.udphop = { port: cfg.portRange };
             if (hopSec > 0) hysteriaSettings.udphop.interval = hopSec;
+            const udpHop = { ports: cfg.portRange };
+            if (hopSec >= 5) udpHop.interval = hopSec;
+            finalmask.quicParams = { udpHop };
         }
 
         const streamSettings = {
@@ -1290,7 +1295,12 @@ function _buildV2rayOutboundsForNode(user, node, tagOverride) {
 
         if (cfg.obfs && cfg.obfsPassword) {
             streamSettings.udpmasks = [{ type: cfg.obfs, settings: { password: cfg.obfsPassword } }];
+            const maskSettings = { password: cfg.obfsPassword };
+            if (cfg.obfs === 'gecko') maskSettings.packetSize = '512-1200';
+            finalmask.udp = [{ type: 'salamander', settings: maskSettings }];
         }
+
+        if (Object.keys(finalmask).length > 0) streamSettings.finalmask = finalmask;
 
         built.push({
             tag,
