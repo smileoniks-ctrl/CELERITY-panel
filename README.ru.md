@@ -644,7 +644,6 @@ const expected = 'sha256=' + crypto
 | `node.online`           | Нода перешла в онлайн       |
 | `node.offline`          | Нода ушла в оффлайн         |
 | `node.error`            | Ошибка ноды                 |
-| `node.disk_low`         | На ноде мало места на диске (порог warning/critical) |
 | `host.disk_low`         | На сервере панели мало места (порог warning) |
 | `host.disk_critical`    | На сервере панели критично мало места |
 | `host.disk_recovered`   | Место на сервере панели восстановилось выше порога |

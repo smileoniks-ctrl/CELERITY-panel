@@ -613,7 +613,6 @@ const expected = 'sha256=' + crypto
 | `node.online` | Node came online |
 | `node.offline` | Node went offline |
 | `node.error` | Node error |
-| `node.disk_low` | A node's free disk space crossed the warning/critical threshold |
 | `host.disk_low` | Panel host free disk dropped below the warning threshold |
 | `host.disk_critical` | Panel host free disk dropped below the critical threshold |
 | `host.disk_recovered` | Panel host free disk recovered above the warning threshold |

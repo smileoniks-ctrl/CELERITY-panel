@@ -18,7 +18,7 @@ const Settings = require('../models/settingsModel');
 const NodeSSH = require('./nodeSSH');
 const configGenerator = require('./configGenerator');
 const cache = require('./cacheService');
-const { invalidateNodesCache, invalidateUserCache, getSettings } = require('../utils/helpers');
+const { invalidateNodesCache, invalidateUserCache } = require('../utils/helpers');
 const logger = require('../utils/logger');
 const axios = require('axios');
 const https = require('https');
@@ -32,12 +32,6 @@ const selfSignedAgent = new https.Agent({ rejectUnauthorized: false });
 
 // Mark node offline after this many consecutive health check failures (1 check/min)
 const HEALTH_FAILURE_THRESHOLD = 3;
-
-// Per-node disk alert level (in-memory; resets on restart). Keyed by nodeId.
-// Used to emit node.disk_low at most once per threshold crossing.
-const _nodeDiskLevel = new Map();
-const GIB = 1024 * 1024 * 1024;
-const DISK_RECOVER_MARGIN_PCT = 5;
 
 // Fields whose change requires regenerating the runtime config on the node.
 // Anything not listed here (name, groups, flag, rankingCoefficient, ssh.*, ...)
@@ -726,8 +720,6 @@ class SyncService {
                 webhook.emit(webhook.EVENTS.NODE_ONLINE, { nodeId: node._id, name: node.name });
             }
 
-            await this._checkNodeDisk(node, data);
-
             return 0;
         } catch (error) {
             logger.warn(`[Agent] ${node.name}: unavailable - ${error.message}`);
@@ -749,62 +741,6 @@ class SyncService {
                 logger.warn(`[Agent] ${node.name}: marked offline after ${failures} consecutive failures`);
             }
             return 0;
-        }
-    }
-
-    /**
-     * Evaluate a node's free disk space (reported by the CC Agent /info as
-     * disk_free/disk_total) against the configured webhook thresholds and emit
-     * node.disk_low once per threshold crossing. Hysteresis prevents flapping:
-     * the alert re-arms only after free space recovers above warn + margin.
-     */
-    async _checkNodeDisk(node, data) {
-        try {
-            const total = Number(data?.disk_total) || 0;
-            const free = Number(data?.disk_free) || 0;
-            if (total <= 0) return; // agent too old or statfs failed
-
-            // Cached settings (Redis-backed) — this runs per node every minute.
-            const settings = await getSettings();
-            const wh = settings?.webhook;
-            const warnPct = Number(wh?.diskWarnPct) > 0 ? Number(wh.diskWarnPct) : 15;
-            const critBytes = (Number(wh?.diskCritGb) > 0 ? Number(wh.diskCritGb) : 1) * GIB;
-
-            const freePct = (free / total) * 100;
-            const usedPct = Math.min(Math.round(100 - freePct), 100);
-            const key = node._id.toString();
-            const prev = _nodeDiskLevel.get(key) || 'ok';
-
-            let level = 'ok';
-            if (free < critBytes) level = 'critical';
-            else if (freePct < warnPct) level = 'low';
-
-            if (level === 'ok') {
-                // Re-arm only after recovering above warn threshold with a margin.
-                if (prev !== 'ok' && freePct >= warnPct + DISK_RECOVER_MARGIN_PCT) {
-                    _nodeDiskLevel.delete(key);
-                }
-                return;
-            }
-
-            // Emit only on a new or escalating threshold crossing.
-            const order = { ok: 0, low: 1, critical: 2 };
-            if (order[level] > order[prev]) {
-                _nodeDiskLevel.set(key, level);
-                webhook.emit(webhook.EVENTS.NODE_DISK_LOW, {
-                    nodeId: node._id,
-                    name: node.name,
-                    freeBytes: free,
-                    totalBytes: total,
-                    usedPct,
-                    level,
-                });
-                logger.warn(`[Agent] ${node.name}: disk ${level} (free ${(free / GIB).toFixed(2)} GiB, used ${usedPct}%)`);
-            } else {
-                _nodeDiskLevel.set(key, level);
-            }
-        } catch (err) {
-            logger.debug(`[Agent] ${node.name}: disk check skipped - ${err.message}`);
         }
     }
 
@@ -1210,14 +1146,6 @@ class SyncService {
             await Promise.allSettled(
                 batch.map(node => this.getOnlineUsers(node))
             );
-        }
-
-        // Drop disk-alert state for nodes that are gone/inactive (bounds the map).
-        if (_nodeDiskLevel.size > 0) {
-            const live = new Set(nodes.map(n => n._id.toString()));
-            for (const key of _nodeDiskLevel.keys()) {
-                if (!live.has(key)) _nodeDiskLevel.delete(key);
-            }
         }
     }
 
