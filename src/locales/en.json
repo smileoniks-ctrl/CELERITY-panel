@@ -1220,7 +1220,9 @@
     "serverLoad": "Load 1m",
     "serverMemory": "Memory",
     "serverRss": "Process RSS",
-    "serverRpm": "Requests per minute"
+    "serverRpm": "Requests per minute",
+    "serverDisk": "Disk",
+    "serverDiskFree": "Free"
   },
   "apiKeys": {
     "title": "API Keys",
@@ -1257,7 +1259,11 @@
     "test": "Test",
     "urlRequired": "Enter a URL first",
     "testEventDefault": "Generic test",
-    "testEventHint": "Send a sample payload for this event"
+    "testEventHint": "Send a sample payload for this event",
+    "diskThresholds": "Disk space alert thresholds",
+    "diskWarnPct": "Warning: free space below (%)",
+    "diskCritGb": "Critical: free space below (GB)",
+    "diskThresholdsHint": "Sends host.disk_low / host.disk_critical / host.disk_recovered events."
   },
   "network": {
     "title": "Network Map",

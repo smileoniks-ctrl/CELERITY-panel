@@ -613,7 +613,50 @@ const expected = 'sha256=' + crypto
 | `node.online` | Node came online |
 | `node.offline` | Node went offline |
 | `node.error` | Node error |
+| `node.disk_low` | A node's free disk space crossed the warning/critical threshold |
+| `host.disk_low` | Panel host free disk dropped below the warning threshold |
+| `host.disk_critical` | Panel host free disk dropped below the critical threshold |
+| `host.disk_recovered` | Panel host free disk recovered above the warning threshold |
 | `sync.completed` | Sync cycle finished |
+
+Disk alert thresholds are configured under **Settings → Security → Webhooks**
+(`Warning: free space below %` and `Critical: free space below GB`). Alerts fire
+once per threshold crossing with hysteresis to avoid spam, and a recovery event
+is sent once free space climbs back above the warning level.
+
+---
+
+## 🧹 Disk Space & Maintenance
+
+MongoDB and the panel stop working when the host runs out of disk, so keep an
+eye on free space (the dashboard shows a **Disk** chart and webhooks can alert
+you — see above). The most common cause of a full disk is Docker accumulating
+unused images, containers and logs over time.
+
+**Cap container log size** (prevents logs from filling the disk). Add to each
+service in your `docker-compose.yml`:
+
+```yaml
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+**Periodically reclaim space** used by dangling/unused Docker data:
+
+```bash
+# Safe: remove only dangling images and build cache
+docker image prune -f
+docker builder prune -f
+
+# Aggressive: also removes ALL unused images (next deploy re-pulls them)
+docker system prune -a -f
+```
+
+A weekly `cron` job running `docker image prune -f` is usually enough to keep
+disk usage in check.
 
 ---
 

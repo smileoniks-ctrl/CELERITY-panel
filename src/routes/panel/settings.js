@@ -180,6 +180,10 @@ router.post('/settings', async (req, res) => {
             updates['webhook.events'] = rawEvents
                 ? (Array.isArray(rawEvents) ? rawEvents : [rawEvents])
                 : [];
+            const warnPct = parseFloat(req.body['webhook.diskWarnPct']);
+            updates['webhook.diskWarnPct'] = Number.isFinite(warnPct) && warnPct > 0 && warnPct < 100 ? warnPct : 15;
+            const critGb = parseFloat(req.body['webhook.diskCritGb']);
+            updates['webhook.diskCritGb'] = Number.isFinite(critGb) && critGb > 0 ? critGb : 1;
         }
 
         // Subscription settings.

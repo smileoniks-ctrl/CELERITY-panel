@@ -19,6 +19,9 @@ const hostStatSchema = new mongoose.Schema({
     heapUsed: { type: Number, default: 0 },
     rps:      { type: Number, default: 0 },
     rpm:      { type: Number, default: 0 },
+    diskPct:  { type: Number, default: 0 },
+    diskFree: { type: Number, default: 0 },
+    diskTotal:{ type: Number, default: 0 },
 }, { _id: false });
 
 const statsSnapshotSchema = new mongoose.Schema({

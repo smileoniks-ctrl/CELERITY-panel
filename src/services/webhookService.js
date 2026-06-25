@@ -39,7 +39,15 @@ const EVENTS = {
     NODE_ONLINE: 'node.online',
     NODE_OFFLINE: 'node.offline',
     NODE_ERROR: 'node.error',
+    /** A node's free disk space dropped below the warning/critical threshold. */
+    NODE_DISK_LOW: 'node.disk_low',
     SYNC_COMPLETED: 'sync.completed',
+    /** Panel host free disk space dropped below the warning threshold. */
+    HOST_DISK_LOW: 'host.disk_low',
+    /** Panel host free disk space dropped below the critical threshold. */
+    HOST_DISK_CRITICAL: 'host.disk_critical',
+    /** Panel host free disk space recovered above the warning threshold. */
+    HOST_DISK_RECOVERED: 'host.disk_recovered',
 };
 
 /** Dedup device-limit webhooks (in-memory; resets on restart). */
@@ -157,7 +165,11 @@ const _SAMPLE_BUILDERS = {
     'node.online': () => ({ nodeId: 'sample-node', name: 'Sample Node' }),
     'node.offline': () => ({ nodeId: 'sample-node', name: 'Sample Node', lastError: 'connection refused' }),
     'node.error': () => ({ nodeId: 'sample-node', name: 'Sample Node', error: 'sample error' }),
+    'node.disk_low': () => ({ nodeId: 'sample-node', name: 'Sample Node', freeBytes: 1073741824, totalBytes: 53687091200, usedPct: 98, level: 'critical' }),
     'sync.completed': () => ({ ok: 1, failed: 0, totalUsers: 1 }),
+    'host.disk_low': () => ({ path: '/', freeBytes: 2147483648, totalBytes: 53687091200, usedPct: 96, level: 'low' }),
+    'host.disk_critical': () => ({ path: '/', freeBytes: 1073741824, totalBytes: 53687091200, usedPct: 98, level: 'critical' }),
+    'host.disk_recovered': () => ({ path: '/', freeBytes: 10737418240, totalBytes: 53687091200, usedPct: 80, level: 'ok' }),
 };
 
 function _sampleDataFor(event) {

@@ -1220,7 +1220,9 @@
     "serverLoad": "Load 1м",
     "serverMemory": "Память",
     "serverRss": "RSS процесса",
-    "serverRpm": "Запросов в минуту"
+    "serverRpm": "Запросов в минуту",
+    "serverDisk": "Диск",
+    "serverDiskFree": "Свободно"
   },
   "apiKeys": {
     "title": "API Ключи",
@@ -1257,7 +1259,11 @@
     "test": "Тест",
     "urlRequired": "Сначала введите URL",
     "testEventDefault": "Обычный тест",
-    "testEventHint": "Отправить пример пейлоада для выбранного события"
+    "testEventHint": "Отправить пример пейлоада для выбранного события",
+    "diskThresholds": "Пороги оповещений о месте на диске",
+    "diskWarnPct": "Предупреждение: свободно меньше (%)",
+    "diskCritGb": "Критично: свободно меньше (ГБ)",
+    "diskThresholdsHint": "Отправляет события host.disk_low / host.disk_critical / host.disk_recovered."
   },
   "network": {
     "title": "Карта сети",

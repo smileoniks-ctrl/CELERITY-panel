@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -59,15 +60,30 @@ func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
-// GET /info — version, uptime, user count
+// GET /info — version, uptime, user count, disk usage
 func (a *API) handleInfo(w http.ResponseWriter, r *http.Request) {
+	diskFree, diskTotal := getDiskUsage("/")
 	jsonOK(w, map[string]any{
 		"agent_version":  Version,
 		"xray_version":   getXrayVersion(),
 		"uptime_seconds": int(time.Since(startTime).Seconds()),
 		"users_count":    a.userStore.Count(),
 		"last_sync":      a.userStore.GetLastSync(),
+		"disk_free":      diskFree,
+		"disk_total":     diskTotal,
 	})
+}
+
+// getDiskUsage returns free (available to unprivileged users) and total bytes
+// of the filesystem containing path. Returns zeros on error.
+func getDiskUsage(path string) (free, total uint64) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		log.Printf("[info] statfs %s: %v", path, err)
+		return 0, 0
+	}
+	bsize := uint64(st.Bsize)
+	return st.Bavail * bsize, st.Blocks * bsize
 }
 
 // POST /connect — handshake; panel calls this to verify connectivity

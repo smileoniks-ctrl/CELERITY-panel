@@ -99,6 +99,12 @@ router.get('/system-stats', async (req, res) => {
                 free: freeMem,
                 percent: snap.memPct,
             },
+            disk: {
+                total: snap.diskTotal,
+                free: snap.diskFree,
+                used: Math.max(snap.diskTotal - snap.diskFree, 0),
+                percent: snap.diskPct,
+            },
             process: {
                 heapUsed: processMemory.heapUsed,
                 heapTotal: processMemory.heapTotal,

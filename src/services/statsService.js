@@ -193,6 +193,9 @@ class StatsService {
             avgHeapUsed: { $avg: '$host.heapUsed' },
             avgRps:      { $avg: '$host.rps' },
             avgRpm:      { $avg: '$host.rpm' },
+            avgDiskPct:   { $avg: '$host.diskPct' },
+            avgDiskFree:  { $avg: '$host.diskFree' },
+            lastDiskTotal: { $last: '$host.diskTotal' },
         };
     }
 
@@ -206,6 +209,9 @@ class StatsService {
             heapUsed: Math.round(data.avgHeapUsed || 0),
             rps:      Math.round(data.avgRps      || 0),
             rpm:      Math.round(data.avgRpm      || 0),
+            diskPct:   Math.round(data.avgDiskPct  || 0),
+            diskFree:  Math.round(data.avgDiskFree || 0),
+            diskTotal: Math.round(data.lastDiskTotal || 0),
         };
     }
 
@@ -553,6 +559,8 @@ class StatsService {
                 heapUsed: data.map(d => d.host?.heapUsed || 0),
                 rps:      data.map(d => d.host?.rps      || 0),
                 rpm:      data.map(d => d.host?.rpm      || 0),
+                diskPct:  data.map(d => d.host?.diskPct  || 0),
+                diskFree: data.map(d => d.host?.diskFree || 0),
             },
         };
 
@@ -610,6 +618,8 @@ class StatsService {
                 rss: latest?.host?.rss || 0,
                 load1: latest?.host?.load1 || 0,
                 rpm: latest?.host?.rpm || 0,
+                diskPct: latest?.host?.diskPct || 0,
+                diskFree: latest?.host?.diskFree || 0,
             },
             trends: {
                 hourly: parseFloat(trend),

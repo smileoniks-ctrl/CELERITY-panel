@@ -1,10 +1,19 @@
 // Single source of truth for host/process metrics. Owns the only CPU sampler.
 
 const os = require('os');
+const fs = require('fs');
 const rpsCounter = require('../middleware/rpsCounter');
+
+// Filesystem to watch for free space. Defaults to the container/host root.
+// Override with DISK_MONITOR_PATH when the data volume lives on another mount.
+const DISK_PATH = process.env.DISK_MONITOR_PATH || '/';
 
 let _cpuPercent = 0;
 let _prevCpuTimes = sampleCpuTimes();
+
+// Latest disk usage for DISK_PATH. Refreshed asynchronously because
+// fs.statfs cannot be called from the synchronous buildBase() hot path.
+let _disk = { total: 0, free: 0, pct: 0 };
 
 // Accumulator for cron snapshot — avoids capturing the cron's own CPU spike.
 let _cpuSum = 0;
@@ -37,6 +46,24 @@ function updateCpuPercent() {
 
 setInterval(updateCpuPercent, 2000).unref();
 
+function updateDiskUsage() {
+    fs.statfs(DISK_PATH, (err, stats) => {
+        if (err) return; // keep last known values on transient errors
+        const total = stats.blocks * stats.bsize;
+        // bavail = blocks available to unprivileged users (matches `df` "Avail").
+        const free = stats.bavail * stats.bsize;
+        const used = total - free;
+        _disk = {
+            total,
+            free,
+            pct: total > 0 ? Math.min(Math.round((used / total) * 100), 100) : 0,
+        };
+    });
+}
+
+updateDiskUsage();
+setInterval(updateDiskUsage, 30000).unref();
+
 function buildBase() {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
@@ -53,6 +80,9 @@ function buildBase() {
         heapUsed: pm.heapUsed,
         rps: r.rps,
         rpm: r.rpm,
+        diskTotal: _disk.total,
+        diskFree: _disk.free,
+        diskPct: _disk.pct,
     };
 }
 

@@ -1220,7 +1220,9 @@
     "serverLoad": "1 分钟负载",
     "serverMemory": "内存",
     "serverRss": "进程 RSS",
-    "serverRpm": "每分钟请求数"
+    "serverRpm": "每分钟请求数",
+    "serverDisk": "磁盘",
+    "serverDiskFree": "可用"
   },
   "apiKeys": {
     "title": "API 密钥",
@@ -1257,7 +1259,11 @@
     "test": "测试",
     "urlRequired": "请先输入 URL",
     "testEventDefault": "通用测试",
-    "testEventHint": "发送此事件的示例 payload"
+    "testEventHint": "发送此事件的示例 payload",
+    "diskThresholds": "磁盘空间告警阈值",
+    "diskWarnPct": "警告：可用空间低于 (%)",
+    "diskCritGb": "严重：可用空间低于 (GB)",
+    "diskThresholdsHint": "发送 host.disk_low / host.disk_critical / host.disk_recovered 事件。"
   },
   "network": {
     "title": "网络地图",

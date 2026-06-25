@@ -903,6 +903,11 @@ function setupCronJobs() {
         } catch (error) {
             logger.error(`[Cron] Cascade health check failed: ${error.message}`);
         }
+        try {
+            await require('./src/services/diskMonitorService').check();
+        } catch (error) {
+            logger.error(`[Cron] Disk monitor failed: ${error.message}`);
+        }
     });
 
     // Panel cert rotation watcher — every 5 minutes.

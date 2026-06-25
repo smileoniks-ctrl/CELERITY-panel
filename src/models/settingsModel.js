@@ -73,6 +73,9 @@ const settingsSchema = new mongoose.Schema({
         secret: { type: String, default: '' },
         // empty = all events; non-empty = only listed events
         events: { type: [String], default: [] },
+        // Disk-space alert thresholds for the panel host (issue #103)
+        diskWarnPct: { type: Number, default: 15 }, // warn when free space % < this
+        diskCritGb: { type: Number, default: 1 },   // critical when free space < this many GiB
     },
 
     subscription: {
