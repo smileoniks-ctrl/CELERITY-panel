@@ -138,20 +138,40 @@
 
     <script>
     (function () {
+        const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const confirmInput = document.getElementById('passwordConfirm');
-        const mismatchMessage = <%- JSON.stringify(typeof t !== "undefined" ? t("setup.passwordsMismatch") : "Passwords don't match!") %>;
+        const messages = {
+            usernameTooShort: <%- JSON.stringify(typeof t !== "undefined" ? t("setup.usernameTooShort") : "Administrator username must be at least 3 characters long.") %>,
+            passwordTooShort: <%- JSON.stringify(typeof t !== "undefined" ? t("setup.passwordTooShort") : "Password must be at least 6 characters long.") %>,
+            passwordsMismatch: <%- JSON.stringify(typeof t !== "undefined" ? t("setup.passwordsMismatch") : "Passwords don't match!") %>
+        };
 
-        function validatePasswordMatch() {
-            if (!passwordInput || !confirmInput) return;
-            const mismatch = confirmInput.value && passwordInput.value !== confirmInput.value;
-            confirmInput.setCustomValidity(mismatch ? mismatchMessage : '');
+        function messageForInput(input) {
+            return input === usernameInput ? messages.usernameTooShort : messages.passwordTooShort;
         }
 
-        if (passwordInput && confirmInput) {
-            passwordInput.addEventListener('input', validatePasswordMatch);
-            confirmInput.addEventListener('input', validatePasswordMatch);
+        function validateField(input) {
+            if (!input) return;
+            const minlength = parseInt(input.getAttribute('minlength') || '0', 10);
+            if (input.value.length > 0 && minlength > 0 && input.value.length < minlength) {
+                input.setCustomValidity(messageForInput(input));
+                return;
+            }
+            if (input === confirmInput && input.value.length > 0 && passwordInput.value !== input.value) {
+                input.setCustomValidity(messages.passwordsMismatch);
+                return;
+            }
+            input.setCustomValidity('');
         }
+
+        [usernameInput, passwordInput, confirmInput].forEach(function (input) {
+            if (!input) return;
+            input.addEventListener('input', function () {
+                validateField(input);
+                if (input === passwordInput) validateField(confirmInput);
+            });
+        });
     })();
     </script>
 </body>
