@@ -254,6 +254,22 @@ async function runRoute(method, path, { id = 'node-1', query = {}, body = {} } =
   assert.deepStrictEqual(res.body, { success: false, error: 'Node not found' });
 
   reset();
+  db.set('virtual-1', { _id: 'virtual-1', name: 'Virtual', type: 'virtual', ssh: { password: 'secret' } });
+  res = await runRoute('get', '/nodes/:id/cron/data', { id: 'virtual-1', query: { user: 'root' } });
+  assert.strictEqual(res.statusCode, 400);
+  assert.deepStrictEqual(res.body, { success: false, error: 'Virtual nodes do not support remote cron management' });
+  assert(!serviceCalls.some(call => call.method === 'getCron'), 'virtual node is rejected before remote cron read');
+  assert(!serviceCalls.some(call => call.method === 'getCronServiceStatus'), 'virtual node is rejected before remote status read');
+
+  reset();
+  db.set('no-ssh', { _id: 'no-ssh', name: 'No SSH', type: 'xray', ssh: { username: 'root' } });
+  res = await runRoute('get', '/nodes/:id/cron/data', { id: 'no-ssh', query: { user: 'root' } });
+  assert.strictEqual(res.statusCode, 400);
+  assert.deepStrictEqual(res.body, { success: false, error: 'SSH credentials are required for remote cron management' });
+  assert(!serviceCalls.some(call => call.method === 'getCron'), 'missing SSH credentials are rejected before remote cron read');
+  assert(!serviceCalls.some(call => call.method === 'getCronServiceStatus'), 'missing SSH credentials are rejected before remote status read');
+
+  reset();
   db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'xray', ssh: { password: 'secret' } });
   res = await runRoute('get', '/nodes/:id/cron/data', { query: { user: 'bad user' } });
   assert.strictEqual(res.statusCode, 400);
@@ -295,6 +311,26 @@ async function runRoute(method, path, { id = 'node-1', query = {}, body = {} } =
 
   reset();
   db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'xray', ssh: { password: 'secret' } });
+  res = await runRoute('post', '/nodes/:id/cron/save', {
+    query: { user: 'root' },
+    body: { user: 'bad user', content: 'MAILTO=\n', baseHash: 'hash-1' },
+  });
+  assert.strictEqual(res.statusCode, 400);
+  assert.deepStrictEqual(res.body, { success: false, error: 'Invalid cron user' });
+  assert(!serviceCalls.some(call => call.method === 'saveCron'), 'query user does not mask invalid body user before remote save');
+
+  reset();
+  db.set('virtual-1', { _id: 'virtual-1', name: 'Virtual', type: 'virtual', ssh: { password: 'secret' } });
+  res = await runRoute('post', '/nodes/:id/cron/save', {
+    id: 'virtual-1',
+    body: { user: 'root', content: 'MAILTO=\n', baseHash: 'hash-1' },
+  });
+  assert.strictEqual(res.statusCode, 400);
+  assert.deepStrictEqual(res.body, { success: false, error: 'Virtual nodes do not support remote cron management' });
+  assert(!serviceCalls.some(call => call.method === 'saveCron'), 'virtual node is rejected before remote save');
+
+  reset();
+  db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'xray', ssh: { password: 'secret' } });
   serviceError = makeServiceError('Cron changed since it was loaded', 409);
   res = await runRoute('post', '/nodes/:id/cron/save', { body: { user: 'root', content: 'MAILTO=\n', baseHash: 'old' } });
   assert.strictEqual(res.statusCode, 409);
@@ -328,6 +364,16 @@ async function runRoute(method, path, { id = 'node-1', query = {}, body = {} } =
   assert.strictEqual(res.statusCode, 400);
   assert.deepStrictEqual(res.body, { success: false, error: 'Invalid cron user' });
   assert(!serviceCalls.some(call => call.method === 'runCommandNow'), 'invalid run user is rejected before remote run');
+
+  reset();
+  db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'xray', ssh: { password: 'secret' } });
+  res = await runRoute('post', '/nodes/:id/cron/run', {
+    query: { user: 'root' },
+    body: { user: 'bad user', command: 'uptime' },
+  });
+  assert.strictEqual(res.statusCode, 400);
+  assert.deepStrictEqual(res.body, { success: false, error: 'Invalid cron user' });
+  assert(!serviceCalls.some(call => call.method === 'runCommandNow'), 'query user does not mask invalid body user before remote run');
 
   reset();
   db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'xray', ssh: { password: 'secret' } });

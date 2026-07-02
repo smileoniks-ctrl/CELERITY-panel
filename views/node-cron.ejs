@@ -112,7 +112,6 @@
                     </div>
                     <button type="button" class="btn" id="addTaskBtn"><i class="ti ti-plus"></i> <%= t('nodes.cronAddTask') %></button>
                 </div>
-                <template id="cronTaskActionsTemplate"><button type="button" data-cron-action="run"></button></template>
                 <div class="cron-table-wrap">
                     <table class="cron-table">
                         <thead>
@@ -269,7 +268,7 @@
             makeCell(row, task.command, 'cron-command-cell');
             const actions = document.createElement('td');
             [
-                { label: labels.runNow, action: () => runCommand(task.command), className: 'btn btn-sm btn-success' },
+                { label: labels.runNow, action: () => runCommand(task.command).catch(error => appendOutput(error.message)), className: 'btn btn-sm btn-success' },
                 { label: labels.edit, action: () => editTask(task), className: 'btn btn-sm' },
                 { label: labels.delete, action: () => deleteTask(index), className: 'btn btn-sm btn-danger' },
             ].forEach(item => {

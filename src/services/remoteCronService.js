@@ -118,6 +118,37 @@ function createValidationError(message) {
 
 function createRemoteCronService({ SSHClass, now = () => Date.now() } = {}) {
   const ResolvedSSHClass = SSHClass || require('./nodeSSH');
+  const saveLocks = new Map();
+
+  function getNodeLockPart(node) {
+    return [
+      node?._id || node?.id || '',
+      node?.ip || '',
+      node?.name || '',
+    ].map(value => String(value)).join('|') || 'unknown';
+  }
+
+  async function withSaveLock(node, user, callback) {
+    const key = `${getNodeLockPart(node)}:${user}`;
+    const previous = saveLocks.get(key)?.promise || Promise.resolve();
+    let release;
+    const currentPromise = new Promise((resolve) => {
+      release = resolve;
+    });
+    const entry = {
+      promise: previous.then(() => currentPromise, () => currentPromise),
+    };
+    saveLocks.set(key, entry);
+    await previous.catch(() => {});
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (saveLocks.get(key) === entry) {
+        saveLocks.delete(key);
+      }
+    }
+  }
 
   async function withSSH(node, callback) {
     const ssh = new ResolvedSSHClass(node);
@@ -154,6 +185,21 @@ function createRemoteCronService({ SSHClass, now = () => Date.now() } = {}) {
     });
   }
 
+  async function cleanupTempDir(ssh, tempDir) {
+    try {
+      await ssh.exec(`rm -rf ${tempDir}`);
+    } catch (error) {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  function createRemoteError(result, fallbackMessage) {
+    const error = new Error(result?.stderr || result?.stdout || fallbackMessage);
+    error.statusCode = 502;
+    return error;
+  }
+
   async function saveCron(node, user, content, baseHash) {
     validateCronUser(user);
     validateCronContent(content);
@@ -162,7 +208,7 @@ function createRemoteCronService({ SSHClass, now = () => Date.now() } = {}) {
     }
     const normalized = normalizeContent(content);
 
-    return withSSH(node, async (ssh) => {
+    return withSaveLock(node, user, () => withSSH(node, async (ssh) => {
       const currentContent = await readCronWithSSH(ssh, node, user);
       if (hashContent(currentContent) !== baseHash) {
         throw createConflictError();
@@ -180,23 +226,30 @@ function createRemoteCronService({ SSHClass, now = () => Date.now() } = {}) {
         error.statusCode = 502;
         throw error;
       }
-      await ssh.exec(`umask 077 && ${crontabReadCommand(node, user)} > ${backupPath} 2>/dev/null || true`);
-      await ssh.writeFile(tempBase64Path, Buffer.from(normalized, 'utf8').toString('base64'));
+      try {
+        const backupResult = await ssh.exec(`umask 077 && ${crontabReadCommand(node, user)} > ${backupPath}`);
+        if (backupResult.code !== 0 && !isMissingCrontab(backupResult)) {
+          throw createRemoteError(backupResult, 'Failed to backup crontab');
+        }
+        await ssh.writeFile(tempBase64Path, Buffer.from(normalized, 'utf8').toString('base64'));
 
-      const installCommand = crontabInstallCommand(node, user, tempCronPath);
-      const result = await ssh.exec(`base64 -d < ${tempBase64Path} > ${tempCronPath} && ${installCommand}; code=$?; rm -rf ${tempDir}; exit $code`);
-      if (result.code !== 0) {
-        const error = new Error(result.stderr || result.stdout || 'Failed to install crontab');
-        error.statusCode = 502;
+        const installCommand = crontabInstallCommand(node, user, tempCronPath);
+        const result = await ssh.exec(`base64 -d < ${tempBase64Path} > ${tempCronPath} && ${installCommand}`);
+        if (result.code !== 0) {
+          throw createRemoteError(result, 'Failed to install crontab');
+        }
+      } catch (error) {
+        await cleanupTempDir(ssh, tempDir);
         throw error;
       }
+      await cleanupTempDir(ssh, tempDir);
 
       return {
         success: true,
         hash: hashContent(normalized),
         backupPath,
       };
-    });
+    }));
   }
 
   async function runCommandNow(node, user, command) {

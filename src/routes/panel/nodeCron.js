@@ -86,7 +86,7 @@ function validateRunCommand(command) {
   }
 }
 
-async function loadNodeForJson(req, res, { validateUser = false } = {}) {
+async function loadNodeForJson(req, res, { validateUser = false, user } = {}) {
   const node = await HyNode.findById(req.params.id);
   if (!node) {
     res.status(404).json({ success: false, error: 'Node not found' });
@@ -101,7 +101,7 @@ async function loadNodeForJson(req, res, { validateUser = false } = {}) {
     return null;
   }
   if (validateUser) {
-    validateCronUser(req.query.user || req.body.user || defaultCronUser(node));
+    validateCronUser(user || defaultCronUser(node));
   }
   return node;
 }
@@ -152,7 +152,7 @@ router.get('/nodes/:id/cron', async (req, res) => {
 
 router.get('/nodes/:id/cron/data', async (req, res) => {
   try {
-    const node = await loadNodeForJson(req, res, { validateUser: true });
+    const node = await loadNodeForJson(req, res, { validateUser: true, user: req.query.user });
     if (!node) return null;
 
     const user = req.query.user || defaultCronUser(node);
@@ -168,7 +168,7 @@ router.get('/nodes/:id/cron/data', async (req, res) => {
 
 router.post('/nodes/:id/cron/save', writeLimiter, async (req, res) => {
   try {
-    const node = await loadNodeForJson(req, res, { validateUser: true });
+    const node = await loadNodeForJson(req, res, { validateUser: true, user: req.body.user });
     if (!node) return null;
     validateCronContent(req.body.content);
     validateBaseHash(req.body.baseHash);
@@ -191,7 +191,7 @@ router.post('/nodes/:id/cron/save', writeLimiter, async (req, res) => {
 
 router.post('/nodes/:id/cron/run', writeLimiter, async (req, res) => {
   try {
-    const node = await loadNodeForJson(req, res, { validateUser: true });
+    const node = await loadNodeForJson(req, res, { validateUser: true, user: req.body.user });
     if (!node) return null;
     validateRunCommand(req.body.command);
 

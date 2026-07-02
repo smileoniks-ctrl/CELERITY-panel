@@ -45,7 +45,6 @@ const cronView = read('views/node-cron.ejs');
   'data-action="status"',
   'data-action="reload"',
   'data-action="restart"',
-  'data-cron-action="run"',
 ].forEach(expected => assertIncludes(cronView, expected, 'node cron view'));
 
 assert(
@@ -62,6 +61,10 @@ assertIncludes(cronView, 'error.status === 409 ? labels.conflict : error.message
 assert(
   /body:\s*JSON\.stringify\(\{\s*user:\s*cronUser\.value\.trim\(\)\s*\|\|\s*'root',\s*command,?\s*\}\)/.test(cronView),
   'node cron view should include selected user when running a command now',
+);
+assert(
+  /runCommand\(task\.command\)\.catch\(error\s*=>\s*appendOutput\(error\.message\)\)/.test(cronView),
+  'node cron view should display Run now request errors in cron output',
 );
 
 const buildDiffMatch = cronView.match(/function buildDiff\(before, after\) \{([\s\S]*?)\n    \}/);

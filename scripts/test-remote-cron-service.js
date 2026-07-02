@@ -20,7 +20,7 @@ function createNode(username = 'root') {
   };
 }
 
-function makeSSHClass(handler) {
+function makeSSHClass(handler, options = {}) {
   const instances = [];
 
   class FakeSSH {
@@ -43,6 +43,9 @@ function makeSSHClass(handler) {
 
     async writeFile(remotePath, content) {
       this.commands.push(`writeFile:${remotePath}:${content}`);
+      if (options.writeFile) {
+        return options.writeFile(remotePath, content, this);
+      }
       return undefined;
     }
 
@@ -135,12 +138,15 @@ function makeSSHClass(handler) {
         return { code: 0, stdout: '', stderr: '' };
       }
       if (command.startsWith('umask 077 && crontab -u app -l > /tmp/celerity-cron-backup-app-')) {
-        assert.match(command, /^umask 077 && crontab -u app -l > \/tmp\/celerity-cron-backup-app-1710000000000-[a-f0-9]{16}\.txt 2>\/dev\/null \|\| true$/);
+        assert.match(command, /^umask 077 && crontab -u app -l > \/tmp\/celerity-cron-backup-app-1710000000000-[a-f0-9]{16}\.txt$/);
         return { code: 0, stdout: '', stderr: '' };
       }
       if (command.includes('base64 -d') && command.includes('crontab -u app')) {
         assert(!command.includes(rawContent), 'raw crontab content must not be concatenated into shell command');
-        assert.match(command, /^base64 -d < \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.b64 > \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.txt && crontab -u app \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.txt; code=\$\?; rm -rf \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}; exit \$code$/);
+        assert.match(command, /^base64 -d < \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.b64 > \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.txt && crontab -u app \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.txt$/);
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('rm -rf /tmp/celerity-cron-app-1710000000000-')) {
         return { code: 0, stdout: '', stderr: '' };
       }
       throw new Error(`unexpected command: ${command}`);
@@ -153,6 +159,116 @@ function makeSSHClass(handler) {
     assert(SSHClass.instances[0].commands.some(command => /^writeFile:\/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}\/crontab\.b64:/.test(command)));
     assert(!SSHClass.instances[0].commands.some(command => /writeFile:\/tmp\/celerity-cron-app-1710000000000\.b64:/.test(command)));
     assert(SSHClass.instances[0].commands.some(command => /rm -rf \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}/.test(command)));
+  }
+
+  {
+    const SSHClass = makeSSHClass(async (command) => {
+      if (command === 'crontab -u app -l') {
+        return { code: 0, stdout: '* * * * * echo old\n', stderr: '' };
+      }
+      if (command.startsWith('umask 077; mkdir -p /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('umask 077 && crontab -u app -l > /tmp/celerity-cron-backup-app-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('rm -rf /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 7, stdout: '', stderr: 'cleanup failed' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    }, {
+      writeFile: async () => {
+        throw new Error('write failed');
+      },
+    });
+    const service = createRemoteCronService({ SSHClass, now: () => 1710000000000 });
+    await assert.rejects(
+      () => service.saveCron(createNode('root'), 'app', '* * * * * echo new\n', hash('* * * * * echo old\n')),
+      /write failed/
+    );
+    assert(SSHClass.instances[0].commands.some(command => /^rm -rf \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}$/.test(command)));
+  }
+
+  {
+    let currentContent = '* * * * * echo old\n';
+    let readCount = 0;
+    const SSHClass = makeSSHClass(async (command) => {
+      if (command === 'crontab -u app -l') {
+        readCount += 1;
+        return { code: 0, stdout: currentContent, stderr: '' };
+      }
+      if (command.startsWith('umask 077; mkdir -p /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('umask 077 && crontab -u app -l > /tmp/celerity-cron-backup-app-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.includes('base64 -d') && command.includes('crontab -u app')) {
+        currentContent = '* * * * * echo first\n';
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const service = createRemoteCronService({ SSHClass, now: () => 1710000000000 });
+    const baseHash = hash('* * * * * echo old\n');
+    const results = await Promise.allSettled([
+      service.saveCron(createNode('root'), 'app', '* * * * * echo first\n', baseHash),
+      service.saveCron(createNode('root'), 'app', '* * * * * echo second\n', baseHash),
+    ]);
+    assert.strictEqual(results.filter(result => result.status === 'fulfilled').length, 1);
+    const rejected = results.find(result => result.status === 'rejected');
+    assert(rejected, 'one parallel save must reject');
+    assert.strictEqual(rejected.reason.statusCode, 409);
+    assert.match(rejected.reason.message, /Cron changed/);
+    assert.strictEqual(readCount, 2);
+  }
+
+  {
+    const SSHClass = makeSSHClass(async (command) => {
+      if (command === 'crontab -u app -l') {
+        return { code: 0, stdout: '* * * * * echo old\n', stderr: '' };
+      }
+      if (command.startsWith('umask 077; mkdir -p /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('umask 077 && crontab -u app -l > /tmp/celerity-cron-backup-app-')) {
+        return { code: 1, stdout: '', stderr: 'permission denied' };
+      }
+      if (command.startsWith('rm -rf /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const service = createRemoteCronService({ SSHClass, now: () => 1710000000000 });
+    await assert.rejects(
+      () => service.saveCron(createNode('root'), 'app', '* * * * * echo new\n', hash('* * * * * echo old\n')),
+      (error) => error.statusCode === 502 && /permission denied/.test(error.message)
+    );
+    assert(!SSHClass.instances[0].commands.some(command => command.startsWith('writeFile:')));
+    assert(!SSHClass.instances[0].commands.some(command => command.includes('base64 -d')));
+    assert(SSHClass.instances[0].commands.some(command => /^rm -rf \/tmp\/celerity-cron-app-1710000000000-[a-f0-9]{16}$/.test(command)));
+  }
+
+  {
+    const SSHClass = makeSSHClass(async (command) => {
+      if (command === 'crontab -u app -l') {
+        return { code: 0, stdout: '* * * * * echo old\n', stderr: '' };
+      }
+      if (command.startsWith('umask 077; mkdir -p /tmp/celerity-cron-app-1710000000000-')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (command.startsWith('umask 077 && crontab -u app -l > /tmp/celerity-cron-backup-app-')) {
+        return { code: 1, stdout: '', stderr: 'no crontab for app' };
+      }
+      if (command.includes('base64 -d') && command.includes('crontab -u app')) {
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const service = createRemoteCronService({ SSHClass, now: () => 1710000000000 });
+    const result = await service.saveCron(createNode('root'), 'app', '* * * * * echo new\n', hash('* * * * * echo old\n'));
+    assert.strictEqual(result.success, true);
+    assert(SSHClass.instances[0].commands.some(command => command.startsWith('writeFile:')));
   }
 
   {
