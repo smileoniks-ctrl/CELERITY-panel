@@ -138,7 +138,47 @@ const requiredNodeKeys = [
   'cronLoad',
   'cronLoading',
   'cronSaved',
+  'cronEmptyVirtualTitle',
+  'cronEmptyVirtualDesc',
+  'cronEmptySshTitle',
+  'cronEmptySshDesc',
+  'cronEmptySshStep1Title',
+  'cronEmptySshStep1Desc',
+  'cronEmptySshStep2Title',
+  'cronEmptySshStep2Desc',
+  'cronEmptySshStep3Title',
+  'cronEmptySshStep3Desc',
 ];
+
+const cronEmptyView = read('views/cron-empty.ejs');
+assertIncludes(cronEmptyView, 'cron-empty-card', 'cron empty view');
+assertIncludes(cronEmptyView, "t('nodes.cronBackToNode')", 'cron empty view');
+assertIncludes(cronEmptyView, "t('common.backToList')", 'cron empty view');
+assert(
+  /reason\s*===\s*'virtual'\s*\?/.test(cronEmptyView) && /reason\s*===\s*'no-ssh'/.test(cronEmptyView),
+  'cron empty view should switch icon and copy based on reason',
+);
+assert(
+  /reason\s*===\s*'no-ssh'[\s\S]+cronEmptySshStep1Title[\s\S]+cronEmptySshStep2Title[\s\S]+cronEmptySshStep3Title/.test(cronEmptyView),
+  'cron empty view should render the 3-step SSH guide only for the no-ssh reason',
+);
+assert(
+  /href="\/panel\/nodes\/<%= node\._id %>"/.test(cronEmptyView) && /href="\/panel\/nodes"/.test(cronEmptyView),
+  'cron empty view should provide navigation back to the node and to the nodes list',
+);
+[
+  'react',
+  'vue',
+  'angular',
+  'svelte',
+  'alpine',
+  'jquery',
+].forEach(framework => {
+  assert(
+    !new RegExp(`<(script|link)[^>]+${framework}`, 'i').test(cronEmptyView),
+    `cron empty view should not import ${framework}`,
+  );
+});
 
 [
   'src/locales/ru.json',

@@ -221,14 +221,25 @@ async function runRoute(method, path, { id = 'node-1', query = {}, body = {} } =
   reset();
   db.set('virtual-1', { _id: 'virtual-1', name: 'Virtual', type: 'virtual', ssh: { password: 'secret' } });
   res = await runRoute('get', '/nodes/:id/cron', { id: 'virtual-1' });
-  assert.strictEqual(res.statusCode, 400);
-  assert.match(res.body, /virtual/i);
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(rendered[0].template, 'cron-empty');
+  assert.strictEqual(rendered[0].data.reason, 'virtual');
+  assert.strictEqual(rendered[0].data.node._id, 'virtual-1');
 
   reset();
   db.set('no-ssh', { _id: 'no-ssh', name: 'No SSH', type: 'xray', ssh: { username: 'root' } });
   res = await runRoute('get', '/nodes/:id/cron', { id: 'no-ssh' });
-  assert.strictEqual(res.statusCode, 400);
-  assert.match(res.body, /ssh/i);
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(rendered[0].template, 'cron-empty');
+  assert.strictEqual(rendered[0].data.reason, 'no-ssh');
+  assert.strictEqual(rendered[0].data.node._id, 'no-ssh');
+
+  reset();
+  db.set('no-creds', { _id: 'no-creds', name: 'No creds', type: 'hysteria' });
+  res = await runRoute('get', '/nodes/:id/cron', { id: 'no-creds' });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(rendered[0].template, 'cron-empty');
+  assert.strictEqual(rendered[0].data.reason, 'no-ssh');
 
   reset();
   db.set('node-1', { _id: 'node-1', name: 'Alpha', type: 'hysteria', ssh: { privateKey: 'key' } });

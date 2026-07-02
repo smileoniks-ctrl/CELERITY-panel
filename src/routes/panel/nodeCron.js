@@ -128,11 +128,14 @@ router.get('/nodes/:id/cron', async (req, res) => {
     if (!node) {
       return res.redirect('/panel/nodes');
     }
-    if (node.type === 'virtual') {
-      return res.status(400).send('Virtual nodes do not support remote cron management');
-    }
-    if (!hasSshCredentials(node)) {
-      return res.status(400).send('SSH credentials are required for remote cron management');
+    if (node.type === 'virtual' || !hasSshCredentials(node)) {
+      return render(res, 'cron-empty', {
+        title: `Cron: ${node.name || node.ip || node._id}`,
+        page: 'nodes',
+        node,
+        reason: node.type === 'virtual' ? 'virtual' : 'no-ssh',
+        error: null,
+      });
     }
 
     return render(res, 'node-cron', {
