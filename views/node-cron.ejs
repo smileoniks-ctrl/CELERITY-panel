@@ -1,0 +1,466 @@
+<div class="page-header">
+    <a href="/panel/nodes/<%= node._id %>" class="btn btn-back"><i class="ti ti-chevron-left"></i> <%= t('nodes.cronBackToNode') %></a>
+</div>
+
+<% if (error) { %>
+<div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<style>
+.cron-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.cron-header-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cron-node-meta { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.cron-user-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.cron-user-row .form-group { margin: 0; min-width: 180px; }
+.cron-service-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+.cron-status-value { font-family: monospace; color: var(--text-primary); }
+.cron-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cron-mode-switch { display: inline-flex; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; gap: 3px; }
+.cron-mode-btn { border: 0; background: transparent; color: var(--text-muted); padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.cron-mode-btn.active { background: var(--accent); color: #fff; }
+.cron-editor { width: 100%; min-height: 280px; resize: vertical; font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
+.cron-editor:focus, .cron-field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+.cron-task-form { display: grid; grid-template-columns: repeat(5, minmax(72px, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
+.cron-command-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-bottom: 14px; }
+.cron-field { width: 100%; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 10px; }
+.cron-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.cron-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+.cron-table th, .cron-table td { padding: 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.cron-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; background: var(--bg-secondary); }
+.cron-table tr:last-child td { border-bottom: 0; }
+.cron-command-cell { font-family: monospace; white-space: pre-wrap; word-break: break-word; }
+.cron-diff { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); padding: 12px; min-height: 120px; max-height: 320px; overflow: auto; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+.cron-diff-line-add { color: #86efac; }
+.cron-diff-line-remove { color: #fca5a5; }
+.cron-output { background: #10131f; border: 1px solid var(--border); border-radius: var(--radius-sm); color: #d1d5db; min-height: 110px; max-height: 280px; overflow: auto; padding: 12px; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+.cron-hidden { display: none !important; }
+.cron-backup { color: var(--success, #22c55e); font-family: monospace; word-break: break-all; }
+@media (max-width: 720px) {
+    .cron-task-form, .cron-command-row { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="cron-grid">
+    <div class="card">
+        <div class="card-header cron-header-row">
+            <div>
+                <h2><i class="ti ti-clock-cog" style="margin-right:6px"></i><%= t('nodes.cronTasks') %></h2>
+                <div class="cron-node-meta"><%= node.name %><% if (node.ip) { %> · <%= node.ip %><% } %></div>
+            </div>
+            <div class="cron-user-row">
+                <div class="form-group">
+                    <label for="cronUser"><%= t('nodes.cronUser') %></label>
+                    <input type="text" class="cron-field" id="cronUser" value="<%= defaultCronUser || 'root' %>" autocomplete="off">
+                </div>
+                <button type="button" class="btn" id="loadCronBtn"><i class="ti ti-refresh"></i> <%= t('nodes.cronLoad') %></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="cron-service-card">
+                <div>
+                    <strong><%= t('nodes.cronServiceStatus') %></strong>
+                    <div class="cron-status-value" id="serviceStatus">—</div>
+                </div>
+                <div class="cron-actions">
+                    <button type="button" class="btn btn-sm" data-action="status"><i class="ti ti-heartbeat"></i> <%= t('nodes.cronServiceStatusButton') %></button>
+                    <button type="button" class="btn btn-sm" data-action="reload"><i class="ti ti-reload"></i> <%= t('nodes.cronServiceReload') %></button>
+                    <button type="button" class="btn btn-sm btn-warning" data-action="restart"><i class="ti ti-rotate-clockwise"></i> <%= t('nodes.cronServiceRestart') %></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header cron-header-row">
+            <div class="cron-mode-switch" role="tablist">
+                <button type="button" class="cron-mode-btn active" data-mode="tasks"><%= t('nodes.cronModeTasks') %></button>
+                <button type="button" class="cron-mode-btn" data-mode="raw"><%= t('nodes.cronModeRaw') %></button>
+            </div>
+            <button type="button" class="btn btn-success" id="saveCronBtn"><i class="ti ti-device-floppy"></i> <%= t('nodes.cronSave') %></button>
+        </div>
+        <div class="card-body">
+            <div id="tasksPanel">
+                <div class="cron-task-form">
+                    <div class="form-group">
+                        <label><%= t('nodes.cronMinute') %></label>
+                        <input type="text" class="cron-field" name="minute" id="taskMinute" value="*">
+                    </div>
+                    <div class="form-group">
+                        <label><%= t('nodes.cronHour') %></label>
+                        <input type="text" class="cron-field" name="hour" id="taskHour" value="*">
+                    </div>
+                    <div class="form-group">
+                        <label><%= t('nodes.cronDayOfMonth') %></label>
+                        <input type="text" class="cron-field" name="dayOfMonth" id="taskDayOfMonth" value="*">
+                    </div>
+                    <div class="form-group">
+                        <label><%= t('nodes.cronMonth') %></label>
+                        <input type="text" class="cron-field" name="month" id="taskMonth" value="*">
+                    </div>
+                    <div class="form-group">
+                        <label><%= t('nodes.cronDayOfWeek') %></label>
+                        <input type="text" class="cron-field" name="dayOfWeek" id="taskDayOfWeek" value="*">
+                    </div>
+                </div>
+                <div class="cron-command-row">
+                    <div class="form-group">
+                        <label><%= t('nodes.cronCommand') %></label>
+                        <input type="text" class="cron-field" name="command" id="taskCommand" autocomplete="off">
+                    </div>
+                    <button type="button" class="btn" id="addTaskBtn"><i class="ti ti-plus"></i> <%= t('nodes.cronAddTask') %></button>
+                </div>
+                <template id="cronTaskActionsTemplate"><button type="button" data-cron-action="run"></button></template>
+                <div class="cron-table-wrap">
+                    <table class="cron-table">
+                        <thead>
+                            <tr>
+                                <th><%= t('nodes.cronMinute') %></th>
+                                <th><%= t('nodes.cronHour') %></th>
+                                <th><%= t('nodes.cronDayOfMonth') %></th>
+                                <th><%= t('nodes.cronMonth') %></th>
+                                <th><%= t('nodes.cronDayOfWeek') %></th>
+                                <th><%= t('nodes.cronCommand') %></th>
+                                <th><%= t('common.actions') %></th>
+                            </tr>
+                        </thead>
+                        <tbody id="taskRows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="rawPanel" class="cron-hidden">
+                <label for="rawCrontab"><%= t('nodes.cronRawCrontab') %></label>
+                <textarea id="rawCrontab" class="cron-editor" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="card cron-hidden" id="diffPreview">
+        <div class="card-header">
+            <h2><%= t('nodes.cronDiffPreview') %></h2>
+        </div>
+        <div class="card-body">
+            <pre class="cron-diff" id="diffOutput"></pre>
+            <div class="cron-actions mt-2">
+                <button type="button" class="btn btn-success" id="confirmSaveBtn"><%= t('nodes.cronConfirmSave') %></button>
+                <button type="button" class="btn" id="cancelSaveBtn"><%= t('nodes.cronCancel') %></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2><%= t('nodes.cronOutput') %></h2>
+        </div>
+        <div class="card-body">
+            <div id="backupPath" class="cron-backup"></div>
+            <pre class="cron-output" id="cronOutput"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const endpoints = {
+        data: '/panel/nodes/<%= node._id %>/cron/data',
+        save: '/panel/nodes/<%= node._id %>/cron/save',
+        run: '/panel/nodes/<%= node._id %>/cron/run',
+        service: '/panel/nodes/<%= node._id %>/cron/service',
+    };
+    const labels = <%- JSON.stringify({
+        runNow: t('nodes.cronRunNow'),
+        edit: t('nodes.cronEdit'),
+        delete: t('nodes.cronDelete'),
+        rawOnly: t('nodes.cronRawOnly'),
+        loading: t('nodes.cronLoading'),
+        saved: t('nodes.cronSaved'),
+        conflict: t('nodes.cronConflictReload'),
+        backupPath: t('nodes.cronBackupPath'),
+    }) %>;
+
+    const rawCrontab = document.getElementById('rawCrontab');
+    const cronUser = document.getElementById('cronUser');
+    const taskRows = document.getElementById('taskRows');
+    const cronOutput = document.getElementById('cronOutput');
+    const serviceStatus = document.getElementById('serviceStatus');
+    const diffPreview = document.getElementById('diffPreview');
+    const diffOutput = document.getElementById('diffOutput');
+    const backupPath = document.getElementById('backupPath');
+    let baseHash = '';
+    let originalContent = '';
+    let pendingContent = '';
+    let editingIndex = null;
+
+    function appendOutput(message) {
+        const prefix = cronOutput.textContent ? '\n' : '';
+        cronOutput.textContent += prefix + message;
+    }
+
+    function getLines() {
+        const value = rawCrontab.value || '';
+        return value.split('\n');
+    }
+
+    function setLines(lines) {
+        rawCrontab.value = lines.join('\n').replace(/\n*$/, '\n');
+        renderTasks();
+    }
+
+    function parseLine(line, index) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#') || /^[A-Za-z_][A-Za-z0-9_]*=.*/.test(trimmed) || trimmed.startsWith('@')) {
+            return { raw: true, line, index };
+        }
+        const parts = trimmed.split(/\s+/);
+        if (parts.length < 6) {
+            return { raw: true, line, index };
+        }
+        return {
+            raw: false,
+            index,
+            minute: parts[0],
+            hour: parts[1],
+            dayOfMonth: parts[2],
+            month: parts[3],
+            dayOfWeek: parts[4],
+            command: parts.slice(5).join(' '),
+        };
+    }
+
+    function makeCell(row, text, className) {
+        const cell = document.createElement('td');
+        if (className) cell.className = className;
+        cell.textContent = text;
+        row.appendChild(cell);
+    }
+
+    function renderTasks() {
+        taskRows.textContent = '';
+        getLines().forEach((line, index) => {
+            if (!line && index === getLines().length - 1) return;
+            const task = parseLine(line, index);
+            const row = document.createElement('tr');
+            if (task.raw) {
+                makeCell(row, labels.rawOnly);
+                makeCell(row, '—');
+                makeCell(row, '—');
+                makeCell(row, '—');
+                makeCell(row, '—');
+                makeCell(row, task.line, 'cron-command-cell');
+                const actions = document.createElement('td');
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = 'btn btn-sm btn-danger';
+                deleteButton.textContent = labels.delete;
+                deleteButton.addEventListener('click', () => deleteTask(index));
+                actions.appendChild(deleteButton);
+                row.appendChild(actions);
+                taskRows.appendChild(row);
+                return;
+            }
+
+            makeCell(row, task.minute);
+            makeCell(row, task.hour);
+            makeCell(row, task.dayOfMonth);
+            makeCell(row, task.month);
+            makeCell(row, task.dayOfWeek);
+            makeCell(row, task.command, 'cron-command-cell');
+            const actions = document.createElement('td');
+            [
+                { label: labels.runNow, action: () => runCommand(task.command), className: 'btn btn-sm btn-success' },
+                { label: labels.edit, action: () => editTask(task), className: 'btn btn-sm' },
+                { label: labels.delete, action: () => deleteTask(index), className: 'btn btn-sm btn-danger' },
+            ].forEach(item => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = item.className;
+                button.textContent = item.label;
+                button.addEventListener('click', item.action);
+                actions.appendChild(button);
+            });
+            row.appendChild(actions);
+            taskRows.appendChild(row);
+        });
+    }
+
+    function taskFormLine() {
+        const fields = ['taskMinute', 'taskHour', 'taskDayOfMonth', 'taskMonth', 'taskDayOfWeek']
+            .map(id => document.getElementById(id).value.trim() || '*');
+        const command = document.getElementById('taskCommand').value.trim();
+        if (!command) return null;
+        return fields.concat(command).join(' ');
+    }
+
+    function clearTaskForm() {
+        document.getElementById('taskMinute').value = '*';
+        document.getElementById('taskHour').value = '*';
+        document.getElementById('taskDayOfMonth').value = '*';
+        document.getElementById('taskMonth').value = '*';
+        document.getElementById('taskDayOfWeek').value = '*';
+        document.getElementById('taskCommand').value = '';
+        editingIndex = null;
+    }
+
+    function addOrUpdateTask() {
+        const line = taskFormLine();
+        if (!line) return;
+        const lines = getLines();
+        if (editingIndex == null) {
+            if (lines.length === 1 && lines[0] === '') lines.length = 0;
+            lines.push(line);
+        } else {
+            lines[editingIndex] = line;
+        }
+        setLines(lines);
+        clearTaskForm();
+    }
+
+    function editTask(task) {
+        document.getElementById('taskMinute').value = task.minute;
+        document.getElementById('taskHour').value = task.hour;
+        document.getElementById('taskDayOfMonth').value = task.dayOfMonth;
+        document.getElementById('taskMonth').value = task.month;
+        document.getElementById('taskDayOfWeek').value = task.dayOfWeek;
+        document.getElementById('taskCommand').value = task.command;
+        editingIndex = task.index;
+    }
+
+    function deleteTask(index) {
+        const lines = getLines();
+        lines.splice(index, 1);
+        setLines(lines);
+    }
+
+    function buildDiff(before, after) {
+        const beforeLines = before.replace(/\n$/, '').split('\n');
+        const afterLines = after.replace(/\n$/, '').split('\n');
+        const lcs = Array.from({ length: beforeLines.length + 1 }, () => Array(afterLines.length + 1).fill(0));
+        for (let i = beforeLines.length - 1; i >= 0; i -= 1) {
+            for (let j = afterLines.length - 1; j >= 0; j -= 1) {
+                lcs[i][j] = beforeLines[i] === afterLines[j]
+                    ? lcs[i + 1][j + 1] + 1
+                    : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+            }
+        }
+        const output = [];
+        let i = 0;
+        let j = 0;
+        while (i < beforeLines.length && j < afterLines.length) {
+            if (beforeLines[i] === afterLines[j]) {
+                i += 1;
+                j += 1;
+            } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+                output.push('- ' + beforeLines[i]);
+                i += 1;
+            } else {
+                output.push('+ ' + afterLines[j]);
+                j += 1;
+            }
+        }
+        while (i < beforeLines.length) {
+            output.push('- ' + beforeLines[i]);
+            i += 1;
+        }
+        while (j < afterLines.length) {
+            output.push('+ ' + afterLines[j]);
+            j += 1;
+        }
+        return output.length ? output.join('\n') : '+ No changes';
+    }
+
+    async function requestJson(url, options) {
+        const res = await fetch(url, options);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+            const error = new Error(data.error || res.statusText);
+            error.status = res.status;
+            throw error;
+        }
+        return data;
+    }
+
+    async function loadCron() {
+        appendOutput(labels.loading);
+        const url = endpoints.data + '?user=' + encodeURIComponent(cronUser.value.trim() || 'root');
+        const data = await requestJson(url);
+        rawCrontab.value = data.cron.content || '';
+        originalContent = rawCrontab.value;
+        baseHash = data.cron.hash || '';
+        if (data.cron.user) cronUser.value = data.cron.user;
+        if (data.service) serviceStatus.textContent = JSON.stringify(data.service);
+        diffPreview.classList.add('cron-hidden');
+        backupPath.textContent = '';
+        renderTasks();
+    }
+
+    function showDiff() {
+        pendingContent = rawCrontab.value.endsWith('\n') ? rawCrontab.value : rawCrontab.value + '\n';
+        diffOutput.textContent = buildDiff(originalContent, pendingContent);
+        diffPreview.classList.remove('cron-hidden');
+    }
+
+    async function confirmSave() {
+        try {
+            const data = await requestJson(endpoints.save, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user: cronUser.value.trim() || 'root',
+                    content: pendingContent,
+                    baseHash,
+                }),
+            });
+            baseHash = data.hash || baseHash;
+            originalContent = pendingContent;
+            diffPreview.classList.add('cron-hidden');
+            appendOutput(labels.saved);
+            if (data.backupPath) backupPath.textContent = labels.backupPath + ': ' + data.backupPath;
+        } catch (error) {
+            appendOutput(error.status === 409 ? labels.conflict : error.message);
+        }
+    }
+
+    async function runCommand(command) {
+        const data = await requestJson(endpoints.run, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user: cronUser.value.trim() || 'root',
+                command,
+            }),
+        });
+        appendOutput([data.stdout, data.stderr].filter(Boolean).join('\n') || String(data.code ?? ''));
+    }
+
+    async function serviceAction(action) {
+        const data = await requestJson(endpoints.service, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+        });
+        serviceStatus.textContent = JSON.stringify(data.service || data);
+        appendOutput(JSON.stringify(data));
+    }
+
+    document.querySelectorAll('.cron-mode-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.cron-mode-btn').forEach(item => item.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById('tasksPanel').classList.toggle('cron-hidden', button.dataset.mode !== 'tasks');
+            document.getElementById('rawPanel').classList.toggle('cron-hidden', button.dataset.mode !== 'raw');
+        });
+    });
+    document.querySelectorAll('[data-action]').forEach(button => {
+        button.addEventListener('click', () => serviceAction(button.dataset.action).catch(error => appendOutput(error.message)));
+    });
+    document.getElementById('loadCronBtn').addEventListener('click', () => loadCron().catch(error => appendOutput(error.message)));
+    document.getElementById('addTaskBtn').addEventListener('click', addOrUpdateTask);
+    document.getElementById('saveCronBtn').addEventListener('click', showDiff);
+    document.getElementById('confirmSaveBtn').addEventListener('click', confirmSave);
+    document.getElementById('cancelSaveBtn').addEventListener('click', () => diffPreview.classList.add('cron-hidden'));
+    rawCrontab.addEventListener('input', renderTasks);
+    loadCron().catch(error => appendOutput(error.message));
+})();
+</script>
