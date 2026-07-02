@@ -68,6 +68,40 @@
                             </button>
                         </div>
                     </form>
+
+                    <script>
+                    (function () {
+                        const messages = {
+                            newPasswordTooShort: <%- JSON.stringify(typeof t !== "undefined" ? t("settings.newPasswordTooShort") : "New password must be at least 6 characters") %>,
+                            passwordsMismatch: <%- JSON.stringify(typeof t !== "undefined" ? t("setup.passwordsMismatch") : "Passwords don't match!") %>
+                        };
+
+                        const newPassword = document.querySelector('input[name="newPassword"]');
+                        const confirmPassword = document.querySelector('input[name="confirmPassword"]');
+                        if (!newPassword || !confirmPassword) return;
+
+                        function validateField(input) {
+                            const min = parseInt(input.getAttribute('minlength') || '0', 10);
+                            if (input.value.length > 0 && min > 0 && input.value.length < min) {
+                                input.setCustomValidity(messages.newPasswordTooShort);
+                                return;
+                            }
+                            if (input === confirmPassword && input.value.length > 0 && newPassword.value !== input.value) {
+                                input.setCustomValidity(messages.passwordsMismatch);
+                                return;
+                            }
+                            input.setCustomValidity('');
+                        }
+
+                        [newPassword, confirmPassword].forEach(function (input) {
+                            if (!input) return;
+                            input.addEventListener('input', function () {
+                                validateField(input);
+                                if (input === newPassword) validateField(confirmPassword);
+                            });
+                        });
+                    })();
+                    </script>
                 </div>
             </div>
         </div>
