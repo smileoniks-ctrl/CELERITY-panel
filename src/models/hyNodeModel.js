@@ -327,6 +327,12 @@ const hyNodeSchema = new mongoose.Schema({
         tx: { type: Number, default: 0 },
         rx: { type: Number, default: 0 },
         lastUpdate: { type: Date, default: null },
+        // Average load over the last stats-collection interval (cron */5 * * * *),
+        // computed as bits transferred / interval seconds / 1e6. Not instantaneous —
+        // see collectXrayTrafficStats / _collectHysteriaTrafficStats in syncService.
+        txMbps: { type: Number, default: 0 },
+        rxMbps: { type: Number, default: 0 },
+        speedUpdatedAt: { type: Date, default: null },
     },
     
     rankingCoefficient: { type: Number, default: 1.0 },

@@ -502,6 +502,7 @@ function addCommonExamples(target) {
                 onlineUsers: 12,
                 lastError: '',
                 lastSync: '2026-05-18T17:00:00.000Z',
+                load: { txMbps: 12.4, rxMbps: 87.1, updatedAt: '2026-05-18T17:00:00.000Z' },
             },
         },
         McpToolsResponse: {
@@ -989,8 +990,11 @@ These endpoints are not under \`/api\` and are not part of this specification:
                     traffic: {
                         type: 'object',
                         properties: {
-                            tx: { type: 'integer' },
-                            rx: { type: 'integer' },
+                            tx: { type: 'integer', description: 'Total uploaded bytes (all-time)' },
+                            rx: { type: 'integer', description: 'Total downloaded bytes (all-time)' },
+                            txMbps: { type: 'number', example: 12.4, description: 'Average upload load in Mbit/s since the previous stats poll (~5 min window, not instantaneous)' },
+                            rxMbps: { type: 'number', example: 87.1, description: 'Average download load in Mbit/s since the previous stats poll (~5 min window, not instantaneous)' },
+                            speedUpdatedAt: { type: 'string', format: 'date-time', nullable: true, description: 'When txMbps/rxMbps were last computed' },
                         },
                     },
                     // Hysteria 2 advanced configuration
@@ -2136,7 +2140,11 @@ See the request body examples panel for both flavours.`,
             get: {
                 tags: ['Nodes'],
                 summary: 'Get stored node status',
-                description: 'Returns the status currently stored in the panel database.',
+                description: `Returns the status currently stored in the panel database, including \`load\` —
+average Mbit/s since the previous stats-collection poll (cron runs every 5 minutes).
+This is a byproduct of the traffic accounting the panel already does for quotas/billing,
+not a live SSH probe, so it's cheap to poll frequently and safe to call from external
+integrations. Resolution is bound to the collection interval (~5 min), not per-second.`,
                 responses: {
                     200: {
                         description: 'Node status',
@@ -2150,6 +2158,15 @@ See the request body examples panel for both flavours.`,
                                         onlineUsers: { type: 'integer' },
                                         lastError:   { type: 'string' },
                                         lastSync:    { type: 'string', format: 'date-time', nullable: true },
+                                        load: {
+                                            type: 'object',
+                                            description: 'Average load since the previous ~5 min stats poll (not instantaneous).',
+                                            properties: {
+                                                txMbps:    { type: 'number', example: 12.4 },
+                                                rxMbps:    { type: 'number', example: 87.1 },
+                                                updatedAt: { type: 'string', format: 'date-time', nullable: true },
+                                            },
+                                        },
                                     },
                                 },
                             },
