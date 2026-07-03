@@ -22,10 +22,15 @@ function assertIncludes(content, expected, label) {
 const managementPartial = read('views/partials/node-form/management.ejs');
 assertIncludes(managementPartial, '/panel/nodes/<%= node._id %>/cron', 'management partial');
 assertIncludes(managementPartial, "t('nodes.cronTasks')", 'management partial');
+assertIncludes(managementPartial, 'class="beta-badge"', 'management partial');
+assertIncludes(managementPartial, "t('network.betaBadge')", 'management partial');
 assert(
   /if\s*\(\s*node\?\._id\s*&&\s*node\.type\s*!==\s*'virtual'\s*\)/.test(managementPartial),
   'management partial should render management actions only for saved non-virtual nodes',
 );
+
+const styleCss = read('public/css/style.css');
+assertIncludes(styleCss, '.beta-badge', 'global stylesheet');
 
 const cronView = read('views/node-cron.ejs');
 [
