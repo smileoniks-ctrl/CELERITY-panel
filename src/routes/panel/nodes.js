@@ -1057,42 +1057,6 @@ router.post('/nodes/:id/outbounds', async (req, res) => {
     }
 });
 
-// GET /panel/broadcast-terminal - Broadcast terminal page
-router.get('/broadcast-terminal', async (req, res) => {
-    try {
-        const nodes = await HyNode.find({
-            $or: [
-                { 'ssh.password': { $exists: true, $ne: '' } },
-                { 'ssh.privateKey': { $exists: true, $ne: '' } },
-            ],
-        })
-            .select('_id name ip type status flag ssh.port ssh.username groups')
-            .populate('groups', 'name')
-            .lean();
-        // Deduplicate by IP (one physical server may have two protocol nodes)
-        const seenIps = new Set();
-        const sshNodes = [];
-        for (const n of nodes) {
-            if (seenIps.has(n.ip)) continue;
-            seenIps.add(n.ip);
-            sshNodes.push({
-                _id: n._id,
-                name: n.name,
-                ip: n.ip,
-                type: n.type,
-                status: n.status,
-                flag: n.flag,
-                sshPort: n.ssh?.port || 22,
-                sshUsername: n.ssh?.username || 'root',
-                groups: n.groups,
-            });
-        }
-        res.render('broadcast-terminal', { nodes: sshNodes });
-    } catch (error) {
-        res.status(500).send('Error: ' + error.message);
-    }
-});
-
 // GET /panel/nodes/:id/terminal - SSH terminal
 router.get('/nodes/:id/terminal', async (req, res) => {
     try {

@@ -100,6 +100,38 @@
             border: 1px solid rgba(99, 102, 241, 0.25);
         }
 
+        .broadcast-tabs {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--glass-border);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .broadcast-tab {
+            border: 0;
+            background: transparent;
+            color: var(--text-muted);
+            padding: 7px 12px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.16s ease;
+        }
+
+        .broadcast-tab.active {
+            color: #fff;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            box-shadow: 0 8px 26px rgba(99,102,241,0.28);
+        }
+
         .header-right {
             display: flex;
             gap: 10px;
@@ -343,6 +375,119 @@
             font-family: 'JetBrains Mono', monospace;
             letter-spacing: 0.02em;
         }
+
+        .mode-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .mode-panel.hidden { display: none; }
+
+        .cron-panel {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .cron-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .cron-panel-title {
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cron-panel-subtitle {
+            color: var(--text-muted);
+            font-size: 12.5px;
+            margin-top: 4px;
+        }
+
+        .cron-grid {
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+            gap: 12px;
+        }
+
+        .cron-field {
+            width: 100%;
+            background: rgba(10, 10, 11, 0.55);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .cron-editor {
+            width: 100%;
+            min-height: 280px;
+            resize: vertical;
+            background: rgba(10, 10, 11, 0.55);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            color: var(--text-primary);
+            outline: none;
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .cron-field:focus,
+        .cron-editor:focus {
+            border-color: rgba(99, 102, 241, 0.55);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
+        }
+
+        .cron-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .cron-results {
+            min-height: 180px;
+            max-height: 420px;
+            overflow: auto;
+            background: rgba(10, 10, 11, 0.55);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .cron-result-row {
+            display: grid;
+            grid-template-columns: minmax(140px, 220px) 1fr;
+            gap: 10px;
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--glass-border);
+            font-size: 12.5px;
+        }
+
+        .cron-result-row.ok { border-color: rgba(34,197,94,0.45); }
+        .cron-result-row.fail { border-color: rgba(239,68,68,0.45); }
+        .cron-result-node { color: var(--text-primary); font-weight: 600; }
+        .cron-result-message { color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-break: break-word; }
 
         /* ── Output area ─────────────────────────────────────────────────── */
         .output-area {
@@ -592,6 +737,10 @@
             .command-actions .btn { flex: 1; }
             .hint { display: none; }
             .node-selector { max-height: 120px; }
+            .cron-grid { grid-template-columns: 1fr; }
+            .cron-actions { justify-content: stretch; }
+            .cron-actions .btn { flex: 1; }
+            .cron-result-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -619,6 +768,22 @@
         timeout:            typeof t !== 'undefined' ? t('broadcast.timeout')           : 'Timed out',
         exitCode:           typeof t !== 'undefined' ? t('broadcast.exitCode')          : 'exit',
         empty:              typeof t !== 'undefined' ? t('broadcast.empty')             : 'Execute a command to see output',
+        terminalTab:        typeof t !== 'undefined' ? t('broadcast.terminalTab')       : 'Terminal',
+        cronTab:            typeof t !== 'undefined' ? t('broadcast.cronTab')           : 'Multicast Cron',
+        betaBadge:          typeof t !== 'undefined' ? t('network.betaBadge')           : 'BETA',
+        cronTitle:          typeof t !== 'undefined' ? t('broadcast.cronTitle')         : 'Multicast Cron',
+        cronUser:           typeof t !== 'undefined' ? t('broadcast.cronUser')          : 'Cron user',
+        cronRawBlock:       typeof t !== 'undefined' ? t('broadcast.cronRawBlock')      : 'Raw cron block',
+        cronRawPlaceholder: typeof t !== 'undefined' ? t('broadcast.cronRawPlaceholder'): '*/5 * * * * /opt/job.sh',
+        cronSave:           typeof t !== 'undefined' ? t('broadcast.cronSave')          : 'Save C³ block',
+        cronSaveRun:        typeof t !== 'undefined' ? t('broadcast.cronSaveRun')       : 'Save + Run now',
+        cronResults:        typeof t !== 'undefined' ? t('broadcast.cronResults')       : 'Cron results',
+        cronSaved:          typeof t !== 'undefined' ? t('broadcast.cronSaved')         : 'Saved',
+        cronSkipped:        typeof t !== 'undefined' ? t('broadcast.cronSkipped')       : 'No changes',
+        cronFailed:         typeof t !== 'undefined' ? t('broadcast.cronFailed')        : 'Failed',
+        cronRunFailed:      typeof t !== 'undefined' ? t('broadcast.cronRunFailed')     : 'Run failed',
+        cronSelectNodes:    typeof t !== 'undefined' ? t('broadcast.cronSelectNodes')   : 'Select at least one node',
+        cronEmpty:          typeof t !== 'undefined' ? t('broadcast.cronEmpty')         : 'Save a cron block to see per-node results',
     };
     %>
 
@@ -631,6 +796,14 @@
             </a>
             <div class="header-divider"></div>
             <h1><i class="ti ti-broadcast"></i> <%- i18nKeys.title %></h1>
+            <div class="broadcast-tabs" id="broadcastTabs">
+                <button type="button" class="broadcast-tab active" data-mode="terminal" onclick="switchBroadcastMode('terminal')">
+                    <i class="ti ti-terminal-2"></i> <%- i18nKeys.terminalTab %>
+                </button>
+                <button type="button" class="broadcast-tab" data-mode="cron" onclick="switchBroadcastMode('cron')">
+                    <i class="ti ti-clock-cog"></i> <%- i18nKeys.cronTab %> <span class="beta-badge"><%- i18nKeys.betaBadge %></span>
+                </button>
+            </div>
         </div>
         <div class="header-right">
             <div class="status">
@@ -644,9 +817,7 @@
     </div>
 
     <div class="page">
-        <!-- Control bar -->
         <div class="glass-surface control-bar">
-            <!-- Node selector -->
             <div class="node-selector-block">
                 <div class="node-selector-head">
                     <div class="node-selector-title">
@@ -671,6 +842,11 @@
                     <% }); %>
                 </div>
             </div>
+        </div>
+
+        <div class="mode-panel" id="terminalPanel">
+        <!-- Control bar -->
+        <div class="glass-surface control-bar">
             <!-- Command input -->
             <div class="command-row">
                 <textarea
@@ -709,6 +885,48 @@
             <span class="summary-stat ok"><%- i18nKeys.summaryOk %> <strong id="sumOk">0</strong></span>
             <span class="summary-stat fail"><%- i18nKeys.summaryFailed %> <strong id="sumFailed">0</strong></span>
         </div>
+        </div>
+
+        <div class="mode-panel hidden" id="cronPanel">
+            <div class="glass-surface cron-panel">
+                <div class="cron-panel-header">
+                    <div>
+                        <div class="cron-panel-title"><i class="ti ti-clock-cog"></i> <%- i18nKeys.cronTitle %></div>
+                        <div class="cron-panel-subtitle"><%- i18nKeys.cronEmpty %></div>
+                    </div>
+                    <div class="cron-actions">
+                        <button type="button" class="btn btn-success" id="btnCronSave" onclick="applyCronBlock(false)">
+                            <i class="ti ti-device-floppy"></i> <%- i18nKeys.cronSave %>
+                        </button>
+                        <button type="button" class="btn btn-primary" id="btnCronSaveRun" onclick="applyCronBlock(true)">
+                            <i class="ti ti-player-play"></i> <%- i18nKeys.cronSaveRun %>
+                        </button>
+                    </div>
+                </div>
+                <div class="cron-grid">
+                    <div class="form-group">
+                        <label for="cronUser"><%- i18nKeys.cronUser %></label>
+                        <input type="text" class="cron-field" id="cronUser" value="root" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="cronRawBlock"><%- i18nKeys.cronRawBlock %></label>
+                        <textarea id="cronRawBlock" class="cron-editor" spellcheck="false" placeholder="<%- i18nKeys.cronRawPlaceholder %>"></textarea>
+                    </div>
+                </div>
+                <div>
+                    <div class="node-selector-title" style="margin-bottom:8px">
+                        <i class="ti ti-list-check" style="font-size:14px"></i>
+                        <span><%- i18nKeys.cronResults %></span>
+                    </div>
+                    <div class="cron-results" id="cronResults">
+                        <div class="empty-state" style="padding:24px 12px">
+                            <i class="ti ti-clock-cog"></i>
+                            <span><%- i18nKeys.cronEmpty %></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Connecting overlay -->
@@ -743,6 +961,7 @@
         let selectedNodeIds = new Set(ALL_NODES.map(n => String(n._id)));
         let cmdHistory = [];
         let cmdHistoryIdx = -1;
+        const CRON_ENDPOINT = '/panel/broadcast/cron/apply';
 
         try { cmdHistory = JSON.parse(localStorage.getItem('bc_cmd_history') || '[]'); } catch (_) {}
 
@@ -1037,6 +1256,105 @@
             return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        // ── Multicast cron ────────────────────────────────────────────────
+        function switchBroadcastMode(mode) {
+            document.querySelectorAll('#broadcastTabs .broadcast-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            document.getElementById('terminalPanel').classList.toggle('hidden', mode !== 'terminal');
+            document.getElementById('cronPanel').classList.toggle('hidden', mode !== 'cron');
+        }
+
+        function setCronBusy(value) {
+            document.getElementById('btnCronSave').disabled = value;
+            document.getElementById('btnCronSaveRun').disabled = value;
+            document.getElementById('cronRawBlock').disabled = value;
+            document.getElementById('cronUser').disabled = value;
+        }
+
+        function clearCronResults(message) {
+            const results = document.getElementById('cronResults');
+            results.textContent = '';
+            if (message) {
+                const row = document.createElement('div');
+                row.className = 'empty-state';
+                row.style.padding = '24px 12px';
+                const icon = document.createElement('i');
+                icon.className = 'ti ti-clock-cog';
+                const text = document.createElement('span');
+                text.textContent = message;
+                row.appendChild(icon);
+                row.appendChild(text);
+                results.appendChild(row);
+            }
+        }
+
+        function appendCronResult(result) {
+            const results = document.getElementById('cronResults');
+            const row = document.createElement('div');
+            row.className = 'cron-result-row ' + (result.success ? 'ok' : 'fail');
+
+            const node = document.createElement('div');
+            node.className = 'cron-result-node';
+            node.textContent = `${result.name || result.nodeId}${result.ip ? ' · ' + result.ip : ''}`;
+
+            const message = document.createElement('div');
+            message.className = 'cron-result-message';
+            const runFailed = Array.isArray(result.runNow) && result.runNow.some(item => item.success === false);
+            if (result.error) {
+                message.textContent = `${i18n.cronFailed}: ${result.error}`;
+            } else if (runFailed) {
+                message.textContent = i18n.cronRunFailed;
+            } else if (result.saved) {
+                message.textContent = i18n.cronSaved;
+            } else {
+                message.textContent = i18n.cronSkipped;
+            }
+
+            row.appendChild(node);
+            row.appendChild(message);
+            results.appendChild(row);
+        }
+
+        async function applyCronBlock(runNow) {
+            if (selectedNodeIds.size === 0) {
+                clearCronResults(i18n.cronSelectNodes);
+                return;
+            }
+
+            setCronBusy(true);
+            clearCronResults(i18n.running);
+            try {
+                const payload = {
+                    selectedNodeIds: Array.from(selectedNodeIds),
+                    user: document.getElementById('cronUser').value.trim() || 'root',
+                    content: document.getElementById('cronRawBlock').value,
+                    runNow: runNow === true,
+                };
+                payload.nodeIds = payload.selectedNodeIds;
+
+                const response = await fetch(CRON_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok || data.success === false && !Array.isArray(data.results)) {
+                    throw new Error(data.error || i18n.wsError);
+                }
+
+                clearCronResults('');
+                (data.results || []).forEach(appendCronResult);
+                if (!data.results || data.results.length === 0) {
+                    clearCronResults(i18n.cronEmpty);
+                }
+            } catch (error) {
+                clearCronResults(error.message || i18n.wsError);
+            } finally {
+                setCronBusy(false);
+            }
+        }
+
         // ── Textarea auto-resize ──────────────────────────────────────────
         function autoResize(el) {
             el.style.height = 'auto';
@@ -1049,8 +1367,10 @@
         // ── Keyboard shortcuts ────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             const input = document.getElementById('cmdInput');
+            const cronRawBlock = document.getElementById('cronRawBlock');
 
             input.addEventListener('input', () => autoResize(input));
+            cronRawBlock.addEventListener('input', () => autoResize(cronRawBlock));
 
             input.addEventListener('keydown', (e) => {
                 const multiline = input.value.includes('\n');

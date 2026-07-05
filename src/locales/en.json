@@ -1150,7 +1150,22 @@
     "empty": "Execute a command to see output from nodes",
     "summaryTotal": "Total:",
     "summaryOk": "OK:",
-    "summaryFailed": "Failed:"
+    "summaryFailed": "Failed:",
+    "terminalTab": "Terminal",
+    "cronTab": "Multicast Cron",
+    "cronTitle": "Multicast Cron Tasks",
+    "cronUser": "Cron user",
+    "cronRawBlock": "Raw cron block",
+    "cronRawPlaceholder": "*/5 * * * * /opt/job.sh",
+    "cronSave": "Save C³ block",
+    "cronSaveRun": "Save + Run now",
+    "cronResults": "Cron results",
+    "cronSaved": "Saved",
+    "cronSkipped": "No changes",
+    "cronFailed": "Failed",
+    "cronRunFailed": "Run failed",
+    "cronSelectNodes": "Select at least one node",
+    "cronEmpty": "Save a cron block to see per-node results"
   },
   "backup": {
     "creating": "Creating backup...",

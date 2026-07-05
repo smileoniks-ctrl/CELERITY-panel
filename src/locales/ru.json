@@ -1150,7 +1150,22 @@
     "empty": "Введите команду, чтобы увидеть вывод с нод",
     "summaryTotal": "Всего:",
     "summaryOk": "Успешно:",
-    "summaryFailed": "Ошибок:"
+    "summaryFailed": "Ошибок:",
+    "terminalTab": "Терминал",
+    "cronTab": "Multicast Cron",
+    "cronTitle": "Multicast Cron задачи",
+    "cronUser": "Пользователь cron",
+    "cronRawBlock": "Raw cron блок",
+    "cronRawPlaceholder": "*/5 * * * * /opt/job.sh",
+    "cronSave": "Сохранить C³ блок",
+    "cronSaveRun": "Сохранить и запустить",
+    "cronResults": "Результаты cron",
+    "cronSaved": "Сохранено",
+    "cronSkipped": "Без изменений",
+    "cronFailed": "Ошибка",
+    "cronRunFailed": "Ошибка запуска",
+    "cronSelectNodes": "Выберите хотя бы одну ноду",
+    "cronEmpty": "Сохраните cron блок, чтобы увидеть результат по нодам"
   },
   "backup": {
     "creating": "Создание бэкапа...",

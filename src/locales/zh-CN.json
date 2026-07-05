@@ -1150,7 +1150,22 @@
     "empty": "执行命令以查看来自节点的输出",
     "summaryTotal": "总计：",
     "summaryOk": "成功：",
-    "summaryFailed": "失败："
+    "summaryFailed": "失败：",
+    "terminalTab": "终端",
+    "cronTab": "组播 Cron",
+    "cronTitle": "组播 Cron 任务",
+    "cronUser": "Cron 用户",
+    "cronRawBlock": "原始 cron 块",
+    "cronRawPlaceholder": "*/5 * * * * /opt/job.sh",
+    "cronSave": "保存 C³ 块",
+    "cronSaveRun": "保存并立即运行",
+    "cronResults": "Cron 结果",
+    "cronSaved": "已保存",
+    "cronSkipped": "无变化",
+    "cronFailed": "失败",
+    "cronRunFailed": "运行失败",
+    "cronSelectNodes": "至少选择一个节点",
+    "cronEmpty": "保存 cron 块后可查看每个节点的结果"
   },
   "backup": {
     "creating": "正在创建备份...",
