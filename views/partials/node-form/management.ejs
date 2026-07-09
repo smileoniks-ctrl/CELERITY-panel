@@ -165,7 +165,7 @@
 <% } %>
 
 <%# ========== Management (edit only — hidden for virtual: nothing to setup/restart/terminal-into) ========== %>
-<% if (node && node.type !== 'virtual') { %>
+<% if (node?._id && node.type !== 'virtual') { %>
 <div class="card mt-3">
     <div class="card-header">
         <h2><%= t('nodes.management') %></h2>
@@ -214,6 +214,11 @@
                 <span class="action-icon"><i class="ti ti-terminal-2"></i></span>
                 <span><%= t('nodes.terminal') %></span>
             </button>
+            <a href="/panel/nodes/<%= node._id %>/cron" class="action-btn" style="text-decoration:none;text-align:center;">
+                <span class="action-icon"><i class="ti ti-clock-cog"></i></span>
+                <span><%= t('nodes.cronTasks') %></span>
+                <span class="beta-badge"><%= t('network.betaBadge') %></span>
+            </a>
             <button class="action-btn" onclick="getNodeLogs()">
                 <span class="action-icon"><i class="ti ti-file-text"></i></span>
                 <span><%= t('nodes.viewLogs') %></span>

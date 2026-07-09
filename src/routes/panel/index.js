@@ -10,6 +10,8 @@ const { checkIpWhitelist, requireAuth, requireOnboarding } = require('./helpers'
 
 const authRoutes = require('./auth');
 const wizardRoutes = require('./wizard');
+const nodeCronRoutes = require('./nodeCron');
+const broadcastRoutes = require('./broadcast');
 const nodesRoutes = require('./nodes');
 const usersRoutes = require('./users');
 const settingsRoutes = require('./settings');
@@ -26,6 +28,8 @@ router.use('/', authRoutes);
 router.use('/', requireAuth, wizardRoutes);
 
 // All other routes require authentication and completed onboarding
+router.use('/', requireAuth, requireOnboarding, nodeCronRoutes);
+router.use('/', requireAuth, requireOnboarding, broadcastRoutes);
 router.use('/', requireAuth, requireOnboarding, nodesRoutes);
 router.use('/', requireAuth, requireOnboarding, usersRoutes);
 router.use('/', requireAuth, requireOnboarding, settingsRoutes);

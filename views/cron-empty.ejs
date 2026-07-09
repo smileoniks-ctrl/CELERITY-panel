@@ -1,0 +1,162 @@
+<style>
+.cron-empty-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0 32px;
+}
+.cron-empty-card {
+    width: 100%;
+    max-width: 680px;
+    position: relative;
+    border: 1px solid rgba(63, 63, 70, 0.78);
+    border-radius: 24px;
+    padding: clamp(28px, 4vw, 48px);
+    background: linear-gradient(180deg, rgba(17, 17, 19, 0.92) 0%, rgba(24, 24, 27, 0.82) 100%);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+    text-align: center;
+    overflow: hidden;
+}
+.cron-empty-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 28%);
+    pointer-events: none;
+}
+.cron-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 84px;
+    height: 84px;
+    margin: 0 auto 20px;
+    border-radius: 24px;
+    font-size: 40px;
+    color: white;
+    background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+    box-shadow: 0 20px 44px rgba(99, 102, 241, 0.3);
+    position: relative;
+    z-index: 1;
+}
+.cron-empty-title {
+    margin: 0 0 12px;
+    font-size: clamp(22px, 3vw, 28px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    position: relative;
+    z-index: 1;
+}
+.cron-empty-desc {
+    margin: 0 auto 24px;
+    max-width: 480px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.65;
+    position: relative;
+    z-index: 1;
+}
+.cron-empty-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 26px;
+    text-align: left;
+    position: relative;
+    z-index: 1;
+}
+.cron-empty-step {
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(63, 63, 70, 0.9);
+    background: rgba(24, 24, 27, 0.72);
+}
+.cron-empty-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+}
+.cron-empty-step strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.cron-empty-step span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+}
+.cron-empty-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+}
+.cron-empty-actions .btn {
+    min-width: 200px;
+    min-height: 46px;
+    padding: 12px 20px;
+    font-size: 14px;
+}
+@media (max-width: 720px) {
+    .cron-empty-steps { grid-template-columns: 1fr; }
+    .cron-empty-actions { flex-direction: column; }
+    .cron-empty-actions .btn { width: 100%; }
+}
+</style>
+
+<div class="cron-empty-shell">
+    <div class="cron-empty-card">
+        <div class="cron-empty-icon">
+            <i class="ti <%= reason === 'virtual' ? 'ti-topology-star-3' : 'ti-shield-lock' %>"></i>
+        </div>
+        <h2 class="cron-empty-title">
+            <%= reason === 'virtual' ? t('nodes.cronEmptyVirtualTitle') : t('nodes.cronEmptySshTitle') %>
+        </h2>
+        <p class="cron-empty-desc">
+            <%= reason === 'virtual' ? t('nodes.cronEmptyVirtualDesc') : t('nodes.cronEmptySshDesc') %>
+        </p>
+        <% if (reason === 'no-ssh') { %>
+        <div class="cron-empty-steps">
+            <div class="cron-empty-step">
+                <span class="cron-empty-step-num">1</span>
+                <strong><%= t('nodes.cronEmptySshStep1Title') %></strong>
+                <span><%= t('nodes.cronEmptySshStep1Desc') %></span>
+            </div>
+            <div class="cron-empty-step">
+                <span class="cron-empty-step-num">2</span>
+                <strong><%= t('nodes.cronEmptySshStep2Title') %></strong>
+                <span><%= t('nodes.cronEmptySshStep2Desc') %></span>
+            </div>
+            <div class="cron-empty-step">
+                <span class="cron-empty-step-num">3</span>
+                <strong><%= t('nodes.cronEmptySshStep3Title') %></strong>
+                <span><%= t('nodes.cronEmptySshStep3Desc') %></span>
+            </div>
+        </div>
+        <% } %>
+        <div class="cron-empty-actions">
+            <a href="/panel/nodes/<%= node._id %>" class="btn btn-primary">
+                <i class="ti ti-arrow-left"></i> <%= t('nodes.cronBackToNode') %>
+            </a>
+            <a href="/panel/nodes" class="btn">
+                <i class="ti ti-server"></i> <%= t('common.backToList') %>
+            </a>
+        </div>
+    </div>
+</div>
