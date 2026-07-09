@@ -107,17 +107,17 @@
                     </td>
                     <td class="td-traffic">
                         <% 
-                        const used = ((user.traffic?.tx || 0) + (user.traffic?.rx || 0)) / (1024*1024*1024);
-                        const limit = user.trafficLimit ? user.trafficLimit / (1024*1024*1024) : 0;
-                        const percent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+                        const usedBytes = (user.traffic?.tx || 0) + (user.traffic?.rx || 0);
+                        const limitBytes = user.trafficLimit || 0;
+                        const percent = limitBytes > 0 ? Math.min((usedBytes / limitBytes) * 100, 100) : 0;
                         %>
                         <div class="traffic-info">
-                            <span class="traffic-used"><%= used.toFixed(1) %> GB</span>
-                        <% if (limit > 0) { %>
+                            <span class="traffic-used"><%= formatTraffic(usedBytes, { decimals: 1 }) %></span>
+                        <% if (limitBytes > 0) { %>
                             <div class="traffic-bar">
                                 <div class="traffic-fill" style="width: <%= percent %>%"></div>
                             </div>
-                            <span class="traffic-limit">/ <%= limit.toFixed(0) %> GB</span>
+                            <span class="traffic-limit">/ <%= formatTraffic(limitBytes, { decimals: 0 }) %></span>
                             <% } else { %>
                             <span class="traffic-unlimited">∞</span>
                             <% } %>
@@ -148,9 +148,9 @@
             </div>
         <% } %>
         <% users.forEach(user => { 
-            const used = ((user.traffic?.tx || 0) + (user.traffic?.rx || 0)) / (1024*1024*1024);
-            const limit = user.trafficLimit ? user.trafficLimit / (1024*1024*1024) : 0;
-            const percent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+            const usedBytes = (user.traffic?.tx || 0) + (user.traffic?.rx || 0);
+            const limitBytes = user.trafficLimit || 0;
+            const percent = limitBytes > 0 ? Math.min((usedBytes / limitBytes) * 100, 100) : 0;
             const isExpired = user.expireAt && new Date(user.expireAt).getTime() < Date.now();
         %>
             <div class="mobile-user-card" data-userid="<%= user.userId %>">
@@ -179,7 +179,7 @@
                     <div class="mobile-stat-item">
                         <span class="mobile-stat-label"><%= t('users.traffic') %></span>
                         <span class="mobile-stat-value">
-                            <%= used.toFixed(1) %> GB<% if (limit > 0) { %> / <%= limit.toFixed(0) %><% } else { %> ∞<% } %>
+                            <%= formatTraffic(usedBytes, { decimals: 1 }) %><% if (limitBytes > 0) { %> / <%= formatTraffic(limitBytes, { decimals: 0 }) %><% } else { %> ∞<% } %>
                         </span>
                     </div>
                     <div class="mobile-stat-item">

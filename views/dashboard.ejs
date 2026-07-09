@@ -31,21 +31,9 @@
             <span class="stat-icon"><i class="ti ti-chart-bar"></i></span>
             <span class="stat-trend"><%= t('dashboard.total') %></span>
         </div>
-        <% 
-        const totalGB = (stats.traffic?.total || 0) / (1024 * 1024 * 1024);
-        const txGB = (stats.traffic?.tx || 0) / (1024 * 1024 * 1024);
-        const rxGB = (stats.traffic?.rx || 0) / (1024 * 1024 * 1024);
-        
-        const formatTraffic = (gb) => {
-            if (gb >= 1000) {
-                return (gb / 1024).toFixed(2) + ' TB';
-            }
-            return gb.toFixed(1) + ' GB';
-        };
-        %>
-        <div class="stat-value"><%= formatTraffic(totalGB) %></div>
-        <div class="stat-label" title="<%= t('common.upload') || 'Upload' %> <%= formatTraffic(txGB) %> / <%= t('common.download') || 'Download' %> <%= formatTraffic(rxGB) %>">
-            <i class="ti ti-arrow-up" style="color:var(--success)"></i> <%= formatTraffic(txGB) %> / <i class="ti ti-arrow-down" style="color:var(--info)"></i> <%= formatTraffic(rxGB) %>
+        <div class="stat-value"><%= formatTraffic(stats.traffic?.total || 0) %></div>
+        <div class="stat-label" title="<%= t('common.upload') || 'Upload' %> <%= formatTraffic(stats.traffic?.tx || 0) %> / <%= t('common.download') || 'Download' %> <%= formatTraffic(stats.traffic?.rx || 0) %>">
+            <i class="ti ti-arrow-up" style="color:var(--success)"></i> <%= formatTraffic(stats.traffic?.tx || 0) %> / <i class="ti ti-arrow-down" style="color:var(--info)"></i> <%= formatTraffic(stats.traffic?.rx || 0) %>
         </div>
     </div>
 </div>

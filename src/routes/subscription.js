@@ -17,6 +17,7 @@ const cache = require('../services/cacheService');
 const logger = require('../utils/logger');
 const appConfig = require('../../config');
 const { getNodesByGroups, getSettings, parseDurationSeconds, normalizeHopInterval } = require('../utils/helpers');
+const { formatTraffic } = require('../utils/formatTraffic');
 const { getDateLocale, normalizeLanguage } = require('../middleware/i18n');
 const uaStats = require('../services/uaStatsService');
 const { extractHwidHeaders } = require('../utils/hwidHeaders');
@@ -1697,6 +1698,8 @@ const SUBSCRIPTION_PAGE_TEXTS = {
         copied: 'Скопировано',
         done: 'Готово',
         gb: 'ГБ',
+        tb: 'ТБ',
+        mb: 'МБ',
         used: 'Использовано',
         locations: 'Локаций',
         validUntil: 'Действует до',
@@ -1714,6 +1717,8 @@ const SUBSCRIPTION_PAGE_TEXTS = {
         copied: 'Copied',
         done: 'Done',
         gb: 'GB',
+        tb: 'TB',
+        mb: 'MB',
         used: 'Used',
         locations: 'Locations',
         validUntil: 'Valid until',
@@ -1731,6 +1736,8 @@ const SUBSCRIPTION_PAGE_TEXTS = {
         copied: '已复制',
         done: '完成',
         gb: 'GB',
+        tb: 'TB',
+        mb: 'MB',
         used: '已用',
         locations: '地区',
         validUntil: '有效期至',
@@ -1799,8 +1806,13 @@ async function generateHTML(user, nodes, token, baseUrl, settings, lang = 'ru', 
         }
     });
     
-    const trafficUsed = ((user.traffic?.tx || 0) + (user.traffic?.rx || 0)) / (1024 * 1024 * 1024);
-    const trafficLimit = user.trafficLimit ? user.trafficLimit / (1024 * 1024 * 1024) : 0;
+    const trafficUsedBytes = (user.traffic?.tx || 0) + (user.traffic?.rx || 0);
+    const trafficLimitBytes = user.trafficLimit || 0;
+    const trafficUnits = { GB: text.gb, TB: text.tb, MB: text.mb };
+    const trafficUsedLabel = formatTraffic(trafficUsedBytes, { decimals: 1, units: trafficUnits });
+    const trafficLimitLabel = trafficLimitBytes > 0
+        ? formatTraffic(trafficLimitBytes, { decimals: 0, units: trafficUnits })
+        : '';
     const expireDate = user.expireAt ? new Date(user.expireAt).toLocaleDateString(text.dateLocale) : text.unlimited;
     
     // Group by location preserving node sort order (Map keeps insertion order for all key types)
@@ -2325,8 +2337,8 @@ async function generateHTML(user, nodes, token, baseUrl, settings, lang = 'ru', 
 
         ${softBlock ? '' : `<div class="stats">
             <div class="stat">
-                <div class="stat-value">${trafficUsed.toFixed(1)} ${text.gb}</div>
-                <div class="stat-label">${text.used}${trafficLimit > 0 ? ` / ${trafficLimit.toFixed(0)} ${text.gb}` : ''}</div>
+                <div class="stat-value">${trafficUsedLabel}</div>
+                <div class="stat-label">${text.used}${trafficLimitLabel ? ` / ${trafficLimitLabel}` : ''}</div>
             </div>
             <div class="stat">
                 <div class="stat-value">${locationsCount}</div>

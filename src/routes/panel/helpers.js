@@ -17,6 +17,7 @@ const totpService = require('../../services/totpService');
 const config = require('../../../config');
 const logger = require('../../utils/logger');
 const { parseDurationSeconds } = require('../../utils/helpers');
+const { formatTraffic } = require('../../utils/formatTraffic');
 const { version: appVersion } = require('../../../package.json');
 
 // Compiled template cache (production only)
@@ -924,21 +925,20 @@ const render = (res, template, data = {}) => {
         locales: res.locals.locales,
     };
 
-    const content = compiledTemplate({
+    const viewVars = {
         ...data,
         ...i18nVars,
         baseUrl: config.BASE_URL,
         config,
         appVersion,
-    });
+        formatTraffic,
+    };
+
+    const content = compiledTemplate(viewVars);
 
     res.render('layout', {
-        ...data,
-        ...i18nVars,
+        ...viewVars,
         content,
-        baseUrl: config.BASE_URL,
-        config,
-        appVersion,
     });
 };
 

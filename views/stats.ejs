@@ -28,15 +28,6 @@
             <span class="stat-icon"><i class="ti ti-chart-bar"></i></span>
             <span class="stat-trend"><%= t('stats.last24h') %></span>
         </div>
-        <% 
-        const traffic24hGB = (summary.traffic24h.total) / (1024 * 1024 * 1024);
-        const formatTraffic = (bytes) => {
-            const gb = bytes / (1024 * 1024 * 1024);
-            if (gb >= 1000) return (gb / 1024).toFixed(2) + ' TB';
-            if (gb >= 1) return gb.toFixed(1) + ' GB';
-            return (bytes / (1024 * 1024)).toFixed(0) + ' MB';
-        };
-        %>
         <div class="stat-value"><%= formatTraffic(summary.traffic24h.total) %></div>
         <div class="stat-label"><i class="ti ti-arrow-up" style="color:var(--success)"></i> <%= formatTraffic(summary.traffic24h.tx) %> / <i class="ti ti-arrow-down" style="color:var(--info)"></i> <%= formatTraffic(summary.traffic24h.rx) %></div>
     </div>
