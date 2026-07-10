@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const Version = "1.3.0"
+const Version = "1.4.0"
 
 var startTime = time.Now()
 
@@ -109,11 +109,20 @@ func main() {
 		}
 	}()
 
+	// Optional access-log shipping module. Stays inert unless explicitly
+	// enabled by the panel via config.access_logs.enabled.
+	var shipper *Shipper
+	if cfg.AccessLogs.Enabled && cfg.AccessLogs.IngestURL != "" && cfg.AccessLogs.IngestToken != "" {
+		shipper = NewShipper(cfg)
+		shipper.Start()
+	}
+
 	api := &API{
 		cfg:        cfg,
 		userStore:  userStore,
 		xrayClient: xrayClient,
 		persister:  persister,
+		shipper:    shipper,
 	}
 
 	mux := http.NewServeMux()
@@ -160,6 +169,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)
+
+	// Stop the access-log shipper first so it drains the tailer and flushes any
+	// pending batches before the process exits.
+	if shipper != nil {
+		shipper.Stop()
+	}
 
 	// Stop the debounce loop and flush any pending config change synchronously.
 	persister.Stop()
