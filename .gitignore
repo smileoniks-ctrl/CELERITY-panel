@@ -47,7 +47,7 @@ cc-agent/cc-agent
 cc-agent/cc-agent-linux-amd64
 cc-agent/cc-agent-linux-arm64
 
-# Access-logs pipeline data (Parquet store + ingest spool)
+# Access-logs ingest spool
 data/access-logs/
 
 Rules.md

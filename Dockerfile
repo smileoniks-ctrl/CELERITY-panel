@@ -3,9 +3,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# System dependencies: mongodb-tools for backups; libstdc++/libgcc are required
-# by the DuckDB native binding used by the access-logs analytics pipeline.
-RUN apk add --no-cache mongodb-tools libstdc++ libgcc
+# System dependencies: mongodb-tools for backups. The access-logs pipeline now
+# talks to an external ClickHouse over HTTP (pure-JS client), so no native
+# runtime libraries are needed.
+RUN apk add --no-cache mongodb-tools
 
 # Копируем зависимости
 COPY package*.json ./
