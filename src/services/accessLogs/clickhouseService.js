@@ -39,6 +39,8 @@ let _clientKey = '';
 // Regex that parses a raw Xray access-log line inside ClickHouse (RE2 engine):
 // no named groups, explicit capture order:
 //   1 ts, 2 src, 3 action, 4 network, 5 dest, 6 route(optional), 7 email(optional)
+// The source (group 2) may carry a leading "tcp:"/"udp:" protocol prefix; the
+// MV strips it (see src_noproto) so it never leaks into source_ip.
 // Example line:
 //   2023/11/22 17:01:32 1.2.3.4:1122 accepted tcp:example.com:443 [in -> direct] email: 42
 const CH_LINE_RE =
@@ -74,9 +76,9 @@ function sqlString(s) {
 // the stale one). The version is part of the MV name; ensureSchema drops any
 // older names listed here. Bump MV_VERSION whenever the MV definition changes
 // and append the previous name to LEGACY_MV_NAMES.
-const MV_VERSION = 3;
+const MV_VERSION = 4;
 const MV_NAME = `access_events_mv_v${MV_VERSION}`;
-const LEGACY_MV_NAMES = ['access_events_mv', 'access_events_mv_v2'];
+const LEGACY_MV_NAMES = ['access_events_mv', 'access_events_mv_v2', 'access_events_mv_v3'];
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -278,9 +280,15 @@ function schemaStatements(retentionDays) {
             if(n > 0, g[5], '') AS dst,
             if(n > 0, g[6], '') AS route,
             if(n > 0, g[7], '') AS mail,
+            -- Xray may prefix the source with the inbound protocol
+            -- ("from tcp:1.2.3.4:5678" when the outbound is UDP), so strip a
+            -- leading tcp:/udp: before splitting host:port. Without this the
+            -- same client shows up as both "1.2.3.4" and "tcp:1.2.3.4",
+            -- inflating unique-IP counts.
+            replaceRegexpOne(src, '^(?:tcp|udp):', '') AS src_noproto,
             -- host:port split from the right (keeps IPv6 host[:port] reasonable)
-            if(match(src, ':\\\\d+$'), replaceRegexpOne(src, ':(\\\\d+)$', ''), src) AS src_host,
-            toUInt16OrZero(if(match(src, ':(\\\\d+)$'), extract(src, ':(\\\\d+)$'), '')) AS src_port,
+            if(match(src_noproto, ':\\\\d+$'), replaceRegexpOne(src_noproto, ':(\\\\d+)$', ''), src_noproto) AS src_host,
+            toUInt16OrZero(if(match(src_noproto, ':(\\\\d+)$'), extract(src_noproto, ':(\\\\d+)$'), '')) AS src_port,
             if(match(dst, ':\\\\d+$'), replaceRegexpOne(dst, ':(\\\\d+)$', ''), dst) AS dst_host_raw,
             toUInt16OrZero(if(match(dst, ':(\\\\d+)$'), extract(dst, ':(\\\\d+)$'), '')) AS dst_port,
             -- a host that looks like an IPv4/IPv6 literal is stored as dest_ip
