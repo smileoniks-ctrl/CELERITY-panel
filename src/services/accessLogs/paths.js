@@ -7,7 +7,8 @@
  *   <root>/
  *     incoming/            durable spool of received batches (immutable once sealed)
  *       tmp/               in-flight uploads (fsync + atomic rename into incoming/)
- *       processed/         zero-byte dedup markers for already-ingested batches
+ *
+ * Batch dedup markers now live in Redis (short TTL), not on disk.
  */
 
 const path = require('path');

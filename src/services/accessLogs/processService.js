@@ -7,7 +7,8 @@
  *   3. inserts the raw rows into ClickHouse access_ingest (a materialized view
  *      parses them into access_events), using the batch id as a dedup token so
  *      a retried batch is dropped natively,
- *   4. marks the batch processed (idempotency) and removes the spool file.
+ *   4. marks the batch processed in Redis (short-TTL idempotency for agent
+ *      retries) and removes the spool file.
  *
  * The panel does NO per-event parsing: ClickHouse does it. That keeps CPU on the
  * panel proportional to bytes moved, not events, which matters on weak hardware.
@@ -26,6 +27,7 @@ const path = require('path');
 const logger = require('../../utils/logger');
 const spoolService = require('./spoolService');
 const clickhouse = require('./clickhouseService');
+const cacheService = require('../cacheService');
 
 const gunzip = promisify(zlib.gunzip);
 
@@ -37,15 +39,9 @@ const MAX_INFLATED_BYTES = 64 * 1024 * 1024; // 64 MB
 const PROCESS_INTERVAL_MS = 10 * 1000;
 const MAX_FILES_PER_RUN = 50;
 
-// Keep processed dedup markers for a day: long enough to cover any agent retry
-// backoff, short enough to keep the marker directory small. ClickHouse insert
-// dedup (by batch id) is the real safety net, so a short window is safe.
-const PROCESSED_MARKER_TTL_MS = 24 * 60 * 60 * 1000;
-
 let running = false;
 let timer = null;
 let kickPending = false;
-let lastMarkerPruneAt = 0;
 
 // Cached maskClientIp flag (checked per drain run, cheap TTL cache).
 let _maskCache = { value: false, at: 0 };
@@ -122,10 +118,10 @@ async function parseSpoolFile(filePath, mask) {
 async function processFile(filePath, mask) {
     const { batchId, nodeId } = spoolService.parseSpoolName(filePath);
 
-    // Crash-recovery fast path: a crash between markProcessed and spool-file
+    // Crash-recovery fast path: a crash between marking processed and spool-file
     // removal leaves an already-processed batch behind. The ClickHouse dedup
     // token would make re-insertion harmless, but skipping avoids wasted work.
-    if (batchId && await spoolService.isAlreadyProcessed(nodeId, batchId)) {
+    if (batchId && await cacheService.isBatchProcessed(nodeId, batchId)) {
         await spoolService.removeSpoolFile(filePath);
         return 0;
     }
@@ -148,7 +144,7 @@ async function processFile(filePath, mask) {
         await clickhouse.insertRaw(parsed.rows, batchId);
     }
 
-    await spoolService.markProcessed(parsed.nodeId || nodeId, batchId);
+    await cacheService.markBatchProcessed(parsed.nodeId || nodeId, batchId);
     await spoolService.removeSpoolFile(filePath);
     return parsed.rows.length;
 }
@@ -186,11 +182,6 @@ async function drainOnce() {
                 }
                 break;
             }
-        }
-        // Occasionally prune old dedup markers (at most once a day).
-        if (Date.now() - lastMarkerPruneAt > 24 * 60 * 60 * 1000) {
-            lastMarkerPruneAt = Date.now();
-            spoolService.pruneProcessedMarkers(PROCESSED_MARKER_TTL_MS).catch(() => {});
         }
     } catch (e) {
         logger.error(`[AccessLogs] drain failed: ${e.message}`);

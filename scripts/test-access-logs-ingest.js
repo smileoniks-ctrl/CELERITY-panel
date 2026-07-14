@@ -5,8 +5,9 @@
  *   - the processor parses NDJSON into { node_id, raw } rows,
  *   - client-IP masking rewrites the raw line in place,
  *   - with ClickHouse not configured, the batch stays spooled (never acked
- *     without a persisted write) — the at-least-once invariant,
- *   - processed marker pruning.
+ *     without a persisted write) — the at-least-once invariant.
+ *
+ * Batch dedup lives in Redis (cacheService), so it is not exercised here.
  *
  * Uses a throwaway ACCESS_LOGS_DIR so it never touches real data.
  */
@@ -55,9 +56,6 @@ try { require('mongoose').set('bufferTimeoutMS', 1); } catch (_) { /* mongoose o
     let list = await spoolService.listSpool();
     assert.strictEqual(list.length, 1, 'one spooled batch');
 
-    // Duplicate detection is false before processing.
-    assert.strictEqual(await spoolService.isAlreadyProcessed(nodeId, batchId), false);
-
     // parseSpoolFile yields raw rows tagged with the node id.
     const parsed = await processService.parseSpoolFile(spoolPath, false);
     assert.strictEqual(parsed.rows.length, 1, 'one parsed row');
@@ -74,20 +72,11 @@ try { require('mongoose').set('bufferTimeoutMS', 1); } catch (_) { /* mongoose o
     assert.ok(masked.includes('1.2.3.0'), 'masked to /24');
     assert.ok(!masked.includes('1.2.3.4:'), 'original source ip scrubbed');
 
-    // Drain with ClickHouse NOT configured: batch must stay spooled and NOT be
-    // marked processed (never ack without a persisted write).
+    // Drain with ClickHouse NOT configured: batch must stay spooled (never ack
+    // without a persisted write) — the at-least-once invariant.
     await processService.drainOnce();
     list = await spoolService.listSpool();
     assert.strictEqual(list.length, 1, 'batch stays spooled when ClickHouse not configured');
-    assert.strictEqual(await spoolService.isAlreadyProcessed(nodeId, batchId), false,
-        'not marked processed without a persisted write');
-
-    // Marker pruning: a fresh marker with a 0ms TTL is removed.
-    await spoolService.markProcessed(nodeId, batchId);
-    assert.strictEqual(await spoolService.isAlreadyProcessed(nodeId, batchId), true, 'marker written');
-    const removed = await spoolService.pruneProcessedMarkers(-1000);
-    assert.ok(removed >= 1, 'stale marker pruned');
-    assert.strictEqual(await spoolService.isAlreadyProcessed(nodeId, batchId), false, 'marker gone');
 
     await fsp.rm(TMP, { recursive: true, force: true });
     console.log('test-access-logs-ingest: OK');

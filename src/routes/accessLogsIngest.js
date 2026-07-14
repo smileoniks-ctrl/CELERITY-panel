@@ -22,6 +22,7 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const credentialService = require('../services/accessLogs/credentialService');
 const spoolService = require('../services/accessLogs/spoolService');
+const cacheService = require('../services/cacheService');
 
 // Hard caps. A single batch body must stay small; the agent batches ~500 events
 // which gzip to well under this. Reject anything larger to bound memory.
@@ -131,7 +132,7 @@ router.post('/ingest', async (req, res) => {
         const batchId = computedId;
 
         // Idempotency: already-processed identical batch -> ACK without re-spooling.
-        if (await spoolService.isAlreadyProcessed(nodeId, batchId)) {
+        if (await cacheService.isBatchProcessed(nodeId, batchId)) {
             await bumpStats({ duplicateBatches: 1 });
             return res.status(200).json({ ok: true, duplicate: true });
         }

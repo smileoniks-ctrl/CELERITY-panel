@@ -9,28 +9,21 @@
  * the spool to be picked up on restart.
  *
  * Idempotency: the batch id (sha256 of the raw bytes, sent as X-Batch-Id and
- * re-verified here) is embedded in the spool file name. A retried identical
- * batch that was already processed is rejected via the dedup marker directory;
- * a retry that races the processor may create a second spool file (names carry
- * a timestamp prefix), which is harmless: the batch id is passed to ClickHouse
- * as an insert deduplication token, so re-processing the same events dedups at
- * the storage layer.
+ * re-verified here) is embedded in the spool file name. Retried identical
+ * batches are rejected via a short-TTL Redis dedup key (see cacheService
+ * markBatchProcessed/isBatchProcessed); a retry that races the processor may
+ * create a second spool file (names carry a timestamp prefix), which is
+ * harmless: the batch id is passed to ClickHouse as an insert deduplication
+ * token, so re-processing the same events dedups at the storage layer.
  */
 
-const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const paths = require('./paths');
 const logger = require('../../utils/logger');
 
-// Marker directory holding zero-byte files named by processed batch id. Kept
-// small and pruned by retention; lets us reject exact-duplicate re-deliveries of
-// batches we already ingested even after the spool file was removed.
-const PROCESSED_DIR = path.join(paths.INCOMING_DIR, 'processed');
-
 async function ensureDirs() {
     await fsp.mkdir(paths.INCOMING_TMP_DIR, { recursive: true });
-    await fsp.mkdir(PROCESSED_DIR, { recursive: true });
 }
 
 // Spool file name embeds node id + batch id so processing has node context
@@ -38,21 +31,6 @@ async function ensureDirs() {
 function spoolFileName(nodeId, batchId) {
     const safeNode = String(nodeId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
     return `${Date.now()}-${safeNode}-${batchId}.ndjson.gz`;
-}
-
-function processedMarkerPath(nodeId, batchId) {
-    const safeNode = String(nodeId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
-    return path.join(PROCESSED_DIR, `${safeNode}-${batchId}`);
-}
-
-// Has this exact (node, batch) already been fully processed?
-async function isAlreadyProcessed(nodeId, batchId) {
-    try {
-        await fsp.access(processedMarkerPath(nodeId, batchId));
-        return true;
-    } catch (_) {
-        return false;
-    }
 }
 
 /**
@@ -83,17 +61,7 @@ async function persistBatch(nodeId, batchId, bytes) {
     return { path: finalPath, name, bytes: bytes.length };
 }
 
-// Mark a (node, batch) processed so future identical re-deliveries are dropped.
-async function markProcessed(nodeId, batchId) {
-    try {
-        await ensureDirs();
-        await fsp.writeFile(processedMarkerPath(nodeId, batchId), '');
-    } catch (e) {
-        logger.warn(`[AccessLogs] markProcessed failed: ${e.message}`);
-    }
-}
-
-// List sealed spool batch files (oldest first), excluding tmp/processed dirs.
+// List sealed spool batch files (oldest first), excluding the tmp dir.
 async function listSpool() {
     try {
         const entries = await fsp.readdir(paths.INCOMING_DIR, { withFileTypes: true });
@@ -126,28 +94,6 @@ async function removeSpoolFile(filePath) {
     }
 }
 
-// Prune processed dedup markers older than maxAgeMs. Without the old retention
-// job these zero-byte files would accumulate forever; a bounded window keeps the
-// dedup guard useful (covers agent retry backoff) without unbounded growth.
-async function pruneProcessedMarkers(maxAgeMs) {
-    const cutoff = Date.now() - maxAgeMs;
-    let removed = 0;
-    try {
-        const entries = await fsp.readdir(PROCESSED_DIR, { withFileTypes: true });
-        for (const e of entries) {
-            if (!e.isFile()) continue;
-            const p = path.join(PROCESSED_DIR, e.name);
-            try {
-                const st = await fsp.stat(p);
-                if (st.mtimeMs < cutoff) { await fsp.unlink(p); removed++; }
-            } catch (_) { /* ignore */ }
-        }
-    } catch (e) {
-        if (e.code !== 'ENOENT') logger.warn(`[AccessLogs] pruneProcessedMarkers: ${e.message}`);
-    }
-    return removed;
-}
-
 // Parse node id + batch id back out of a spool file name.
 function parseSpoolName(filePath) {
     const base = path.basename(filePath).replace(/\.ndjson\.gz$/, '');
@@ -161,15 +107,11 @@ function parseSpoolName(filePath) {
 }
 
 module.exports = {
-    PROCESSED_DIR,
     ensureDirs,
     persistBatch,
-    markProcessed,
-    isAlreadyProcessed,
     listSpool,
     spoolSize,
     removeSpoolFile,
-    pruneProcessedMarkers,
     parseSpoolName,
     spoolFileName,
 };

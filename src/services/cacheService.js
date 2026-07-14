@@ -38,7 +38,13 @@ const PREFIX = {
     TRAFFIC_STATS: 'traffic:stats', // Total traffic stats
     GROUPS: 'groups:active', // Active groups
     DASHBOARD_COUNTS: 'dashboard:counts', // Dashboard counters
+    AL_DEDUP: 'al:dedup:', // al:dedup:{nodeId}:{batchId} - access-logs batch dedup marker
 };
+
+// Access-logs batch dedup markers auto-expire after this many seconds. Long
+// enough to cover any agent retry backoff; ClickHouse insert dedup is the real
+// safety net, so the exact window is not critical.
+const AL_DEDUP_TTL = 86400; // 24 hours
 
 class CacheService {
     constructor() {
@@ -704,6 +710,47 @@ class CacheService {
         } catch (err) {
             // On Redis error - allow (fail open)
             return { allowed: true, count: 0, limit: maxPerMinute };
+        }
+    }
+
+    // ==================== ACCESS-LOGS BATCH DEDUP ====================
+
+    /**
+     * Build the dedup key for an access-logs batch. Node id is sanitized so an
+     * unexpected value cannot inject key separators.
+     */
+    _alDedupKey(nodeId, batchId) {
+        const safeNode = String(nodeId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+        return `${PREFIX.AL_DEDUP}${safeNode}:${batchId}`;
+    }
+
+    /**
+     * Mark an access-logs batch as processed (idempotency for agent retries).
+     * Key auto-expires after AL_DEDUP_TTL, so no cleanup job is ever needed.
+     */
+    async markBatchProcessed(nodeId, batchId) {
+        if (!this.isConnected() || !batchId) return;
+
+        try {
+            await this.redis.setex(this._alDedupKey(nodeId, batchId), AL_DEDUP_TTL, '1');
+        } catch (err) {
+            logger.error(`[Cache] markBatchProcessed error: ${err.message}`);
+        }
+    }
+
+    /**
+     * Has this exact (node, batch) already been processed? Fail-safe: on missing
+     * connection or any error returns false, so the batch is processed and
+     * deduplicated at the ClickHouse layer instead (never a false positive).
+     */
+    async isBatchProcessed(nodeId, batchId) {
+        if (!this.isConnected() || !batchId) return false;
+
+        try {
+            return (await this.redis.exists(this._alDedupKey(nodeId, batchId))) === 1;
+        } catch (err) {
+            logger.error(`[Cache] isBatchProcessed error: ${err.message}`);
+            return false;
         }
     }
 
