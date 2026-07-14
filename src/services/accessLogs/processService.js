@@ -37,9 +37,10 @@ const MAX_INFLATED_BYTES = 64 * 1024 * 1024; // 64 MB
 const PROCESS_INTERVAL_MS = 10 * 1000;
 const MAX_FILES_PER_RUN = 50;
 
-// Keep processed dedup markers for a week: long enough to cover any agent retry
-// backoff, short enough to bound the marker directory.
-const PROCESSED_MARKER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Keep processed dedup markers for a day: long enough to cover any agent retry
+// backoff, short enough to keep the marker directory small. ClickHouse insert
+// dedup (by batch id) is the real safety net, so a short window is safe.
+const PROCESSED_MARKER_TTL_MS = 24 * 60 * 60 * 1000;
 
 let running = false;
 let timer = null;
