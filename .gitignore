@@ -50,6 +50,9 @@ cc-agent/cc-agent-linux-arm64
 # Access-logs ingest spool
 data/access-logs/
 
+# Updater sidecar state (last update run log)
+data/updater/
+
 Rules.md
 TODO.md
 TEST-CHECKLIST.md 

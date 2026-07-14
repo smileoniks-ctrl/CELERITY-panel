@@ -1,6 +1,6 @@
 {
   "name": "c3-celerity",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "C³ CELERITY - Management panel for Hysteria 2 nodes by Click Connect",
   "keywords": [
     "nodejs",
@@ -15,13 +15,13 @@
     "hysteria2",
     "proxy-panel"
   ],
-  "homepage": "https://github.com/ClickDevTech/hysteria-panel",
+  "homepage": "https://github.com/ClickDevTech/CELERITY-panel",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ClickDevTech/hysteria-panel.git"
+    "url": "git+https://github.com/ClickDevTech/CELERITY-panel.git"
   },
   "bugs": {
-    "url": "https://github.com/ClickDevTech/hysteria-panel/issues"
+    "url": "https://github.com/ClickDevTech/CELERITY-panel/issues"
   },
   "author": "Click Connect",
   "license": "MIT",
@@ -32,7 +32,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node scripts/test-session-cookie-config.js && node scripts/test-i18n-fallback.js && node scripts/test-node-ui-meta.js && node scripts/test-node-active-api.js && node scripts/test-auth-subscription-boundaries.js && node scripts/test-setup-ejs-validation.js && node scripts/test-security-ejs-validation.js && node scripts/test-remote-cron-service.js && node scripts/test-node-cron-panel.js && node scripts/test-node-cron-ui.js && node scripts/test-multicast-cron-service.js && node scripts/test-broadcast-panel.js && node scripts/test-broadcast-ui.js && npm run test:access-logs",
+    "test": "node scripts/test-session-cookie-config.js && node scripts/test-i18n-fallback.js && node scripts/test-node-ui-meta.js && node scripts/test-node-active-api.js && node scripts/test-auth-subscription-boundaries.js && node scripts/test-setup-ejs-validation.js && node scripts/test-security-ejs-validation.js && node scripts/test-remote-cron-service.js && node scripts/test-node-cron-panel.js && node scripts/test-node-cron-ui.js && node scripts/test-multicast-cron-service.js && node scripts/test-broadcast-panel.js && node scripts/test-broadcast-ui.js && node scripts/test-update-service.js && npm run test:access-logs",
     "test:access-logs": "node scripts/test-access-logs-credentials.js && node scripts/test-access-logs-ingest.js && node scripts/test-access-logs-clickhouse.js",
     "build:assets": "npx --yes esbuild public/css/style.css public/css/network.css --minify --loader:.css=css --outdir=public/css --out-extension:.css=.min.css --allow-overwrite && npx --yes esbuild public/js/network.js --minify --outfile=public/js/network.min.js"
   },

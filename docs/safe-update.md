@@ -34,6 +34,54 @@ Before any update:
 
 ---
 
+## 🖱️ In-panel update (UI)
+
+The panel can update and roll back itself from **Settings → Maintenance → Panel update**,
+without SSH. It works for both Docker Hub and build-from-source deployments and is powered
+by an isolated `updater` sidecar container.
+
+### One-time setup
+
+1. Generate a strong secret and add it to `.env` (min. 32 chars):
+   ```bash
+   echo "UPDATER_SECRET=$(openssl rand -hex 32)" >> .env
+   ```
+
+2. Recreate the stack so the `updater` service starts:
+   ```bash
+   # Docker Hub deployment
+   docker compose -f docker-compose.hub.yml up -d
+   # Build-from-source deployment
+   docker compose up -d
+   ```
+
+Without `UPDATER_SECRET` the updater refuses all requests and the UI shows manual
+instructions instead of the update button (fail-safe default).
+
+### How it works
+
+- The panel never has access to the Docker socket; only the `updater` sidecar does.
+- The panel sends an HMAC-signed, single-purpose request ("move `backend` to version X").
+- **Hub mode:** the updater rewrites `PANEL_TAG` in `.env`, pulls the image and recreates
+  the backend.
+- **Source mode:** the updater runs `git checkout --force vX.Y.Z`, rebuilds and recreates
+  the backend. The forced checkout **discards local modifications to tracked files** —
+  the deployment copy must not carry manual patches (untracked files such as `.env`,
+  `data/`, `logs/` and `backups/` are never touched).
+- A database backup is created before the update by default. `docker pull` / `docker build`
+  run before the container is recreated, so a failed download/build leaves the running panel
+  untouched.
+- **Rollback** is the same operation targeting an older version. Note that a rollback does
+  **not** revert database schema changes — recover data from a backup if needed.
+- Rolling back to a release that predates the in-panel updater removes the update UI from
+  the running panel (old code / old compose file without `UPDATER_URL`). Rolling forward
+  again then requires one manual update using the steps below.
+
+Dokploy and local (`docker-compose.local.yml`) deployments do not run the updater; use the
+manual steps below.
+
+---
+
 ## 🚀 Update (Docker Hub — recommended)
 
 For production deployments using `docker-compose.hub.yml`:
