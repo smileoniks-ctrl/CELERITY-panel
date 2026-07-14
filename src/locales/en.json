@@ -1448,7 +1448,13 @@
     "diskThresholds": "Disk space alert thresholds",
     "diskWarnPct": "Warning: free space below (%)",
     "diskCritGb": "Critical: free space below (GB)",
-    "diskThresholdsHint": "Sends host.disk_low / host.disk_critical / host.disk_recovered events."
+    "diskThresholdsHint": "Sends host.disk_low / host.disk_critical / host.disk_recovered events.",
+    "ipAlert": "IP-sharing alert (access logs)",
+    "ipAlertEnabled": "Alert when a user exceeds the IP limit",
+    "ipAlertThreshold": "Unique IPs per user (threshold)",
+    "ipAlertWindow": "Analysis window (minutes)",
+    "ipAlertIncludeIps": "Include the IP list in the payload (privacy-sensitive)",
+    "ipAlertHint": "Checked hourly. Sends user.ip_limit_exceeded. With IP masking on, counts are per /24 subnet, so granularity is coarser."
   },
   "network": {
     "title": "Network Map",

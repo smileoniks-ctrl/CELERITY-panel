@@ -526,6 +526,36 @@
                         </div>
                         <small class="hint"><%= t('webhooks.diskThresholdsHint') || 'Sends host.disk_low / host.disk_critical / host.disk_recovered events.' %></small>
                     </div>
+
+                    <% if (settings?.accessLogs?.enabled) { %>
+                    <!-- Access-logs IP-sharing alert (only when access logs are active) -->
+                    <div class="form-group">
+                        <label><%= t('webhooks.ipAlert') || 'IP-sharing alert (access logs)' %></label>
+                        <label class="checkbox-label" style="margin:0.35rem 0;">
+                            <input type="checkbox" name="webhook.ipAlertEnabled" id="webhookIpAlertEnabled"
+                                   <%= settings?.webhook?.ipAlertEnabled ? 'checked' : '' %>>
+                            <span><%= t('webhooks.ipAlertEnabled') || 'Alert when a user exceeds the IP limit' %></span>
+                        </label>
+                        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:180px;">
+                                <small class="hint"><%= t('webhooks.ipAlertThreshold') || 'Unique IPs per user (threshold)' %></small>
+                                <input type="number" name="webhook.ipAlertThreshold" min="1" max="10000" step="1"
+                                       value="<%= settings?.webhook?.ipAlertThreshold ?? 5 %>">
+                            </div>
+                            <div style="flex:1; min-width:180px;">
+                                <small class="hint"><%= t('webhooks.ipAlertWindow') || 'Analysis window (minutes)' %></small>
+                                <input type="number" name="webhook.ipAlertWindowMinutes" min="1" max="43200" step="1"
+                                       value="<%= settings?.webhook?.ipAlertWindowMinutes ?? 60 %>">
+                            </div>
+                        </div>
+                        <label class="checkbox-label" style="margin-top:0.5rem;">
+                            <input type="checkbox" name="webhook.ipAlertIncludeIps"
+                                   <%= settings?.webhook?.ipAlertIncludeIps ? 'checked' : '' %>>
+                            <span><%= t('webhooks.ipAlertIncludeIps') || 'Include the IP list in the payload (privacy-sensitive)' %></span>
+                        </label>
+                        <small class="hint"><%= t('webhooks.ipAlertHint') || 'Checked hourly. Sends user.ip_limit_exceeded. With IP masking on, counts are per /24 subnet, so granularity is coarser.' %></small>
+                    </div>
+                    <% } %>
                 </div>
 
                 <div class="settings-save-bar">

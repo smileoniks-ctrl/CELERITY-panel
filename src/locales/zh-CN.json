@@ -1448,7 +1448,13 @@
     "diskThresholds": "磁盘空间告警阈值",
     "diskWarnPct": "警告：可用空间低于 (%)",
     "diskCritGb": "严重：可用空间低于 (GB)",
-    "diskThresholdsHint": "发送 host.disk_low / host.disk_critical / host.disk_recovered 事件。"
+    "diskThresholdsHint": "发送 host.disk_low / host.disk_critical / host.disk_recovered 事件。",
+    "ipAlert": "IP 共享警报（访问日志）",
+    "ipAlertEnabled": "当用户超过 IP 限制时发出警报",
+    "ipAlertThreshold": "每个用户的唯一 IP 数（阈值）",
+    "ipAlertWindow": "分析窗口（分钟）",
+    "ipAlertIncludeIps": "在负载中包含 IP 列表（涉及隐私）",
+    "ipAlertHint": "每小时检查一次。发送 user.ip_limit_exceeded。开启 IP 掩码时，按 /24 子网统计，粒度较粗。"
   },
   "network": {
     "title": "网络地图",

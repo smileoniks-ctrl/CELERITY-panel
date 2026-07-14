@@ -243,9 +243,81 @@ async function overview(filters = {}, opts = {}) {
     };
 }
 
+/**
+ * IP-sharing detection: users whose unique source-IP count over a sliding
+ * window reaches `threshold`. Uses approximate uniq() (HyperLogLog) since exact
+ * precision is not needed for a threshold alert, and HAVING pushes the filter
+ * server-side so only violators travel back to the panel. Cheap enough to run
+ * hourly against an external ClickHouse.
+ *
+ * @param {number} windowMinutes - sliding window length in minutes
+ * @param {number} threshold     - minimum unique IPs to flag a user
+ * @returns {Promise<{degraded?:boolean, rows?:Array, error?:string}>}
+ *          rows: [{ email, ips }]
+ */
+async function ipViolators(windowMinutes, threshold, opts = {}) {
+    if (!(await clickhouse.isConfigured())) {
+        return { degraded: true, rows: [] };
+    }
+    const win = Math.max(1, Math.floor(Number(windowMinutes) || 60));
+    const thr = Math.max(1, Math.floor(Number(threshold) || 5));
+    const params = { win, thr };
+
+    const sql = `
+        SELECT email, uniq(source_ip) AS ips
+        FROM access_events
+        WHERE event_time >= now() - INTERVAL {win:UInt32} MINUTE AND email != ''
+        GROUP BY email
+        HAVING ips >= {thr:UInt32}
+        ORDER BY ips DESC
+    `;
+
+    const res = await clickhouse.query(sql, params, { timeoutMs: opts.timeoutMs || 30000 });
+    if (!res.ok) {
+        if (res.error === 'not_configured') return { degraded: true, rows: [] };
+        logger.warn(`[AccessLogs] ipViolators failed: ${res.error}`);
+        return { error: res.error, rows: [] };
+    }
+    return { rows: res.rows };
+}
+
+/**
+ * Distinct source IPs a single user used within a sliding window, capped by
+ * `limit`. Used to attach an IP list to the sharing-alert webhook payload only
+ * when the admin opts in.
+ * @returns {Promise<{degraded?:boolean, rows?:Array, error?:string}>}
+ *          rows: [{ ip }]
+ */
+async function ipsForUser(email, windowMinutes, limit, opts = {}) {
+    if (!(await clickhouse.isConfigured())) {
+        return { degraded: true, rows: [] };
+    }
+    const win = Math.max(1, Math.floor(Number(windowMinutes) || 60));
+    const cap = Math.max(1, Math.min(500, Math.floor(Number(limit) || 20)));
+    const params = { win, email: String(email || '') };
+
+    const sql = `
+        SELECT DISTINCT source_ip AS ip
+        FROM access_events
+        WHERE event_time >= now() - INTERVAL {win:UInt32} MINUTE
+          AND email = {email:String} AND source_ip != ''
+        LIMIT ${cap}
+    `;
+
+    const res = await clickhouse.query(sql, params, { timeoutMs: opts.timeoutMs || 30000 });
+    if (!res.ok) {
+        if (res.error === 'not_configured') return { degraded: true, rows: [] };
+        logger.warn(`[AccessLogs] ipsForUser failed: ${res.error}`);
+        return { error: res.error, rows: [] };
+    }
+    return { rows: res.rows };
+}
+
 module.exports = {
     buildWhere,
     search,
     userIps,
     overview,
+    ipViolators,
+    ipsForUser,
 };

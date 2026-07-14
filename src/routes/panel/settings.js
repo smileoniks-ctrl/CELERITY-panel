@@ -202,6 +202,15 @@ router.post('/settings', async (req, res) => {
             updates['webhook.diskWarnPct'] = Number.isFinite(warnPct) && warnPct > 0 && warnPct < 100 ? warnPct : 15;
             const critGb = parseFloat(req.body['webhook.diskCritGb']);
             updates['webhook.diskCritGb'] = Number.isFinite(critGb) && critGb > 0 ? critGb : 1;
+
+            // Access-logs IP-sharing alert. Clamp to sane bounds; fall back to
+            // defaults on invalid input so a bad value never disables the guard.
+            updates['webhook.ipAlertEnabled'] = req.body['webhook.ipAlertEnabled'] === 'on';
+            const ipThreshold = parseInt(req.body['webhook.ipAlertThreshold'], 10);
+            updates['webhook.ipAlertThreshold'] = Number.isFinite(ipThreshold) && ipThreshold >= 1 && ipThreshold <= 10000 ? ipThreshold : 5;
+            const ipWindow = parseInt(req.body['webhook.ipAlertWindowMinutes'], 10);
+            updates['webhook.ipAlertWindowMinutes'] = Number.isFinite(ipWindow) && ipWindow >= 1 && ipWindow <= 43200 ? ipWindow : 60;
+            updates['webhook.ipAlertIncludeIps'] = req.body['webhook.ipAlertIncludeIps'] === 'on';
         }
 
         // Subscription settings.

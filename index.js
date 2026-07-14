@@ -1023,6 +1023,16 @@ function setupCronJobs() {
             logger.error(`[Cron] Daily snapshot failed: ${error.message}`);
         }
     });
+
+    // Access-logs IP-sharing alert — every hour. Self-gated (no-op unless access
+    // logs + webhook + ipAlert are enabled); heavy aggregation runs on ClickHouse.
+    cron.schedule('0 * * * *', async () => {
+        try {
+            await require('./src/services/accessLogs/ipAlertService').check();
+        } catch (error) {
+            logger.error(`[Cron] IP alert check failed: ${error.message}`);
+        }
+    });
     
     // Save monthly snapshot and cleanup at 00:05
     cron.schedule('5 0 * * *', async () => {

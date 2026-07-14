@@ -1448,7 +1448,13 @@
     "diskThresholds": "Пороги оповещений о месте на диске",
     "diskWarnPct": "Предупреждение: свободно меньше (%)",
     "diskCritGb": "Критично: свободно меньше (ГБ)",
-    "diskThresholdsHint": "Отправляет события host.disk_low / host.disk_critical / host.disk_recovered."
+    "diskThresholdsHint": "Отправляет события host.disk_low / host.disk_critical / host.disk_recovered.",
+    "ipAlert": "Оповещение о превышении числа IP (логи доступа)",
+    "ipAlertEnabled": "Оповещать, когда пользователь превышает лимит IP",
+    "ipAlertThreshold": "Уникальных IP на пользователя (порог)",
+    "ipAlertWindow": "Окно анализа (минуты)",
+    "ipAlertIncludeIps": "Включать список IP в тело запроса (чувствительно к приватности)",
+    "ipAlertHint": "Проверяется раз в час. Отправляет user.ip_limit_exceeded. При включённой маскировке IP подсчёт идёт по подсетям /24, поэтому гранулярность грубее."
   },
   "network": {
     "title": "Карта сети",

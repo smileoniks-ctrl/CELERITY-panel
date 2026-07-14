@@ -76,6 +76,12 @@ const settingsSchema = new mongoose.Schema({
         // Disk-space alert thresholds for the panel host (issue #103)
         diskWarnPct: { type: Number, default: 15 }, // warn when free space % < this
         diskCritGb: { type: Number, default: 1 },   // critical when free space < this many GiB
+        // Access-logs IP-sharing alert (fires user.ip_limit_exceeded).
+        // Requires access logs enabled; checked hourly by ipAlertService.
+        ipAlertEnabled: { type: Boolean, default: false },
+        ipAlertThreshold: { type: Number, default: 5 },        // unique IPs per user
+        ipAlertWindowMinutes: { type: Number, default: 60 },   // sliding analysis window
+        ipAlertIncludeIps: { type: Boolean, default: false },  // include IP list in payload (privacy)
     },
 
     subscription: {
